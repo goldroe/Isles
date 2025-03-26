@@ -269,11 +269,23 @@ internal void update_guy_mirror(Guy *guy) {
         Vector3Int position = guy->position;
         position.x = mirror->position.x;
         position.z += distance*(int)roundf(mirror_forward.z);
+
+        Action *move = action_make(ACTION_TELEPORT);
+        move->actor_id = guy->id;
+        move->from = guy->position;
+        move->to = position;
+
         guy->set_position(position);
       } else if (direction.z) {
         Vector3Int position = guy->position;
-        position.z = mirror->position.z;
         position.x += distance*(int)roundf(mirror_forward.x);
+        position.z = mirror->position.z;
+
+        Action *move = action_make(ACTION_TELEPORT);
+        move->actor_id = guy->id;
+        move->from = guy->position;
+        move->to = position;
+
         guy->set_position(position);
       }
     }
@@ -286,6 +298,11 @@ internal bool move_entity(Entity *e, Vector3Int distance) {
   Entity *below = find_entity_at(get_world(), new_position - Vector3Int::Up());
 
   bool valid_move = true;
+
+  Action *move = action_make(ACTION_MOVE);
+  move->actor_id = e->id;
+  move->from = e->position;
+  move->to = e->position + distance;
 
   if (wall) {
     if (wall->flags & ENTITY_FLAG_PUSHABLE) {
@@ -301,9 +318,11 @@ internal bool move_entity(Entity *e, Vector3Int distance) {
 
   if (valid_move) {
     e->position = new_position;
-    if (!below) {
-      e->position.y -= 1;
-    }
+    // if (!below) {
+    //   e->position.y -= 1;
+    // }
+  } else {
+    action_pop();
   }
 
   return valid_move;
@@ -334,21 +353,21 @@ void update_guy(Guy *guy) {
   bool moved = false;
 
   if (moving) {
-    Vector3 move_direction = {0, 0, 0};
+    Vector3Int move_direction = {0, 0, 0};
     if (forward_dt) {
-      move_direction = {0, 0, (f32)forward_dt};
+      move_direction = {0, 0, forward_dt};
     } else if (right_dt) {
-      move_direction = {(f32)right_dt, 0, 0};
+      move_direction = {right_dt, 0, 0};
     }
 
-    f32 theta = atan2f(-move_direction.z, move_direction.x);
+    f32 theta = atan2f((f32)-move_direction.z, (f32)move_direction.x);
     if (theta < 0) theta += 2 * PI;
     guy->theta_target = theta;
-    moved = move_entity(guy, truncate(move_direction));
+    moved = move_entity(guy, move_direction);
   }
 
-  if (moved) {
-    update_guy_mirror(guy);
+  if (key_pressed(OS_KEY_Z)) {
+    undo();
   }
 }
 
@@ -696,6 +715,9 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     g_viewport->dimension.x = 1;
     g_viewport->dimension.y = 1;
     g_viewport->window_handle = window_handle;
+
+    undo_stack = new Undo_Stack();
+    undo_stack->arena = make_arena(get_malloc_allocator());
   }
 
   ui_g_state->animation_dt = dt;

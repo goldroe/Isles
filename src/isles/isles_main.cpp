@@ -48,6 +48,7 @@
 #include "isles.h"
 #include "draw.h"
 #include "input.h"
+#include "undo.h"
 
 #include "core.cpp"
 #include "ui/ui_core.cpp"
@@ -57,6 +58,7 @@
 #include "render/render.cpp"
 #include "input.cpp"
 #include "editor.cpp"
+#include "undo.cpp"
 #include "isles.cpp"
 
 global bool window_should_close;
