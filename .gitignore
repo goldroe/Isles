@@ -2,7 +2,6 @@
 *.sln
 *.rdbg
 
-*.obj
 *.ilk
 *.exe
 *.pdb
