@@ -1,25 +1,4 @@
 
-internal inline Vector3 get_nearest_axis(Vector3 v) {
-  Vector3 result = Vector3(0, 0, 0);
-  f32 x = Abs(v.x);
-  f32 y = Abs(v.y);
-  f32 z = Abs(v.z);
-  if (x > y) {
-    if (x > z) {
-      result.x = v.x < 0 ? -1.0f : 1.0f;
-    } else {
-      result.z = v.z < 0 ? -1.0f : 1.0f;
-    }
-  } else {
-    if (y > z) {
-      result.y = v.y < 0 ? -1.0f : 1.0f;
-    } else {
-      result.z = v.z < 0 ? -1.0f : 1.0f;
-    }
-  }
-  return result;
-}
-
 internal inline Vector3 to_vector3(Vector4 v) {
   Vector3 result = {v.x, v.y, v.z};
   return result;
@@ -699,7 +678,7 @@ internal inline Matrix4 scale(Vector3 v) {
   return result;
 }
 
-inline internal Matrix4 look_at_rh(Vector3 eye, Vector3 target, Vector3 up) {
+internal inline Matrix4 look_at_rh(Vector3 eye, Vector3 target, Vector3 up) {
   Vector3 F = normalize(target - eye);
   Vector3 R = normalize(cross(F, up));
   Vector3 U = cross(R, F);
@@ -724,7 +703,7 @@ inline internal Matrix4 look_at_rh(Vector3 eye, Vector3 target, Vector3 up) {
   return result;
 }
 
-inline internal Matrix4 rotate_rh(f32 angle, Vector3 axis) {
+internal inline Matrix4 rotate_rh(f32 angle, Vector3 axis) {
   Matrix4 result = make_matrix4(1.0f);
   axis = normalize(axis);
 
@@ -779,11 +758,38 @@ internal inline Matrix4 operator*(Matrix4 a, Matrix4 b) {
   return result;
 }
 
-inline internal Vector4 operator*(Matrix4 m, Vector4 v) {
+internal inline Vector4 operator*(Matrix4 m, Vector4 v) {
   Vector4 result;
   result.elements[0] = v.elements[0] * m._00 + v.elements[1] * m._01 + v.elements[2] * m._02 + v.elements[3] * m._03;
   result.elements[1] = v.elements[0] * m._10 + v.elements[1] * m._11 + v.elements[2] * m._12 + v.elements[3] * m._13;
   result.elements[2] = v.elements[0] * m._20 + v.elements[1] * m._21 + v.elements[2] * m._22 + v.elements[3] * m._23;
   result.elements[3] = v.elements[0] * m._30 + v.elements[1] * m._31 + v.elements[2] * m._32 + v.elements[3] * m._33;
+  return result;
+}
+
+internal inline Vector3 get_nearest_axis(Vector3 v) {
+  Vector3 result = Vector3(0, 0, 0);
+  f32 x = Abs(v.x);
+  f32 y = Abs(v.y);
+  f32 z = Abs(v.z);
+  if (x > y) {
+    if (x > z) {
+      result.x = v.x < 0 ? -1.0f : 1.0f;
+    } else {
+      result.z = v.z < 0 ? -1.0f : 1.0f;
+    }
+  } else {
+    if (y > z) {
+      result.y = v.y < 0 ? -1.0f : 1.0f;
+    } else {
+      result.z = v.z < 0 ? -1.0f : 1.0f;
+    }
+  }
+  return result;
+}
+
+internal inline Vector3 forward_from_theta(f32 theta) {
+  Vector4 forward = rotate_rh(theta, Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1);
+  Vector3 result = to_vector3(forward);
   return result;
 }
