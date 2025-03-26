@@ -61,6 +61,8 @@ struct Entity {
 struct Guy : Entity {
   Vector3 forward;
   Pid mirror_id;
+  Vector3Int reflect_target;
+  Vector3Int reflect_position;
 };
 
 #endif // ENTITY_H

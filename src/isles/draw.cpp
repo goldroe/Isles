@@ -131,6 +131,11 @@ internal void draw_rectangle(Draw_Immediate_Batch *batch, Vector3 position, Vect
     draw_immediate_vertex(batch, p4, normal, color, uv);
 }
 
+internal void draw_rectangle_center(Draw_Immediate_Batch *batch, Vector3 center, Vector3 size, Vector4 color) {
+  Vector3 half_size = size * 0.5f;
+  draw_rectangle(batch, center - half_size, size, color);
+}
+
 internal void draw_cube(Draw_Immediate_Batch *batch, Vector3 center, f32 size, Vector4 color) {
     f32 half = 0.5f * size;
     Vector2 uv = {0, 0};

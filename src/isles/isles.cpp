@@ -258,38 +258,66 @@ internal void update_guy_mirror(Guy *guy) {
 
   mirrors.clear();
 
-  if (key_pressed(OS_KEY_SPACE) && guy->mirror_id) {
-    Entity *mirror = lookup_entity(guy->mirror_id);
-    if (mirror) {
-      Vector3 mirror_forward = to_vector3(rotate_rh(-mirror->theta,  Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1));
-      Vector3 direction = to_vector3(guy->position - mirror->position);
-      int distance = (int)Abs(magnitude(direction));
+  Entity *mirror = lookup_entity(guy->mirror_id);
+  if (mirror) {
+    Vector3 mirror_forward = forward_from_theta(-mirror->theta);
+    Vector3 direction = to_vector3(guy->position - mirror->position);
+    int distance = (int)Abs(magnitude(direction));
 
-      if (direction.x) {
-        Vector3Int position = guy->position;
-        position.x = mirror->position.x;
-        position.z += distance*(int)roundf(mirror_forward.z);
+    if (direction.x) {
+      int dz = (int)roundf(mirror_forward.z);
+      Vector3Int target = mirror->position;
+      target.z += distance * dz;
+      Vector3Int new_position = mirror->position;
+      new_position.z += dz;
 
-        Action *move = action_make(ACTION_TELEPORT);
-        move->actor_id = guy->id;
-        move->from = guy->position;
-        move->to = position;
-
-        guy->set_position(position);
-      } else if (direction.z) {
-        Vector3Int position = guy->position;
-        position.x += distance*(int)roundf(mirror_forward.x);
-        position.z = mirror->position.z;
-
-        Action *move = action_make(ACTION_TELEPORT);
-        move->actor_id = guy->id;
-        move->from = guy->position;
-        move->to = position;
-
-        guy->set_position(position);
+      for (;;) {
+        Entity *e = find_entity_at(get_world(), new_position);
+        if (e) {
+          new_position.z -= dz;
+          break;
+        }
+        if (new_position == target) {
+          break;
+        }
+        new_position.z += dz;
       }
+
+      guy->reflect_target = target;
+      guy->reflect_position = new_position;
+
+    } else if (direction.z) {
+      int dx = (int)roundf(mirror_forward.x);
+      Vector3Int target = mirror->position;
+      target.x += distance * dx;
+      Vector3Int new_position = mirror->position;
+      new_position.x += dx;
+
+      for (;;) {
+        Entity *e = find_entity_at(get_world(), new_position);
+        if (e) {
+          new_position.x -= dx;
+          break;
+        }
+        if (new_position == target) {
+          break;
+        }
+        new_position.x += dx;
+      }
+
+      guy->reflect_target = target;
+      guy->reflect_position = new_position;
     }
   }
+
+  if (key_pressed(OS_KEY_SPACE) && lookup_entity(guy->mirror_id)) {
+      Action *move = action_make(ACTION_TELEPORT);
+      move->actor_id = guy->id;
+      move->from = guy->position;
+      move->to = guy->reflect_position;
+      guy->set_position(guy->reflect_position);
+  }
+
 }
 
 internal bool move_entity(Entity *e, Vector3Int distance) {
@@ -442,18 +470,49 @@ internal void draw_world(World *world, Camera camera) {
         Vector3 p = e->visual_position + mesh->positions[vert_idx];
         Vector4 color = mesh->has_vertex_colors ? mesh->colors[vert_idx] : mesh->material.diffuse_color;
         Vector2 uv = mesh->tex_coords[vert_idx];
-        Vector3 normal = mesh->normals[vert_idx];
+        Vector3 normal = mesh->has_normals ? mesh->normals[vert_idx] : Vector3(0, 0, 0);
         draw_immediate_vertex(batch, p, normal, color, uv);
       }
     }
   }
 
-
-  //@Note Draw mirror beams
   Entity *mirror = lookup_entity(world->guy->mirror_id);
   if (mirror) {
-    draw_immediate_begin();
+    //@Note Draw guy clone
+    {
+      draw_immediate_begin();
+      Draw_Bucket *bucket = draw_top();
+      bucket->immediate.depth_state = R_DEPTH_STENCIL_STATE_DEFAULT;
 
+      Guy *guy = world->guy;
+      Model *model = guy->model;
+
+      Matrix4 rotation_matrix = rotate_rh(guy->theta, camera.up);
+      Matrix4 world_matrix = translate(to_vector3(guy->reflect_position)) * rotation_matrix * translate(to_vector3(-guy->reflect_position));
+      Matrix4 view = camera.view_matrix;
+
+      for (int mesh_idx = 0; mesh_idx < model->meshes.count; mesh_idx++) {
+        Mesh *mesh = model->meshes[mesh_idx];
+
+        Draw_Immediate_Batch *batch = push_immediate_batch(bucket);
+        batch->world = world_matrix;
+        batch->view = camera.view_matrix;
+        batch->projection = camera.projection_matrix;
+        batch->texture = mesh->material.texture;
+            
+        for (int vert_idx = 0; vert_idx < mesh->positions.count; vert_idx++) {
+          Vector3 p = to_vector3(guy->reflect_position) + mesh->positions[vert_idx];
+          Vector4 color = Vector4(0.4f, 0.4f, 0.4f, 1.0f);
+          Vector2 uv = mesh->tex_coords[vert_idx];
+          Vector3 normal = mesh->has_normals ? mesh->normals[vert_idx] : Vector3(0, 0, 0);
+          draw_immediate_vertex(batch, p, normal, color, uv);
+        }
+      }
+    }
+
+
+    //@Note Draw reflection beams
+    draw_immediate_begin();
     Draw_Bucket *bucket = draw_top();
     bucket->immediate.depth_state = R_DEPTH_STENCIL_STATE_DEFAULT;
     bucket->immediate.blend_state = R_BLEND_STATE_ALPHA;
@@ -469,19 +528,29 @@ internal void draw_world(World *world, Camera camera) {
     f32 dz = mirror_forward.z > 0 ? 1.0f : -1.0f;
     f32 beam_start_x = (f32)mirror->position.x + dx;
     f32 beam_start_z = (f32)mirror->position.z + dz;
-    
+
+    Vector3 beam_position;
+
+    Draw_Immediate_Batch *batch = nullptr;
+
+    // x
+    batch = push_immediate_batch(bucket);
     beam_start = to_vector3(mirror->position);
     beam_start.x = beam_start_x;
 
-    Draw_Immediate_Batch *batch = push_immediate_batch(bucket);
     batch->world = translate(beam_start);
     batch->view = camera.view_matrix;
     batch->projection = camera.projection_matrix;
     batch->texture = nullptr;
 
-    beam_size = Vector3(dx * (f32)distance, 1.0f, 1.0f);
-    draw_rectangle(batch, Vector3(dx * -0.5f, 0.001f, -0.5f), beam_size, beam_color);
+    beam_size = Vector3(dx * (f32)distance, 1.f, 1.f);
+    beam_size -= Vector3(0.f, 0.1f, 0.1f);
+    beam_position = Vector3(dx * -0.5f, 0.001f, -0.5f);
+    beam_position += Vector3(0.f, 0.05f, 0.05f);
+    draw_rectangle(batch, beam_position, beam_size, beam_color);
 
+    // z
+    batch = push_immediate_batch(bucket);
     beam_start = to_vector3(mirror->position);
     beam_start.z = beam_start_z;
 
@@ -491,8 +560,12 @@ internal void draw_world(World *world, Camera camera) {
     batch->projection = camera.projection_matrix;
     batch->texture = nullptr;
 
-    beam_size = Vector3(1.0f, 1.0f, dz * (f32)distance);
-    draw_rectangle(batch, Vector3(dz * -0.5f, 0.001f, -0.5f), beam_size, beam_color);
+    beam_size = Vector3(1.f, 1.f, dz * (f32)distance);
+    beam_size -= Vector3(0.1f, 0.1f, 0.f);
+    beam_position = Vector3(dz * -0.5f, 0.001f, -0.5f);
+    beam_position += Vector3(0.05f, 0.05f, 0.0f);
+    draw_rectangle(batch, beam_position, beam_size, beam_color);
+
   }
 }
 
