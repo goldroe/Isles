@@ -486,7 +486,7 @@ internal void editor_present_ui() {
   }
 
   if (ui_clicked(ui_button(str8_lit("Save")))) {
-    serialize_world(get_world(), str8_lit("0.lvl"));
+    serialize_world(get_world(), str8_lit("data/worlds/0.lvl"));
   }
   ui_pop_parent();
 

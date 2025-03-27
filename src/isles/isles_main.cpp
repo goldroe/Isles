@@ -15,6 +15,10 @@
 #include <ft2build.h>
 #include <freetype/freetype.h>
 
+#include <fmod_studio.hpp>
+#include <fmod_errors.h>
+#include <fmod.hpp>
+
 #include "base/base_core.h"
 #include "core/core_math.h"
 #include "base/base_arena.h"
@@ -42,6 +46,7 @@
 #include "font/font.cpp"
 
 #include "core.h"
+#include "audio.h"
 #include "entity.h"
 #include "ui/ui_core.h"
 #include "editor.h"
@@ -51,6 +56,7 @@
 #include "undo.h"
 
 #include "core.cpp"
+#include "audio.cpp"
 #include "ui/ui_core.cpp"
 #include "ui/ui_widgets.cpp"
 #include "draw.cpp"

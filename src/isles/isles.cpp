@@ -157,7 +157,7 @@ internal void serialize_world(World *world, String8 file_name) {
     buffer->put_f32(e->theta);
   }
 
-  OS_Handle file = os_open_file(str8_lit("0.lvl"), OS_AccessFlag_Write);
+  OS_Handle file = os_open_file(file_name, OS_AccessFlag_Write);
   os_write_file(file, buffer->buffer, buffer->len);
   os_close_handle(file);
 }
@@ -311,13 +311,12 @@ internal void update_guy_mirror(Guy *guy) {
   }
 
   if (key_pressed(OS_KEY_SPACE) && lookup_entity(guy->mirror_id)) {
-      Action *move = action_make(ACTION_TELEPORT);
-      move->actor_id = guy->id;
-      move->from = guy->position;
-      move->to = guy->reflect_position;
-      guy->set_position(guy->reflect_position);
+    Action *move = action_make(ACTION_TELEPORT);
+    move->actor_id = guy->id;
+    move->from = guy->position;
+    move->to = guy->reflect_position;
+    guy->set_position(guy->reflect_position);
   }
-
 }
 
 internal bool move_entity(Entity *e, Vector3Int distance) {
@@ -392,6 +391,10 @@ void update_guy(Guy *guy) {
     if (theta < 0) theta += 2 * PI;
     guy->theta_target = theta;
     moved = move_entity(guy, move_direction);
+
+    if (moved) {
+      audio_engine->play_sound("tile_0.ogg", to_vector3(guy->position));
+    }
   }
 
   if (key_pressed(OS_KEY_Z)) {
@@ -718,7 +721,7 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     game_state->editing = false;
 
     Arena *temp = make_arena(get_malloc_allocator());
-    default_font = load_font(temp, str8_lit("data/fonts/seguisb.ttf"), 14);
+    default_font = load_font(temp, str8_lit("data/fonts/seguisb.ttf"), 15);
 
     Model *guy_model = load_model("data/models/Character/character.obj");
     Model *arrow_model = load_model("data/models/arrow.obj");
@@ -768,7 +771,7 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     arrow_prototype->entity.flags = ENTITY_FLAG_STATIC;
     arrow_prototype->entity.model = arrow_model;
 
-    World *world = load_world(str8_lit("0.lvl"));
+    World *world = load_world(str8_lit("data/worlds/0.lvl"));
     set_world(world);
 
     Draw_State *draw_state = new Draw_State();
@@ -780,7 +783,7 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     game_state->camera.right = Vector3(1, 0, 0);
     game_state->camera.yaw = -PI * 0.5f;
     game_state->camera.pitch = 0;
-    game_state->camera.fov = PI * 0.4f;
+    game_state->camera.fov = PI * 0.30f;
 
     game_state->camera.update_euler_angles(-PI * 0.5f, 0.0f);
 
@@ -791,7 +794,13 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
 
     undo_stack = new Undo_Stack();
     undo_stack->arena = make_arena(get_malloc_allocator());
+
+    audio_engine = new Audio_Engine();
+    audio_engine->init();
   }
+
+  audio_engine->origin = game_state->camera.origin;
+  audio_engine->update();
 
   ui_g_state->animation_dt = dt;
 
