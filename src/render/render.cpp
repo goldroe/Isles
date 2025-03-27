@@ -26,7 +26,21 @@ internal u32 r_size_from_format(R_Texture_Format format) {
   return 0;
 }
 
+UINT get_num_mip_levels(UINT width, UINT height) {
+  UINT levels = 1;
+  while(width > 1 || height > 1) {
+    width = max(width / 2, 1);
+    height = max(height / 2, 1);
+    ++levels;
+  }
+  return levels;
+}
+
 internal Texture *r_create_texture(u8 *data, R_Texture_Format format, int w, int h) {
+  HRESULT hr = S_OK;
+
+  UINT mip_levels = get_num_mip_levels(w, h);
+
   R_D3D11_State *d3d11_state = r_d3d11_state();
 
   Texture *texture = (Texture *)malloc(sizeof(Texture));
@@ -38,25 +52,27 @@ internal Texture *r_create_texture(u8 *data, R_Texture_Format format, int w, int
   D3D11_TEXTURE2D_DESC desc = {};
   desc.Width = (UINT)w;
   desc.Height = (UINT)h;
-  desc.MipLevels = 1;
+  desc.MipLevels = mip_levels;
   desc.ArraySize = 1;
   desc.Format = r_dxgi_format_from(format);
   desc.SampleDesc.Count = 1;
   desc.SampleDesc.Quality = 0;
-  desc.Usage = D3D11_USAGE_IMMUTABLE;
-  desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-  desc.MiscFlags = 0;
-  D3D11_SUBRESOURCE_DATA init_data = {};
-  init_data.pSysMem = data;
-  init_data.SysMemPitch = w * r_size_from_format(format);
-  init_data.SysMemSlicePitch = 0;
+  desc.Usage = D3D11_USAGE_DEFAULT;
+  desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+  desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
 
-  HRESULT hr;
-
-  hr = d3d11_state->device->CreateTexture2D(&desc, &init_data, &tex2d);
+  hr = d3d11_state->device->CreateTexture2D(&desc, NULL, &tex2d);
+  d3d11_state->device_context->UpdateSubresource(tex2d, 0, NULL, data, w * r_size_from_format(format), 0);
     
   ID3D11ShaderResourceView *view = nullptr;
-  hr = d3d11_state->device->CreateShaderResourceView(tex2d, nullptr, &view);
+	D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
+	srv_desc.Format = desc.Format;
+	srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	srv_desc.Texture2D.MipLevels = desc.MipLevels;
+	srv_desc.Texture2D.MostDetailedMip = 0;
+  hr = d3d11_state->device->CreateShaderResourceView(tex2d, &srv_desc, &view);
+
+  d3d11_state->device_context->GenerateMips(view);
 
   texture->view = (void *)view;
   return texture;
@@ -246,12 +262,25 @@ internal void r_d3d11_initialize(HWND window_handle) {
   //@Note Create Sampler states
   {
     D3D11_SAMPLER_DESC desc = {};
-    desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    // desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    // desc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+    // desc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+    // desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+    // desc.MinLOD = 0;
+    // desc.MaxLOD = D3D11_FLOAT32_MAX;
+    // desc.MipLODBias = 0;
+    // desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+
+    desc.Filter = D3D11_FILTER_ANISOTROPIC;
     desc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
     desc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
     desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+    desc.MaxAnisotropy = 4;
+    desc.MinLOD = 0;
+    desc.MaxLOD = D3D11_FLOAT32_MAX;
     desc.MipLODBias = 0;
     desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+
     d3d11_state->device->CreateSamplerState(&desc, &d3d11_state->sampler_states[R_SAMPLER_STATE_LINEAR]);
 
     desc = {};
