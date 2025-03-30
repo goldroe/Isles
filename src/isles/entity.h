@@ -39,6 +39,8 @@ struct Entity {
 
   Model *model;
 
+  Vector4 override_color;
+
   b32 to_be_destroyed;
 
   void update();

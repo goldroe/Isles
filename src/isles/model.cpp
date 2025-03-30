@@ -52,11 +52,6 @@ internal Model *load_model(std::string file_name) {
         mesh->tex_coords.push(get_ai_texcoord(ai_mesh->mTextureCoords[0][i1]));
         mesh->tex_coords.push(get_ai_texcoord(ai_mesh->mTextureCoords[0][i2]));
       }
-      if (ai_mesh->HasVertexColors(0)) {
-        mesh->colors.push(get_ai_color(ai_mesh->mColors[0][i0]));
-        mesh->colors.push(get_ai_color(ai_mesh->mColors[0][i1]));
-        mesh->colors.push(get_ai_color(ai_mesh->mColors[0][i2]));
-      }
       if (ai_mesh->HasNormals()) {
         mesh->normals.push(get_ai_vertex(ai_mesh->mNormals[i0]));
         mesh->normals.push(get_ai_vertex(ai_mesh->mNormals[i1]));
@@ -64,7 +59,6 @@ internal Model *load_model(std::string file_name) {
       }
     }
 
-    mesh->has_vertex_colors = ai_mesh->HasVertexColors(0);
     mesh->has_normals = ai_mesh->HasNormals();
 
     aiMaterial *material = scene->mMaterials[ai_mesh->mMaterialIndex];
@@ -81,19 +75,18 @@ internal Model *load_model(std::string file_name) {
         Texture *texture = r_create_texture_from_file(material_file_name);
         mesh->material.texture = texture;
         // printf("material:%s\n", name.data);
-        // printf("Error loading texture:%s\n", material_file.data());
+        printf("Error loading texture:%s\n", material_file_name.data);
       }
     }
 
-    aiColor4D diffuse_color;
-    if (aiGetMaterialColor(material, AI_MATKEY_COLOR_DIFFUSE, &diffuse_color) == AI_SUCCESS) {
-      mesh->material.diffuse_color.x = diffuse_color.r;
-      mesh->material.diffuse_color.y = diffuse_color.g;
-      mesh->material.diffuse_color.z = diffuse_color.b;
-      mesh->material.diffuse_color.w = diffuse_color.a;
-    } else {
-      mesh->material.diffuse_color = {1, 1, 1, 1}; 
-    }
+    // aiColor4D diffuse_color;
+    // if (aiGetMaterialColor(material, AI_MATKEY_COLOR_DIFFUSE, &diffuse_color) == AI_SUCCESS) {
+    //   mesh->material.diffuse_color.x = diffuse_color.r;
+    //   mesh->material.diffuse_color.y = diffuse_color.g;
+    //   mesh->material.diffuse_color.z = diffuse_color.b;
+    //   mesh->material.diffuse_color.w = diffuse_color.a;
+    // }
+    mesh->material.diffuse_color = Vector4(1, 1, 1, 1);
   }
 
   return model;

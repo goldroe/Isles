@@ -21,6 +21,16 @@ global World *g_world;
 
 global Font *default_font;
 
+global Game_Settings *game_settings;
+
+internal inline Arena *get_permanent_arena() {
+  return permanent_arena;
+}
+
+internal inline Game_Settings *get_settings() {
+  return game_settings;
+}
+
 internal inline Game_State *get_game_state() {
   return game_state;
 }
@@ -30,6 +40,10 @@ internal inline World *get_world() {
 }
 
 internal inline void set_world(World *world) {
+  if (g_world) {
+    g_world->entities.clear();
+    delete g_world;
+  }
   g_world = world;
 }
 
@@ -64,17 +78,21 @@ internal char *string_from_entity_flag(Entity_Flags flags) {
 }
 
 internal void remove_grid_entity(World *world, Entity *entity) {
-  for (int i = 0; i < world->grid.count; i++) {
-    if (world->grid[i] == entity) {
-      world->grid.remove(i);
+  for (int i = 0; i < world->entities.count; i++) {
+    if (world->entities[i] == entity) {
+      world->entities.remove(i);
       break;
     }
   }
 }
 
-internal World *load_world(String8 file_name) {
+internal World *load_world(String8 name) {
+  String8 file_name = path_join(get_permanent_arena(), str8_lit("data/worlds"), name);
+
   World *world = new World();
-  world->name = str8_copy(permanent_arena, path_file_name(file_name));
+  world->name = str8_copy(permanent_arena, name);
+
+  set_world(world);
 
   Byte_Buffer *buffer = new Byte_Buffer();
   
@@ -93,6 +111,20 @@ internal World *load_world(String8 file_name) {
     fprintf(stderr, "ERROR LOADING '%s'\n", (char *)file_name.data);
     return nullptr;
   }
+
+  f32 x = buffer->get_f32();
+  f32 y = buffer->get_f32();
+  f32 z = buffer->get_f32();
+  f32 yaw = buffer->get_f32();
+  f32 pitch = buffer->get_f32();
+
+  Camera *camera = &get_game_state()->camera;
+  camera->origin = Vector3(x, y, z);
+  camera->update_euler_angles(yaw, pitch);
+
+  camera = &get_editor()->camera;
+  camera->origin = Vector3(x, y, z);
+  camera->update_euler_angles(yaw, pitch);
 
   Pid max_id = 0;
   u32 entity_count = buffer->get_le32();
@@ -118,12 +150,12 @@ internal World *load_world(String8 file_name) {
       world->guy = static_cast<Guy*>(entity);
     }
 
-    world->grid.push(entity);
+    world->entities.push(entity);
 
     if (id > max_id) max_id = (Pid)id;
   }
 
-  game_state->next_pid = max_id + 1;
+  world->next_pid = max_id + 1;
 
   if (!world->guy) {
     Entity_Prototype *prototype = entity_prototype_lookup("Guy");
@@ -131,20 +163,37 @@ internal World *load_world(String8 file_name) {
     guy->set_position(Vector3Int(0, 2, 0));
     guy->set_theta(0);
     world->guy = static_cast<Guy*>(guy);
-    world->grid.push(guy);
+    world->entities.push(guy);
   }
 
   return world;
 }
 
-internal void serialize_world(World *world, String8 file_name) {
+internal void save_world(World *world) {
+  save_world(world, world->name);
+}
+
+internal void save_world(World *world, String8 file_name) {
+  String8 file_path = path_join(get_permanent_arena(), str8_lit("data/worlds"), file_name);
+
   Byte_Buffer *buffer = new Byte_Buffer();
+
+  // Header
   buffer->put_string(str8_lit("LVL"));
 
-  buffer->put_le32((u32)world->grid.count);
+  // Camera
+  Camera camera = get_editor()->camera;
+  buffer->put_f32(camera.origin.x);
+  buffer->put_f32(camera.origin.y);
+  buffer->put_f32(camera.origin.z);
+  buffer->put_f32(camera.yaw);
+  buffer->put_f32(camera.pitch);
 
-  for (int i = 0; i < world->grid.count; i++) {
-    Entity *e = world->grid[i];
+  // Entities
+  buffer->put_le32((u32)world->entities.count);
+
+  for (int i = 0; i < world->entities.count; i++) {
+    Entity *e = world->entities[i];
     buffer->put_le64(e->id);
     buffer->put_le16(e->kind);
     buffer->put_le64(e->flags);
@@ -157,7 +206,7 @@ internal void serialize_world(World *world, String8 file_name) {
     buffer->put_f32(e->theta);
   }
 
-  OS_Handle file = os_open_file(file_name, OS_AccessFlag_Write);
+  OS_Handle file = os_open_file(file_path, OS_AccessFlag_Write);
   os_write_file(file, buffer->buffer, buffer->len);
   os_close_handle(file);
 }
@@ -171,11 +220,6 @@ internal void entity_free(Entity *entity) {
   free(entity);
 }
 
-internal void entity_push(Entity *e) {
-  e->id = game_state->next_pid++;
-  game_state->entities.push(e);
-}
-
 internal Entity *entity_make(Entity_Kind kind) {
   Entity *e = nullptr;
   switch (kind) {
@@ -187,22 +231,24 @@ internal Entity *entity_make(Entity_Kind kind) {
     break;
   }
   e->kind = kind;
-  entity_push(e);
+  e->override_color = Vector4(1, 1, 1, 1);
+  e->id = get_world()->next_pid++;
   return e;
 }
 
 internal Entity *lookup_entity(Pid id) {
   if (id == 0) return nullptr;
-  for (int i = 0; i < game_state->entities.count; i++) {
-    Entity *e = game_state->entities[i];
+  World *world = get_world();
+  for (int i = 0; i < world->entities.count; i++) {
+    Entity *e = world->entities[i];
     if (e->id == id) return e;
   }
   return nullptr;
 }
     
 internal Entity *find_entity_at(World *world, Vector3Int position) {
-  for (int i = 0; i < world->grid.count; i++) {
-    Entity *wall = world->grid[i];
+  for (int i = 0; i < world->entities.count; i++) {
+    Entity *wall = world->entities[i];
     if (wall->position == position) return wall;
   }
   return nullptr;
@@ -213,9 +259,9 @@ internal void update_guy_mirror(Guy *guy) {
   guy->mirror_id = 0;
 
   Auto_Array<Entity*> mirrors;
-  for (int i = 0; i < world->grid.count; i++) {
-    if (world->grid[i]->kind == ENTITY_MIRROR) {
-      mirrors.push(world->grid[i]);
+  for (int i = 0; i < world->entities.count; i++) {
+    if (world->entities[i]->kind == ENTITY_MIRROR) {
+      mirrors.push(world->entities[i]);
     }
   }
 
@@ -316,6 +362,7 @@ internal void update_guy_mirror(Guy *guy) {
     move->from = guy->position;
     move->to = guy->reflect_position;
     guy->set_position(guy->reflect_position);
+    play_effect("swosh.flac");
   }
 }
 
@@ -393,7 +440,7 @@ void update_guy(Guy *guy) {
     moved = move_entity(guy, move_direction);
 
     if (moved) {
-      audio_engine->play_sound("tile_0.ogg", to_vector3(guy->position));
+      play_effect("tile_0.ogg");
     }
   }
 
@@ -452,8 +499,8 @@ internal void draw_world(World *world, Camera camera) {
   bucket->immediate.depth_state = R_DEPTH_STENCIL_STATE_DEFAULT;
   bucket->immediate.light_dir = normalize(light_dir);
 
-  for (int i = 0; i < world->grid.count; i++) {
-    Entity *e = world->grid[i];
+  for (int i = 0; i < world->entities.count; i++) {
+    Entity *e = world->entities[i];
     Model *model = e->model;
 
     Matrix4 rotation_matrix = rotate_rh(e->theta, camera.up);
@@ -471,7 +518,7 @@ internal void draw_world(World *world, Camera camera) {
             
       for (int vert_idx = 0; vert_idx < mesh->positions.count; vert_idx++) {
         Vector3 p = e->visual_position + mesh->positions[vert_idx];
-        Vector4 color = mesh->has_vertex_colors ? mesh->colors[vert_idx] : mesh->material.diffuse_color;
+        Vector4 color = e->override_color;
         Vector2 uv = mesh->tex_coords[vert_idx];
         Vector3 normal = mesh->has_normals ? mesh->normals[vert_idx] : Vector3(0, 0, 0);
         draw_immediate_vertex(batch, p, normal, color, uv);
@@ -479,8 +526,8 @@ internal void draw_world(World *world, Camera camera) {
     }
   }
 
-  Entity *mirror = lookup_entity(world->guy->mirror_id);
-  if (mirror) {
+  Entity *mirror = nullptr;
+  if (world->guy && (mirror = lookup_entity(world->guy->mirror_id))) {
     //@Note Draw guy clone
     {
       draw_immediate_begin();
@@ -675,27 +722,16 @@ internal void update_camera_position(Camera *camera) {
 }
 
 internal void update_world_state() {
+  World *world = get_world();
   Vector2 mouse_delta = get_mouse_delta();
   update_camera_orientation(&game_state->camera, mouse_delta);
   update_camera_position(&game_state->camera);
 
   //@Note Update entities
-  for (int i = 0; i < game_state->entities.count; i++) {
-    Entity *e = game_state->entities[i];
+  for (int i = 0; i < world->entities.count; i++) {
+    Entity *e = world->entities[i];
     e->update();
   }
-}
-
-internal UI_Line_Edit *ui_line_edit_create(String8 name) {
-  UI_Line_Edit *result = new UI_Line_Edit();
-  result->name = name;
-  result->box = nullptr;
-  result->sig = {};
-  result->buffer = (u8 *)calloc(1, 256);
-  result->buffer_len = 0;
-  result->buffer_pos = 0;
-  result->buffer_capacity = 256;
-  return result;
 }
 
 internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, f32 dt) {
@@ -714,9 +750,6 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     g_picker->render_target_view = nullptr;
 
     game_state = new Game_State();
-
-    game_state->next_pid = 1;
-
     game_state->paused = false;
     game_state->editing = false;
 
@@ -724,55 +757,49 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     default_font = load_font(temp, str8_lit("data/fonts/seguisb.ttf"), 15);
 
     Model *guy_model = load_model("data/models/Character/character.obj");
-    Model *arrow_model = load_model("data/models/arrow.obj");
-    Model *block_model = load_model("data/models/block.obj");
+    Model *block_model = load_model("data/models/tile.obj");
     Model *stone_model = load_model("data/models/stone.obj");
     Model *mirror_model = load_model("data/models/mirror/mirror.obj");
+    Model *crate_model = load_model("data/models/Crate.obj");
+    Model *sand_model = load_model("data/models/sand.obj");
 
-    editor = new Editor();
-    {
-      Entity_Panel *panel = new Entity_Panel();
-      editor->entity_panel = panel;
-      panel->position_x = ui_line_edit_create(str8_lit("X"));
-      panel->position_y = ui_line_edit_create(str8_lit("Y"));
-      panel->position_z = ui_line_edit_create(str8_lit("Z"));
-      panel->theta      = ui_line_edit_create(str8_lit("Theta"));
-
-      editor->gizmo_models[GIZMO_TRANSLATE][AXIS_X] = load_model("data/models/gizmo/translate_x.obj");
-      editor->gizmo_models[GIZMO_TRANSLATE][AXIS_Y] = load_model("data/models/gizmo/translate_y.obj");
-      editor->gizmo_models[GIZMO_TRANSLATE][AXIS_Z] = load_model("data/models/gizmo/translate_z.obj");
-      editor->gizmo_models[GIZMO_ROTATE][AXIS_X] = load_model("data/models/gizmo/rotation_x.obj");
-      editor->gizmo_models[GIZMO_ROTATE][AXIS_Y] = load_model("data/models/gizmo/rotation_y.obj");
-      editor->gizmo_models[GIZMO_ROTATE][AXIS_Z] = load_model("data/models/gizmo/rotation_z.obj");
-    }
+    init_editor();
 
     Entity_Prototype *guy_prototype = entity_prototype_create("Guy");
     guy_prototype->entity.kind = ENTITY_GUY;
     guy_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
     guy_prototype->entity.model = guy_model;
+    guy_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
     Entity_Prototype *mirror_prototype = entity_prototype_create("Mirror");
     mirror_prototype->entity.kind = ENTITY_MIRROR;
     mirror_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
     mirror_prototype->entity.model = mirror_model;
+    mirror_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
     Entity_Prototype *block_prototype = entity_prototype_create("Block");
     block_prototype->entity.kind = ENTITY_BLOCK;
     block_prototype->entity.flags = ENTITY_FLAG_STATIC;
     block_prototype->entity.model = block_model;
+    block_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
     Entity_Prototype *stone_prototype = entity_prototype_create("Stone");
     stone_prototype->entity.kind = ENTITY_BLOCK;
     stone_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
     stone_prototype->entity.model = stone_model;
+    stone_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
-    Entity_Prototype *arrow_prototype = entity_prototype_create("Arrow");
-    arrow_prototype->entity.kind = ENTITY_ARROW;
-    arrow_prototype->entity.flags = ENTITY_FLAG_STATIC;
-    arrow_prototype->entity.model = arrow_model;
+    Entity_Prototype *crate_prototype = entity_prototype_create("Crate");
+    crate_prototype->entity.kind = ENTITY_BLOCK;
+    crate_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
+    crate_prototype->entity.model = crate_model;
+    crate_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
-    World *world = load_world(str8_lit("data/worlds/0.lvl"));
-    set_world(world);
+    Entity_Prototype *sand_prototype = entity_prototype_create("Sand");
+    sand_prototype->entity.kind = ENTITY_BLOCK;
+    sand_prototype->entity.flags = ENTITY_FLAG_STATIC;
+    sand_prototype->entity.model = sand_model;
+    sand_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
     Draw_State *draw_state = new Draw_State();
     draw_set_state(draw_state);
@@ -787,6 +814,8 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
 
     game_state->camera.update_euler_angles(-PI * 0.5f, 0.0f);
 
+    load_world(str8_lit("overworld.lvl"));
+
     g_viewport = new Viewport();
     g_viewport->dimension.x = 1;
     g_viewport->dimension.y = 1;
@@ -795,8 +824,16 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     undo_stack = new Undo_Stack();
     undo_stack->arena = make_arena(get_malloc_allocator());
 
+    //@Note Game settings
+    game_settings = new Game_Settings();
+    game_settings->audio_settings.master_volume = 100;
+    game_settings->audio_settings.sfx_volume = 70;
+    game_settings->audio_settings.music_volume = 80;
+
     audio_engine = new Audio_Engine();
     audio_engine->init();
+
+    // play_music("439015_somepin_cavernous.mp3");
   }
 
   audio_engine->origin = game_state->camera.origin;
@@ -831,15 +868,15 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
 
   draw_begin(window_handle);
 
-  r_clear_color(0.51f, 0.75f, 0.87f, 1.0f);
-  // r_clear_color(0.0f, 0.0f, 0.0f, 1.0f);
+  // r_clear_color(0.51f, 0.75f, 0.87f, 1.0f);
+  r_clear_color(0.0f, 0.0f, 0.0f, 1.0f);
 
   r_resize_render_target(game_state->window_dim);
 
-  for (int i = 0; i < game_state->entities.count; i++) {
-    Entity *e = game_state->entities[i];
+  for (int i = 0; i < get_world()->entities.count; i++) {
+    Entity *e = get_world()->entities[i];
     if (e->to_be_destroyed) {
-      game_state->entities.remove(i);
+      get_world()->entities.remove(i);
       entity_free(e);
     }
   }

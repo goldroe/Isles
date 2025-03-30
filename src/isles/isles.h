@@ -5,8 +5,17 @@ struct Entity;
 struct Guy;
 struct Texture;
 
+struct Audio_Settings {
+  int master_volume;
+  int sfx_volume;
+  int music_volume;
+};
+
+struct Game_Settings {
+  Audio_Settings audio_settings; 
+};
+
 struct Picker {
-  b32 dirty;
   Vector2Int dimension;
 
   void *texture;
@@ -29,11 +38,9 @@ struct Mesh {
   Auto_Array<Vector3> positions;
   Auto_Array<Vector2> tex_coords;
   Auto_Array<Vector3> normals;
-  Auto_Array<Vector4> colors;
 
   Material material;
 
-  b32 has_vertex_colors;
   b32 has_normals;
 };
 
@@ -43,22 +50,20 @@ struct Model {
 
 struct World {
   String8 name;
-  Auto_Array<Entity*> grid;
   Auto_Array<Entity*> entities;
   Guy *guy = nullptr;
+  Pid next_pid = 1;
 };
 
 struct Game_State {
   Vector2Int window_dim;
   f32 dt;
   Camera camera;
-
   b32 paused;
   b32 editing;
-
-  Pid next_pid = 1;
-  Auto_Array<Entity*> entities;
 };
+
+internal inline Game_Settings *get_settings();
 
 internal char *string_from_entity_kind(Entity_Kind kind);
 internal char *string_from_entity_flag(Entity_Flags flags);
@@ -72,8 +77,13 @@ internal inline Game_State *get_game_state();
 internal inline World *get_world();
 internal inline void set_world(World *world);
 
+
+internal inline Arena *get_permanent_arena();
+
 internal World *load_world(String8 file_name);
-internal void serialize_world(World *world, String8 file_name);
+
+internal void save_world(World *world);
+internal void save_world(World *world, String8 name);
 
 internal void remove_grid_entity(World *world, Entity *entity);
 
