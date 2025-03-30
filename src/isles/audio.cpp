@@ -15,7 +15,7 @@ void Audio_Engine::init() {
   // ERRCHECK(system->getMasterChannelGroup(&channel_group));
 }
 
-FMOD::Sound *Audio_Engine::load_sound(std::string name) {
+FMOD::Sound *Audio_Engine::load_sound(std::string name, bool looping) {
   std::string file_name = std::string("data/audio/") + name;
   auto it = sound_map.find(name);
   if (it != sound_map.end()) {
@@ -24,7 +24,7 @@ FMOD::Sound *Audio_Engine::load_sound(std::string name) {
 
   FMOD_MODE mode = 0;
   // mode |= FMOD_3D;
-  mode |= FMOD_LOOP_OFF;
+  mode |= looping ? FMOD_LOOP_NORMAL : FMOD_LOOP_OFF;
   mode |= FMOD_CREATESTREAM;
 
   FMOD::Sound *sound = nullptr;
@@ -35,12 +35,37 @@ FMOD::Sound *Audio_Engine::load_sound(std::string name) {
   return sound;
 }
 
-void Audio_Engine::play_sound(std::string name, Vector3 position) {
+// void Audio_Engine::play_sound(std::string name, Vector3 position) {
+//   FMOD::Sound *sound = nullptr;
+
+//   auto found = sound_map.find(name);
+//   if (found == sound_map.end()) {
+//     sound = load_sound(name, looping);
+//   } else {
+//     sound = found->second;
+//   }
+
+//   FMOD::Channel *channel = nullptr;
+//   ERRCHECK(system->playSound(sound, nullptr, true, &channel));
+
+//   if (channel) {
+//     FMOD_MODE mode;
+//     sound->getMode(&mode);
+//     if (mode & FMOD_3D) {
+//       FMOD_VECTOR v = {position.x, position.y, position.z};
+//       ERRCHECK(channel->set3DAttributes(&v, nullptr));
+//     }
+//     ERRCHECK(channel->setVolume(0.1f));
+//     ERRCHECK(channel->setPaused(false));
+//   }
+// }
+
+void Audio_Engine::play_sound(std::string name, f32 volume, bool looping) {
   FMOD::Sound *sound = nullptr;
 
   auto found = sound_map.find(name);
   if (found == sound_map.end()) {
-    sound = load_sound(name);
+    sound = load_sound(name, looping);
   } else {
     sound = found->second;
   }
@@ -49,14 +74,9 @@ void Audio_Engine::play_sound(std::string name, Vector3 position) {
   ERRCHECK(system->playSound(sound, nullptr, true, &channel));
 
   if (channel) {
-    FMOD_MODE mode;
-    sound->getMode(&mode);
-    if (mode & FMOD_3D) {
-      FMOD_VECTOR v = {position.x, position.y, position.z};
-      ERRCHECK(channel->set3DAttributes(&v, nullptr));
-    }
-    ERRCHECK(channel->setVolume(0.1f));
+    ERRCHECK(channel->setVolume(volume));
     ERRCHECK(channel->setPaused(false));
+
   }
 }
 
@@ -78,3 +98,16 @@ void Audio_Engine::update() {
 }
 
 #undef ERRCHECK
+
+
+internal void play_music(const char *name) {
+  Game_Settings *settings = get_settings();
+  f32 volume = 0.01f * settings->audio_settings.master_volume * 0.01f * settings->audio_settings.music_volume;
+  audio_engine->play_sound(name, volume, true);
+}
+
+internal void play_effect(const char *name) {
+  Game_Settings *settings = get_settings();
+  f32 volume = 0.01f * settings->audio_settings.master_volume * 0.01f * settings->audio_settings.sfx_volume;
+  audio_engine->play_sound(name, volume, false);
+}

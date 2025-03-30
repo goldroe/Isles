@@ -13,8 +13,8 @@ struct Audio_Engine {
 
   void init();
 
-  FMOD::Sound *load_sound(std::string name);
-  void play_sound(std::string name, Vector3 position);
+  FMOD::Sound *load_sound(std::string name, bool looping);
+  void play_sound(std::string name, f32 volume, bool looping);
   void update();
 };
 
