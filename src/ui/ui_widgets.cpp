@@ -135,3 +135,20 @@ internal UI_Signal ui_text_edit(String8 name, void *buffer, int max_buffer_capac
   ui_box_equip_draw_proc(box, ui_draw_text_edit, draw_data);
   return sig;
 }
+
+internal UI_Line_Edit *ui_line_edit_create(String8 name) {
+  UI_Line_Edit *result = new UI_Line_Edit();
+  result->name = name;
+  result->box = nullptr;
+  result->sig = {};
+  result->buffer = (u8 *)calloc(1, 256);
+  result->buffer_len = 0;
+  result->buffer_pos = 0;
+  result->buffer_capacity = 256;
+  return result;
+}
+
+internal UI_Signal ui_line_edit(String8 string, UI_Line_Edit *edit) {
+  UI_Signal signal = ui_text_edit(string, edit->buffer, edit->buffer_capacity, &edit->buffer_pos, &edit->buffer_len);
+  return signal;
+}
