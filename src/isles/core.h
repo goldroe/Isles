@@ -55,9 +55,15 @@ struct Byte_Buffer {
 
 struct Vertex_3D {
   Vector3 position;
-  Vector3 normal;
-  Vector2 uv;
   Vector4 color;
+  Vector2 uv;
+};
+
+struct Vertex_XNCUU {
+  Vector3 position;
+  Vector3 normal;
+  Vector4 color;
+  Vector2 uv;
 };
 
 #define ALLOCATOR_RESERVE_SIG(name) void * name(u64 bytes)
