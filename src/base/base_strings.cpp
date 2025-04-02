@@ -209,7 +209,7 @@ internal cstring cstring_format_va(const char *fmt, va_list args) {
 
     int len = stbsp_vsnprintf(NULL, NULL, fmt, args_);
     cstring result = cstring_alloc(len);
-    stbsp_vsnprintf(result, len, fmt, args_);
+    stbsp_vsnprintf(result, len + 1, fmt, args_);
     result[len] = 0;
 
     va_end(args_);
