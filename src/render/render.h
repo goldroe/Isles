@@ -39,7 +39,8 @@ enum Sampler_State_Kind {
 };
 
 enum Shader_Kind {
-  SHADER_IMMEDIATE,
+  SHADER_BASIC,
+  SHADER_MESH,
   SHADER_RECT,
   SHADER_PICKER,
   SHADER_SHADOW_MAP,
@@ -57,14 +58,19 @@ struct Shader {
 };
 
 enum Uniform_Kind {
-  UNIFORM_IMMEDIATE,
+  UNIFORM_BASIC,
+  UNIFORM_MESH,
   UNIFORM_RECT,
   UNIFORM_PICKER,
   UNIFORM_SHADOW_MAP,
   UNIFORM_COUNT 
 };
 
-struct R_D3D11_Uniform_Basic_3D {
+struct R_Uniform_Basic3D {
+  Matrix4 transform;
+};
+
+struct R_Uniform_Mesh {
   Matrix4 transform;
   Matrix4 world_matrix;
   Vector3 light_dir;

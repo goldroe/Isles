@@ -97,17 +97,16 @@ internal void reset_viewport() {
   set_viewport(0, 0, (f32)d3d->window_dimension.x, (f32)d3d->window_dimension.y);
 }
 
-internal inline void immediate_vertex(Vector3 v, Vector3 n, Vector4 c, Vector2 uv) {
+internal inline void immediate_vertex(Vector3 v, Vector4 c, Vector2 uv) {
   Vertex_3D vertex;
   vertex.position = v;
-  vertex.normal = n;
   vertex.color = c;
   vertex.uv = uv;
   immediate_vertices.push(vertex);
 }
 
 internal void immediate_flush() {
-  set_shader(SHADER_IMMEDIATE);
+  set_shader(SHADER_BASIC);
 
   if (immediate_vertices.count == 0) {
     return;
@@ -132,23 +131,23 @@ internal void immediate_begin() {
 }
 
 internal void draw_mesh(Triangle_Mesh *mesh, bool use_override_color, Vector4 override_color) {
-  set_shader(SHADER_IMMEDIATE);
+  set_shader(SHADER_MESH);
 
   R_D3D11_State *d3d = r_d3d11_state();
 
-  Auto_Array<Vertex_3D> vertices;
+  Auto_Array<Vertex_XNCUU> vertices;
   vertices.reserve(mesh->vertices.count);
   for (int i = 0; i < mesh->vertices.count; i++) {
-    Vertex_3D vertex;
+    Vertex_XNCUU vertex;
     vertex.position = mesh->vertices[i];
-    vertex.uv = mesh->uvs[i];
     vertex.normal = mesh->normals[i];
     vertex.color = use_override_color ? override_color : Vector4(1, 1, 1, 1);
+    vertex.uv = mesh->uvs[i];
     vertices.push(vertex);
   }
 
-  UINT stride = sizeof(Vertex_3D), offset = 0;
-  ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices.data, vertices.count, sizeof(Vertex_3D));
+  UINT stride = sizeof(Vertex_XNCUU), offset = 0;
+  ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices.data, vertices.count, sizeof(Vertex_XNCUU));
   d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
 
   ID3D11SamplerState *sampler = d3d->sampler_states[SAMPLER_STATE_LINEAR];
@@ -239,7 +238,6 @@ internal void draw_scene() {
   
   draw_world(world, camera);
 
-
   if (!game_state->editing) {
     Entity *mirror = nullptr;
     if (world->guy && (mirror = lookup_entity(world->guy->mirror_id))) {
@@ -251,10 +249,12 @@ internal void draw_scene() {
         Matrix4 world_matrix = translate(to_vector3(guy->reflect_position)) * rotation_matrix;
         Matrix4 transform = camera.projection_matrix * camera.view_matrix * world_matrix;
 
-        R_D3D11_Uniform_Basic_3D uniform = {};
+        set_shader(SHADER_MESH);
+
+        R_Uniform_Mesh uniform = {};
         uniform.transform = transform;
         uniform.world_matrix = world_matrix;
-        ID3D11Buffer *uniform_buffer = d3d->uniform_buffers[UNIFORM_IMMEDIATE];
+        ID3D11Buffer *uniform_buffer = d3d->uniform_buffers[UNIFORM_MESH];
         write_uniform_buffer(uniform_buffer, &uniform, 0, sizeof(uniform));
 
         draw_mesh(guy->mesh, true, Vector4(0.4f, 0.4f, 0.4f, 1.0f));
@@ -326,10 +326,9 @@ internal void draw_world(World *world, Camera camera) {
     Matrix4 world_matrix = translate(entity->visual_position) * rotation_matrix;
     Matrix4 transform = camera.projection_matrix * camera.view_matrix * world_matrix;
 
-    R_D3D11_Uniform_Basic_3D uniform = {};
+    R_Uniform_Mesh uniform = {};
     uniform.transform = transform;
-    uniform.world_matrix = world_matrix;
-    ID3D11Buffer *uniform_buffer = d3d->uniform_buffers[UNIFORM_IMMEDIATE];
+    ID3D11Buffer *uniform_buffer = d3d->uniform_buffers[UNIFORM_MESH];
     write_uniform_buffer(uniform_buffer, &uniform, 0, sizeof(uniform));
 
     d3d->device_context->VSSetConstantBuffers(0, 1, &uniform_buffer);
@@ -348,18 +347,17 @@ internal void draw_imm_quad(Texture *texture, Vector2 position, Vector2 size, Ve
   Vector2 uv2 = Vector2(uv.x + uv_size.x, uv.y + uv_size.y);
   Vector2 uv3 = Vector2(uv.x, uv.y + uv_size.y);
 
-  immediate_vertex(p0, Vector3(), color, uv0);
-  immediate_vertex(p1, Vector3(), color, uv1);
-  immediate_vertex(p2, Vector3(), color, uv2);
-  immediate_vertex(p0, Vector3(), color, uv0);
-  immediate_vertex(p2, Vector3(), color, uv2);
-  immediate_vertex(p3, Vector3(), color, uv3);
+  immediate_vertex(p0, color, uv0);
+  immediate_vertex(p1, color, uv1);
+  immediate_vertex(p2, color, uv2);
+  immediate_vertex(p0, color, uv0);
+  immediate_vertex(p2, color, uv2);
+  immediate_vertex(p3, color, uv3);
 }
 
 internal void draw_imm_rectangle(Vector3 position, Vector3 size, Vector4 color) {
     Vector3 half = 0.5f * size;
     Vector2 uv = Vector2();
-    Vector3 normal = Vector3();
     Vector3 p0 = Vector3(position.x,          position.y,          position.z + size.z);
     Vector3 p1 = Vector3(position.x + size.x, position.y,          position.z + size.z);
     Vector3 p2 = Vector3(position.x + size.x, position.y + size.y, position.z + size.z);
@@ -370,47 +368,47 @@ internal void draw_imm_rectangle(Vector3 position, Vector3 size, Vector4 color) 
     Vector3 p7 = Vector3(position.x + size.x, position.y + size.y, position.z);
 
     // front
-    immediate_vertex(p0, normal, color, uv);
-    immediate_vertex(p1, normal, color, uv);
-    immediate_vertex(p2, normal, color, uv);
-    immediate_vertex(p0, normal, color, uv);
-    immediate_vertex(p2, normal, color, uv);
-    immediate_vertex(p3, normal, color, uv);
+    immediate_vertex(p0, color, uv);
+    immediate_vertex(p1, color, uv);
+    immediate_vertex(p2, color, uv);
+    immediate_vertex(p0, color, uv);
+    immediate_vertex(p2, color, uv);
+    immediate_vertex(p3, color, uv);
     // back
-    immediate_vertex(p4, normal, color, uv);
-    immediate_vertex(p5, normal, color, uv);
-    immediate_vertex(p6, normal, color, uv);
-    immediate_vertex(p4, normal, color, uv);
-    immediate_vertex(p6, normal, color, uv);
-    immediate_vertex(p7, normal, color, uv);
+    immediate_vertex(p4, color, uv);
+    immediate_vertex(p5, color, uv);
+    immediate_vertex(p6, color, uv);
+    immediate_vertex(p4, color, uv);
+    immediate_vertex(p6, color, uv);
+    immediate_vertex(p7, color, uv);
     // left
-    immediate_vertex(p5, normal, color, uv);
-    immediate_vertex(p0, normal, color, uv);
-    immediate_vertex(p3, normal, color, uv);
-    immediate_vertex(p5, normal, color, uv);
-    immediate_vertex(p3, normal, color, uv);
-    immediate_vertex(p6, normal, color, uv);
+    immediate_vertex(p5, color, uv);
+    immediate_vertex(p0, color, uv);
+    immediate_vertex(p3, color, uv);
+    immediate_vertex(p5, color, uv);
+    immediate_vertex(p3, color, uv);
+    immediate_vertex(p6, color, uv);
     // right
-    immediate_vertex(p1, normal, color, uv);
-    immediate_vertex(p4, normal, color, uv);
-    immediate_vertex(p7, normal, color, uv);
-    immediate_vertex(p1, normal, color, uv);
-    immediate_vertex(p7, normal, color, uv);
-    immediate_vertex(p2, normal, color, uv);
+    immediate_vertex(p1, color, uv);
+    immediate_vertex(p4, color, uv);
+    immediate_vertex(p7, color, uv);
+    immediate_vertex(p1, color, uv);
+    immediate_vertex(p7, color, uv);
+    immediate_vertex(p2, color, uv);
     // top
-    immediate_vertex(p3, normal, color, uv);
-    immediate_vertex(p2, normal, color, uv);
-    immediate_vertex(p7, normal, color, uv);
-    immediate_vertex(p3, normal, color, uv);
-    immediate_vertex(p7, normal, color, uv);
-    immediate_vertex(p6, normal, color, uv);
+    immediate_vertex(p3, color, uv);
+    immediate_vertex(p2, color, uv);
+    immediate_vertex(p7, color, uv);
+    immediate_vertex(p3, color, uv);
+    immediate_vertex(p7, color, uv);
+    immediate_vertex(p6, color, uv);
     // bottom
-    immediate_vertex(p1, normal, color, uv);
-    immediate_vertex(p0, normal, color, uv);
-    immediate_vertex(p5, normal, color, uv);
-    immediate_vertex(p1, normal, color, uv);
-    immediate_vertex(p5, normal, color, uv);
-    immediate_vertex(p4, normal, color, uv);
+    immediate_vertex(p1, color, uv);
+    immediate_vertex(p0, color, uv);
+    immediate_vertex(p5, color, uv);
+    immediate_vertex(p1, color, uv);
+    immediate_vertex(p5, color, uv);
+    immediate_vertex(p4, color, uv);
 }
 
 internal void draw_imm_cube(Vector3 center, f32 size, Vector4 color) {

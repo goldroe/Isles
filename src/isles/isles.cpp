@@ -750,7 +750,7 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
   if (!game_state->paused && !game_state->editing) {
     input_set_mouse_capture(true);
     update_world_state();
-    draw_world(get_world(), game_state->camera);
+    draw_scene();
   }
 
   if (key_pressed(OS_KEY_F1) ||

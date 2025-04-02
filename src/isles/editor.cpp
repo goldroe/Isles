@@ -3,8 +3,6 @@
 global Editor *editor;
 global Picker *g_picker;
 
-internal void draw_world(World *world, Camera camera);
-
 internal inline Editor *get_editor() {
   return editor;
 }
@@ -87,7 +85,7 @@ internal void r_picker_render_gizmo(Picker *picker) {
 
   float clear_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
   d3d->device_context->ClearRenderTargetView((ID3D11RenderTargetView*)picker->render_target->render_target_view, clear_color);
-  d3d->device_context->ClearDepthStencilView(d3d->depth_stencil_view, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
+  d3d->device_context->ClearDepthStencilView((ID3D11DepthStencilView *)d3d->default_render_target->depth_stencil_view, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
 
   d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -130,7 +128,7 @@ internal void r_picker_render_gizmo(Picker *picker) {
     vertex_buffer->Release();
   }
 
-  d3d->device_context->OMSetRenderTargets(1, &d3d->render_target_view, d3d->depth_stencil_view);
+  set_render_target(d3d->default_render_target);
 }
 
 internal void picker_render(Picker *picker) {
@@ -194,7 +192,7 @@ internal void picker_render(Picker *picker) {
     vertex_buffer->Release();
   }
 
-  d3d->device_context->OMSetRenderTargets(1, &d3d->render_target_view, d3d->depth_stencil_view);
+  set_render_target(d3d->default_render_target);
 }
 
 internal Picker *make_picker(int width, int height) {
@@ -328,14 +326,14 @@ internal void update_editor() {
 
   Entity *selected_entity = editor->selected_entity;
 
-  draw_world(get_world(), editor->camera);
+  draw_scene();
 
   //@Note Draw Gizmos
   if (editor->selected_entity) {
     R_D3D11_State *d3d = r_d3d11_state();
 
     set_depth_state(DEPTH_STATE_DEFAULT);
-    d3d->device_context->ClearDepthStencilView(d3d->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
+    d3d->device_context->ClearDepthStencilView((ID3D11DepthStencilView *)d3d->default_render_target->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     set_rasterizer_state(RASTERIZER_STATE_NO_CULL);
 
@@ -352,25 +350,19 @@ internal void update_editor() {
       Matrix4 world_matrix = translate(selected_entity->visual_position.x, selected_entity->visual_position.y, selected_entity->visual_position.z) * scale(Vector3(gizmo_scale_factor, gizmo_scale_factor, gizmo_scale_factor));
       Matrix4 view_matrix = editor->camera.view_matrix;
       Matrix4 transform = editor->camera.projection_matrix * view_matrix * world_matrix;
-      R_D3D11_Uniform_Basic_3D uniform = {};
+      R_Uniform_Mesh uniform = {};
       uniform.transform = transform;
       uniform.world_matrix = world_matrix;
-
-      ID3D11Buffer *uniform_buffer = r_d3d11_state()->uniform_buffers[SHADER_IMMEDIATE];
+      ID3D11Buffer *uniform_buffer = r_d3d11_state()->uniform_buffers[SHADER_MESH];
       write_uniform_buffer(uniform_buffer, &uniform, 0, sizeof(uniform));
 
-      Vector4 color = Vector4(0, 0, 0, 1);
+      Vector4 color;
       switch (axis) {
-      case AXIS_X:
-        color = Vector4(1, 0, 0, 1);
-        break;
-      case AXIS_Y:
-        color = Vector4(0, 1, 0, 1);
-        break;
-      case AXIS_Z:
-        color = Vector4(0, 0, 1, 1);
-        break;
+      case AXIS_X: color = Vector4(1, 0, 0, 1); break;
+      case AXIS_Y: color = Vector4(0, 1, 0, 1); break;
+      case AXIS_Z: color = Vector4(0, 0, 1, 1); break;
       }
+
       if (editor->gizmo_axis_hover == axis && editor->gizmo_axis_active == (Axis)-1) {
         color = mix(color, Vector4(1.0f, 1.0f, 1.0f, 1.0f), 0.4f);
       }
@@ -381,7 +373,6 @@ internal void update_editor() {
       draw_mesh(mesh, true, color);
     }
   }
-
 }
 
 internal u64 djb2_hash(const char *str) {
