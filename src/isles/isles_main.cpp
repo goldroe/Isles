@@ -1,6 +1,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #pragma warning(push)
 #pragma warning( disable : 4244)
@@ -45,7 +46,10 @@
 #include "path/path.cpp"
 #include "font/font.cpp"
 
+#include "log.cpp"
+
 #include "core.h"
+#include "mesh.h"
 #include "audio.h"
 #include "entity.h"
 #include "ui/ui_core.h"
@@ -54,17 +58,19 @@
 #include "draw.h"
 #include "input.h"
 #include "undo.h"
+#include "render_target.h"
 
 #include "core.cpp"
 #include "audio.cpp"
 #include "ui/ui_core.cpp"
 #include "ui/ui_widgets.cpp"
 #include "draw.cpp"
-#include "model.cpp"
 #include "render/render.cpp"
+#include "mesh.cpp"
 #include "input.cpp"
 #include "editor.cpp"
 #include "undo.cpp"
+#include "render_target.cpp"
 #include "isles.cpp"
 
 global bool window_should_close;
