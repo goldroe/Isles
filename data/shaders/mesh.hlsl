@@ -22,8 +22,11 @@ struct Vertex_Output {
     float4 color : COLOR;
 };
 
-Texture2D main_tex : register(t0);
-SamplerState main_sampler : register(s0);
+Texture2D diffuse_texture : register(t0);
+Texture2D shadow_map : register(t1);
+
+SamplerState diffuse_sampler : register(s0);
+SamplerState point_sampler : register(s1);
 
 Vertex_Output vs_main(Vertex_Input input) {
     Vertex_Output output;
@@ -37,7 +40,7 @@ Vertex_Output vs_main(Vertex_Input input) {
 
 float4 ps_main(Vertex_Output input) : SV_TARGET {
     float4 final_color;
-    float4 diffuse = main_tex.Sample(main_sampler, input.uv);
+    float4 diffuse = diffuse_texture.Sample(diffuse_sampler, input.uv);
 
     // float light_dot = max(dot(light_dir, normalize(input.normal)), 0.0);
     // float4 light_color = float4(0.8, 0.4, 0.4, 1.0);
