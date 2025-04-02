@@ -130,15 +130,26 @@ internal u64 djb2_hash_string(String8 string) {
 }
 
 
+internal cstring cstring_alloc(u64 len) {
+  cstring_header *header = (cstring_header *)malloc(offsetof(cstring_header, data) + len + 1);
+  header->len = len;
+  header->cap = len;
+  return header->data;
+}
+
+internal void cstring_free(cstring str) {
+  if (str) {
+    cstring_header *header = CSTRING_HEADER(str);
+    free(header);
+  }
+}
 
 //@Note Cstring
 internal cstring make_cstring_len(const char *str, u64 len) {
-    cstring_header *header = (cstring_header *)malloc(offsetof(cstring_header, data) + len + 1);
-    header->len = len;
-    header->cap = len;
-    MemoryCopy(header->data, str, len);
-    header->data[len] = 0;
-    return header->data;
+  cstring result = cstring_alloc(len);
+  MemoryCopy(result, str, len);
+  result[len] = 0;
+  return result;
 }
 
 internal cstring make_cstring(const char *str) {
@@ -192,12 +203,28 @@ internal void cstring_append(cstring *string, const char *s) {
     *string = result;
 }
 
+internal cstring cstring_format_va(const char *fmt, va_list args) {
+    va_list args_;
+    va_copy(args_, args);
+
+    int len = stbsp_vsnprintf(NULL, NULL, fmt, args_);
+    cstring result = cstring_alloc(len);
+    stbsp_vsnprintf(result, len, fmt, args_);
+    result[len] = 0;
+
+    va_end(args_);
+    return result;
+}
+
 internal cstring cstring_fmt(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
+
     int len = stbsp_vsnprintf(NULL, NULL, fmt, args);
-    char *result = (char *)malloc(len + 1);
-    stbsp_vsnprintf(result, len + 1, fmt, args);
+    cstring result = cstring_alloc(len);
+    stbsp_vsnprintf(result, len, fmt, args);
+    result[len] = 0;
+
     va_end(args);
     return result;
 }
@@ -210,6 +237,7 @@ internal cstring cstring_append_fmt(cstring string, const char *fmt, ...) {
     stbsp_vsnprintf(str_fmt, len + 1, fmt, args);
     va_end(args);
     cstring result = cstring__append(string, str_fmt);
+    free(str_fmt);
     return result;
 }
 
@@ -222,4 +250,5 @@ internal void cstring_append_fmt(cstring *string, const char *fmt, ...) {
     va_end(args);
     cstring result = cstring__append(*string, str_fmt);
     *string = result;
+    free(str_fmt);
 }
