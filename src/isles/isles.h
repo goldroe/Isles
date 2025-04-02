@@ -1,9 +1,8 @@
-#ifndef SOKOBAN_H
-#define SOKOBAN_H
+#if !defined(ISLES_H)
+#define ISLES_H
 
 struct Entity;
 struct Guy;
-struct Texture;
 
 struct Audio_Settings {
   int master_volume;
@@ -15,37 +14,18 @@ struct Game_Settings {
   Audio_Settings audio_settings; 
 };
 
-struct Picker {
-  Vector2Int dimension;
+struct Render_Target;
 
-  void *texture;
-  void *select_texture;
-  void *render_target_view;
+struct Picker {
+  Vector2 dimension;
+  Render_Target *render_target;
+  void *staging_texture;
 };
 
 struct Raycast {
   Entity *hit;
   Vector3 hit_position;
   Face face;
-};
-
-struct Material {
-  Texture *texture;
-  Vector4 diffuse_color;
-};
-
-struct Mesh {
-  Auto_Array<Vector3> positions;
-  Auto_Array<Vector2> tex_coords;
-  Auto_Array<Vector3> normals;
-
-  Material material;
-
-  b32 has_normals;
-};
-
-struct Model {
-  Auto_Array<Mesh*> meshes;
 };
 
 struct World {
@@ -87,4 +67,4 @@ internal void save_world(World *world, String8 name);
 
 internal void remove_grid_entity(World *world, Entity *entity);
 
-#endif // SOKOBAN_H
+#endif // ISLES_H
