@@ -1,5 +1,9 @@
 global Viewport *g_viewport;
 
+internal inline Viewport *get_viewport() {
+  return g_viewport;
+}
+
 void Byte_Buffer::advance() {
   Assert(ptr < len);
   ptr++;
