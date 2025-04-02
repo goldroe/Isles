@@ -20,7 +20,8 @@ EnumDefineFlagOperators(Entity_Flags);
 
 Entity_Flags entity_flag_array[] = { ENTITY_FLAG_PUSHABLE, ENTITY_FLAG_STATIC, };
 
-struct Model;
+
+struct Triangle_Mesh;
 
 struct Entity {
   Entity_Kind kind;
@@ -37,8 +38,9 @@ struct Entity {
   f32 theta;
   f32 theta_target;
 
-  Model *model;
-
+  Triangle_Mesh *mesh;
+  
+  b32 use_override_color;
   Vector4 override_color;
 
   b32 to_be_destroyed;
