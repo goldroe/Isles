@@ -21,12 +21,12 @@ internal void init_editor() {
   editor->entity_panel->color_g = ui_line_edit_create(str8_lit("G"));
   editor->entity_panel->color_b = ui_line_edit_create(str8_lit("B"));
 
-  editor->gizmo_models[GIZMO_TRANSLATE][AXIS_X] = load_model("data/models/gizmo/translate_x.obj");
-  editor->gizmo_models[GIZMO_TRANSLATE][AXIS_Y] = load_model("data/models/gizmo/translate_y.obj");
-  editor->gizmo_models[GIZMO_TRANSLATE][AXIS_Z] = load_model("data/models/gizmo/translate_z.obj");
-  editor->gizmo_models[GIZMO_ROTATE][AXIS_X] = load_model("data/models/gizmo/rotation_x.obj");
-  editor->gizmo_models[GIZMO_ROTATE][AXIS_Y] = load_model("data/models/gizmo/rotation_y.obj");
-  editor->gizmo_models[GIZMO_ROTATE][AXIS_Z] = load_model("data/models/gizmo/rotation_z.obj");
+  editor->gizmo_meshes[GIZMO_TRANSLATE][AXIS_X] = load_mesh("data/meshes/gizmo/translate_x.obj");
+  editor->gizmo_meshes[GIZMO_TRANSLATE][AXIS_Y] = load_mesh("data/meshes/gizmo/translate_y.obj");
+  editor->gizmo_meshes[GIZMO_TRANSLATE][AXIS_Z] = load_mesh("data/meshes/gizmo/translate_z.obj");
+  // editor->gizmo_meshes[GIZMO_ROTATE][AXIS_X]    = load_mesh("data/meshes/gizmo/rotation_x.obj");
+  // editor->gizmo_meshes[GIZMO_ROTATE][AXIS_Y]    = load_mesh("data/meshes/gizmo/rotation_y.obj");
+  // editor->gizmo_meshes[GIZMO_ROTATE][AXIS_Z]    = load_mesh("data/meshes/gizmo/rotation_z.obj");
 
   editor->panel = new Editor_Panel();
   editor->panel->expand_load_world = false;
@@ -75,34 +75,36 @@ void Editor::select_entity(Entity *e) {
 }
 
 internal void r_picker_render_gizmo(Picker *picker) {
-  R_D3D11_State *d3d11_state = r_d3d11_state();
+  Render_Target *render_target = picker->render_target;
+  
+  R_D3D11_State *d3d = r_d3d11_state();
 
-  d3d11_state->device_context->OMSetBlendState(nullptr, NULL, 0xffffffff);
-  d3d11_state->device_context->OMSetDepthStencilState(d3d11_state->depth_stencil_states[R_DEPTH_STENCIL_STATE_DEFAULT], 0);
+  set_blend_state(BLEND_STATE_DEFAULT);
+  set_depth_state(DEPTH_STATE_DISABLE);
+  set_rasterizer_state(RASTERIZER_STATE_NO_CULL);
 
-  d3d11_state->device_context->OMSetRenderTargets(1, (ID3D11RenderTargetView **)&picker->render_target_view, d3d11_state->depth_stencil_view);
+  d3d->device_context->OMSetRenderTargets(1, (ID3D11RenderTargetView **)&render_target->render_target_view, (ID3D11DepthStencilView*)render_target->depth_stencil_view);
 
   float clear_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-  d3d11_state->device_context->ClearRenderTargetView((ID3D11RenderTargetView*)picker->render_target_view, clear_color);
-  d3d11_state->device_context->ClearDepthStencilView(d3d11_state->depth_stencil_view, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
+  d3d->device_context->ClearRenderTargetView((ID3D11RenderTargetView*)picker->render_target->render_target_view, clear_color);
+  d3d->device_context->ClearDepthStencilView(d3d->depth_stencil_view, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
 
-  Shader *shader = d3d11_state->shaders[D3D11_SHADER_PICKER];
-  d3d11_state->device_context->VSSetShader(shader->vertex_shader, nullptr, 0);
-  d3d11_state->device_context->PSSetShader(shader->pixel_shader, nullptr, 0);
+  d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-  d3d11_state->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-  d3d11_state->device_context->IASetInputLayout(shader->input_layout);
-
-  Auto_Array<Vector3> vertices;
-
-  Game_State *game_state = get_game_state();
+  set_shader(SHADER_PICKER);
+  ID3D11Buffer *uniform_buffer = d3d->uniform_buffers[UNIFORM_PICKER];
+  d3d->device_context->VSSetConstantBuffers(0, 1, &uniform_buffer);
+  d3d->device_context->PSSetConstantBuffers(0, 1, &uniform_buffer);
 
   Entity *e = editor->selected_entity;
 
-  for (u32 axis = AXIS_X; axis <= AXIS_Z; axis++) {
-    Model *model = editor->gizmo_models[editor->active_gizmo][axis];
+  f32 gizmo_scale_factor = Abs(magnitude(editor->camera.origin - editor->selected_entity->visual_position) * 0.5f);
+  gizmo_scale_factor = ClampBot(gizmo_scale_factor, 1.0f);
 
-    Matrix4 world_matrix = translate(e->visual_position.x, e->visual_position.y, e->visual_position.z) * scale(Vector3(2.f, 2.f, 2.f));
+  for (u32 axis = AXIS_X; axis <= AXIS_Z; axis++) {
+    Triangle_Mesh *mesh = editor->gizmo_meshes[editor->active_gizmo][axis];
+
+    Matrix4 world_matrix = translate(e->visual_position.x, e->visual_position.y, e->visual_position.z) * scale(Vector3(gizmo_scale_factor, gizmo_scale_factor, gizmo_scale_factor));
     Matrix4 view_matrix = editor->camera.view_matrix;
     Matrix4 transform = editor->camera.projection_matrix * view_matrix * world_matrix;
 
@@ -117,92 +119,47 @@ internal void r_picker_render_gizmo(Picker *picker) {
     uniform.transform = transform;
     uniform.pick_color = pick_color;
 
-    ID3D11Buffer *uniform_buffer = d3d11_state->uniform_buffers[D3D11_UNIFORM_PICKER];
-    d3d11_state->device_context->VSSetConstantBuffers(0, 1, &uniform_buffer);
-    d3d11_state->device_context->PSSetConstantBuffers(0, 1, &uniform_buffer);
-    {
-      D3D11_MAPPED_SUBRESOURCE resource = {};
-      if (d3d11_state->device_context->Map(uniform_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &resource) == S_OK) {
-        memcpy(resource.pData, &uniform, sizeof(uniform));
-        d3d11_state->device_context->Unmap(uniform_buffer, 0);
-      }
-    }
+    write_uniform_buffer(uniform_buffer, &uniform, 0, sizeof(uniform));
 
-    for (int mesh_idx = 0; mesh_idx < model->meshes.count; mesh_idx++) {
-      Mesh *mesh = model->meshes[mesh_idx];
+    UINT stride = sizeof(Vector3), offset = 0;
+    ID3D11Buffer *vertex_buffer = make_vertex_buffer(mesh->vertices.data, mesh->vertices.count, sizeof(Vector3));
+    d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
 
-      vertices.reserve(mesh->positions.count);
+    d3d->device_context->Draw((UINT)mesh->vertices.count, 0);
 
-      for (int vert_idx = 0; vert_idx < mesh->positions.count; vert_idx++) {
-        Vector3 p = mesh->positions[vert_idx];
-        vertices.push(p);
-      }
-
-      ID3D11Buffer *vertex_buffer = nullptr;
-      {
-        D3D11_BUFFER_DESC desc = {};
-        desc.Usage = D3D11_USAGE_DEFAULT;
-        desc.ByteWidth = sizeof(Vector3) * (UINT)vertices.count;
-        desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-        desc.CPUAccessFlags = 0;
-        desc.MiscFlags = 0;
-        D3D11_SUBRESOURCE_DATA data = {};
-        data.pSysMem = vertices.data;
-        data.SysMemPitch = 0;
-        data.SysMemSlicePitch = 0;
-        d3d11_state->device->CreateBuffer(&desc, &data, &vertex_buffer);
-      }
-      UINT stride = sizeof(Vector3), offset = 0;
-      d3d11_state->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
-
-      d3d11_state->device_context->Draw((UINT)vertices.count, 0);
-
-      vertex_buffer->Release();
-      vertices.reset_count();
-    }
+    vertex_buffer->Release();
   }
 
-  d3d11_state->swap_chain->Present(1, 0);
-
-  d3d11_state->device_context->OMSetRenderTargets(1, &d3d11_state->render_target_view, d3d11_state->depth_stencil_view);
+  d3d->device_context->OMSetRenderTargets(1, &d3d->render_target_view, d3d->depth_stencil_view);
 }
 
-internal void r_picker_render(Picker *picker) {
-  R_D3D11_State *d3d11_state = r_d3d11_state();
+internal void picker_render(Picker *picker) {
+  R_D3D11_State *d3d = r_d3d11_state();
 
-  d3d11_state->device_context->OMSetBlendState(nullptr, NULL, 0xffffffff);
+  set_blend_state(BLEND_STATE_DEFAULT);
+  set_depth_state(DEPTH_STATE_DEFAULT);
 
-  d3d11_state->device_context->OMSetDepthStencilState(d3d11_state->depth_stencil_states[R_DEPTH_STENCIL_STATE_DEFAULT], 0);
-
-  d3d11_state->device_context->OMSetRenderTargets(1, (ID3D11RenderTargetView **)&picker->render_target_view, d3d11_state->depth_stencil_view);
+  Render_Target *render_target = picker->render_target;
+  d3d->device_context->OMSetRenderTargets(1, (ID3D11RenderTargetView **)&render_target->render_target_view, (ID3D11DepthStencilView *)render_target->depth_stencil_view);
 
   float clear_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-  d3d11_state->device_context->ClearRenderTargetView((ID3D11RenderTargetView*)picker->render_target_view, clear_color);
-  d3d11_state->device_context->ClearDepthStencilView(d3d11_state->depth_stencil_view, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
+  d3d->device_context->ClearRenderTargetView((ID3D11RenderTargetView *)render_target->render_target_view, clear_color);
+  d3d->device_context->ClearDepthStencilView((ID3D11DepthStencilView *)render_target->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
-  Shader *shader = d3d11_state->shaders[D3D11_SHADER_PICKER];
-  ID3D11VertexShader *vertex_shader = shader->vertex_shader;
-  ID3D11PixelShader *pixel_shader = shader->pixel_shader;
-  d3d11_state->device_context->VSSetShader(vertex_shader, nullptr, 0);
-  d3d11_state->device_context->PSSetShader(pixel_shader, nullptr, 0);
-
-  ID3D11InputLayout *input_layout = shader->input_layout;
-  d3d11_state->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-  d3d11_state->device_context->IASetInputLayout(input_layout);
-
-  Auto_Array<Vector3> vertices;
+  set_shader(SHADER_PICKER);
+  d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
   Game_State *game_state = get_game_state();
   World *world = get_world();
 
   for (int i = 0; i < world->entities.count; i++) {
     Entity *e = world->entities[i];
-    Model *model = e->model;
+    Triangle_Mesh *mesh = e->mesh;
 
     Matrix4 rotation_matrix = rotate_rh(e->visual_rotation.y, editor->camera.up);
-    Matrix4 world_matrix = translate(e->visual_position) * rotation_matrix * translate(-e->visual_position);
+    Matrix4 world_matrix = translate(e->visual_position) * rotation_matrix;
     Matrix4 view = editor->camera.view_matrix;
-    Matrix4 transform = editor->camera.projection_matrix * editor->camera.view_matrix;
+    Matrix4 transform = editor->camera.projection_matrix * editor->camera.view_matrix * world_matrix;
 
     Vector4 pick_color;
     pick_color.x = ((e->id & 0x000000FF) >> 0 ) / 255.0f;
@@ -214,90 +171,40 @@ internal void r_picker_render(Picker *picker) {
     uniform.transform = transform;
     uniform.pick_color = pick_color;
 
-    ID3D11Buffer *uniform_buffer = d3d11_state->uniform_buffers[D3D11_UNIFORM_PICKER];
-    d3d11_state->device_context->VSSetConstantBuffers(0, 1, &uniform_buffer);
-    d3d11_state->device_context->PSSetConstantBuffers(0, 1, &uniform_buffer);
+    ID3D11Buffer *uniform_buffer = d3d->uniform_buffers[UNIFORM_PICKER];
+    d3d->device_context->VSSetConstantBuffers(0, 1, &uniform_buffer);
+    d3d->device_context->PSSetConstantBuffers(0, 1, &uniform_buffer);
     {
       D3D11_MAPPED_SUBRESOURCE resource = {};
-      if (d3d11_state->device_context->Map(uniform_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &resource) == S_OK) {
+      if (d3d->device_context->Map(uniform_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &resource) == S_OK) {
         memcpy(resource.pData, &uniform, sizeof(uniform));
-        d3d11_state->device_context->Unmap(uniform_buffer, 0);
+        d3d->device_context->Unmap(uniform_buffer, 0);
       }
     }
 
-    for (int mesh_idx = 0; mesh_idx < model->meshes.count; mesh_idx++) {
-      Mesh *mesh = model->meshes[mesh_idx];
+    ID3D11Buffer *vertex_buffer = make_vertex_buffer(mesh->vertices.data, mesh->vertices.count, sizeof(Vector3));
+    UINT stride = sizeof(Vector3), offset = 0;
+    d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
 
-      vertices.reserve(mesh->positions.count);
-
-      for (int vert_idx = 0; vert_idx < mesh->positions.count; vert_idx++) {
-        Vector3 p = e->visual_position + mesh->positions[vert_idx];
-        vertices.push(p);
-      }
-
-      ID3D11Buffer *vertex_buffer = nullptr;
-      {
-        D3D11_BUFFER_DESC desc = {};
-        desc.Usage = D3D11_USAGE_DEFAULT;
-        desc.ByteWidth = sizeof(Vector3) * (UINT)vertices.count;
-        desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-        desc.CPUAccessFlags = 0;
-        desc.MiscFlags = 0;
-        D3D11_SUBRESOURCE_DATA data = {};
-        data.pSysMem = vertices.data;
-        data.SysMemPitch = 0;
-        data.SysMemSlicePitch = 0;
-        d3d11_state->device->CreateBuffer(&desc, &data, &vertex_buffer);
-      }
-      UINT stride = sizeof(Vector3), offset = 0;
-      d3d11_state->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
-
-      d3d11_state->device_context->Draw((UINT)vertices.count, 0);
-
-      vertex_buffer->Release();
-      vertices.reset_count();
+    for (int triangle_list_idx = 0; triangle_list_idx < mesh->triangle_list_info.count; triangle_list_idx++) {
+      Triangle_List_Info triangle_list_info = mesh->triangle_list_info[triangle_list_idx];
+      d3d->device_context->Draw((UINT)triangle_list_info.vertices_count, triangle_list_info.first_index);
     }
+
+    vertex_buffer->Release();
   }
 
-  d3d11_state->swap_chain->Present(1, 0);
-
-  d3d11_state->device_context->OMSetRenderTargets(1, &d3d11_state->render_target_view, d3d11_state->depth_stencil_view);
+  d3d->device_context->OMSetRenderTargets(1, &d3d->render_target_view, d3d->depth_stencil_view);
 }
 
-internal void r_picker_init(Picker *picker) {
-  R_D3D11_State *d3d11_state = r_d3d11_state();
+internal Picker *make_picker(int width, int height) {
+  Picker *picker = new Picker();
+  picker->dimension = Vector2((f32)width, (f32)height);
 
-  if (picker->texture) ((ID3D11Texture2D *)picker->texture)->Release();
-  if (picker->select_texture) ((ID3D11Texture2D *)picker->select_texture)->Release();
-  if (picker->render_target_view) ((ID3D11RenderTargetView *)picker->render_target_view)->Release();
+  R_D3D11_State *d3d = r_d3d11_state();
+  picker->render_target = make_render_target(width, height, DXGI_FORMAT_R8G8B8A8_UNORM);
 
   HRESULT hr = S_OK;
-
-  D3D11_TEXTURE2D_DESC desc = {};
-  desc.Width = picker->dimension.x;
-  desc.Height = picker->dimension.y;
-  desc.MipLevels = 1;
-  desc.ArraySize = 1;
-  desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-  desc.SampleDesc.Count = 1;
-  desc.SampleDesc.Quality = 0;
-  desc.Usage = D3D11_USAGE_DEFAULT;
-  desc.BindFlags = D3D11_BIND_RENDER_TARGET;
-  desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-  desc.MiscFlags = 0;
-  ID3D11Texture2D *texture = nullptr;
-  hr = d3d11_state->device->CreateTexture2D(&desc, NULL, &texture);
-
-  D3D11_RENDER_TARGET_VIEW_DESC rtv_desc = {};
-  rtv_desc.Format = desc.Format;
-  rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-  rtv_desc.Texture2D.MipSlice = 0;
-  ID3D11RenderTargetView *view = nullptr;
-  hr = d3d11_state->device->CreateRenderTargetView(texture, &rtv_desc, &view);
-
-  picker->texture = texture;
-  picker->render_target_view = view;
-
   {
     D3D11_TEXTURE2D_DESC staging_desc = {};
     staging_desc.Width = 1;
@@ -311,37 +218,36 @@ internal void r_picker_init(Picker *picker) {
     staging_desc.BindFlags = 0;
     staging_desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
     staging_desc.MiscFlags = 0;
-    hr = d3d11_state->device->CreateTexture2D(&staging_desc, NULL, (ID3D11Texture2D **)&picker->select_texture);
+    hr = d3d->device->CreateTexture2D(&staging_desc, NULL, (ID3D11Texture2D **)&picker->staging_texture);
   }
+
+  return picker;
 }
 
-internal Pid r_picker_get_id(Picker *picker, Vector2Int mouse) {
+internal Pid picker_get_id(Picker *picker, Vector2Int mouse) {
   Pid result = 0xFFFFFFFF;
 
-  R_D3D11_State *d3d11_state = r_d3d11_state();
+  R_D3D11_State *d3d = r_d3d11_state();
   D3D11_BOX src_box = {};
-  src_box.left = mouse.x;
-  src_box.right = mouse.x + 1;
-  src_box.top = mouse.y;
-  src_box.bottom = mouse.y + 1;
+  src_box.left   = (UINT)mouse.x;
+  src_box.right  = src_box.left + 1;
+  src_box.top    = (UINT)mouse.y;
+  src_box.bottom = src_box.top + 1;
   src_box.front = 0;
   src_box.back = 1;
-
-  HRESULT hr = S_OK;
-
-  d3d11_state->device_context->CopySubresourceRegion((ID3D11Texture2D *)picker->select_texture, 0, 0, 0, 0, (ID3D11Texture2D *)picker->texture, 0, &src_box);
+  d3d->device_context->CopySubresourceRegion((ID3D11Texture2D *)picker->staging_texture, 0, 0, 0, 0, (ID3D11Texture2D *)picker->render_target->texture, 0, &src_box);
 
   D3D11_MAPPED_SUBRESOURCE mapped = {};
-  hr = d3d11_state->device_context->Map((ID3D11Texture2D *)picker->select_texture, 0, D3D11_MAP_READ, 0, &mapped);
-  u8 *ptr = (u8 *)mapped.pData;
+  if (d3d->device_context->Map((ID3D11Texture2D *)picker->staging_texture, 0, D3D11_MAP_READ, 0, &mapped) == S_OK) {
+    u8 *ptr = (u8 *)mapped.pData;
+    u8 r = *ptr++;
+    u8 g = *ptr++;
+    u8 b = *ptr++;
+    u8 a = *ptr++;
+    result = r | (g << 8) | (b << 16) | (a << 24);
 
-  u8 r = *ptr++;
-  u8 g = *ptr++;
-  u8 b = *ptr++;
-  u8 a = *ptr++;
-  result = r | (g << 8) | (b << 16) | (a << 24);
-        
-  d3d11_state->device_context->Unmap((ID3D11Texture2D *)picker->select_texture, 0);
+    d3d->device_context->Unmap((ID3D11Texture2D *)picker->staging_texture, 0);
+  }
 
   return result;
 }
@@ -354,7 +260,7 @@ internal void update_editor() {
   editor->gizmo_axis_hover = (Axis)-1;
   if (editor->selected_entity) {
     r_picker_render_gizmo(g_picker);
-    Pid gizmo_id = r_picker_get_id(g_picker, mouse_position);
+    Pid gizmo_id = picker_get_id(g_picker, mouse_position);
     if (gizmo_id != 0xFFFFFFFF) {
       editor->gizmo_axis_hover = (Axis)gizmo_id;
     }
@@ -368,7 +274,7 @@ internal void update_editor() {
     switch (editor->active_gizmo) {
     case GIZMO_TRANSLATE:
     {
-      Vector3 ray = get_mouse_ray(editor->camera, mouse_position, g_viewport->dimension);
+      Vector3 ray = get_mouse_ray(editor->camera, Vector2Int((int)mouse_position.x, (int)mouse_position.y), g_viewport->dimension);
       Vector3 ray_start = get_mouse_ray(editor->camera, editor->gizmo_mouse_start, g_viewport->dimension);
       Vector3 distance = 15.0f * (ray - ray_start);
 
@@ -404,8 +310,8 @@ internal void update_editor() {
     }
   } else if (editor->gizmo_axis_active == -1){
     if (mouse_clicked(0)) {
-      r_picker_render(g_picker);
-      Pid id = r_picker_get_id(g_picker, mouse_position);
+      picker_render(g_picker);
+      Pid id = picker_get_id(g_picker, g_input.mouse_position);
       if (id != 0xFFFFFFFF) {
         Entity *e = lookup_entity(id);
         editor->select_entity(e);
@@ -415,6 +321,7 @@ internal void update_editor() {
     }
   }
 
+
   Vector2 camera_delta = get_mouse_right_drag_delta();
   camera_delta = 0.2f * camera_delta;
   update_camera_orientation(&editor->camera, camera_delta);
@@ -423,49 +330,58 @@ internal void update_editor() {
 
   draw_world(get_world(), editor->camera);
 
+  //@Note Draw Gizmos
   if (editor->selected_entity) {
-    Draw_Bucket *bucket = draw_push();
-    bucket->immediate.clear_depth_buffer = true;
-    bucket->immediate.depth_state = R_DEPTH_STENCIL_STATE_DEFAULT;
-    bucket->immediate.light_dir = Vector3(1.0f, 1.0f, 1.0f);
+    R_D3D11_State *d3d = r_d3d11_state();
+
+    set_depth_state(DEPTH_STATE_DEFAULT);
+    d3d->device_context->ClearDepthStencilView(d3d->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
+
+    set_rasterizer_state(RASTERIZER_STATE_NO_CULL);
+
+    f32 gizmo_scale_factor = Abs(magnitude(editor->camera.origin - editor->selected_entity->visual_position) * 0.5f);
+    gizmo_scale_factor = ClampBot(gizmo_scale_factor, 1.0f);
 
     Matrix4 world_matrix = make_matrix4(1.0f);
     Matrix4 view = editor->camera.view_matrix;
     Matrix4 transform = editor->camera.projection_matrix * editor->camera.view_matrix;
 
     for (int axis = AXIS_X; axis <= AXIS_Z; axis++) {
-      Model *model = editor->gizmo_models[editor->active_gizmo][axis];
+      Triangle_Mesh *mesh = editor->gizmo_meshes[editor->active_gizmo][axis];
 
-      Matrix4 world_matrix = translate(selected_entity->visual_position.x, selected_entity->visual_position.y, selected_entity->visual_position.z) * scale(Vector3(2.0f, 2.0f, 2.0f));
+      Matrix4 world_matrix = translate(selected_entity->visual_position.x, selected_entity->visual_position.y, selected_entity->visual_position.z) * scale(Vector3(gizmo_scale_factor, gizmo_scale_factor, gizmo_scale_factor));
       Matrix4 view_matrix = editor->camera.view_matrix;
       Matrix4 transform = editor->camera.projection_matrix * view_matrix * world_matrix;
+      R_D3D11_Uniform_Basic_3D uniform = {};
+      uniform.transform = transform;
+      uniform.world_matrix = world_matrix;
 
-      for (int mesh_idx = 0; mesh_idx < model->meshes.count; mesh_idx++) {
-        Mesh *mesh = model->meshes[mesh_idx];
+      ID3D11Buffer *uniform_buffer = r_d3d11_state()->uniform_buffers[SHADER_IMMEDIATE];
+      write_uniform_buffer(uniform_buffer, &uniform, 0, sizeof(uniform));
 
-        Draw_Immediate_Batch *batch = push_immediate_batch(bucket);
-        batch->world = world_matrix;
-        batch->view = editor->camera.view_matrix;
-        batch->projection = editor->camera.projection_matrix;
-        batch->texture = nullptr;
-
-        Vector4 color = mesh->material.diffuse_color;
-        if (editor->gizmo_axis_hover == axis && editor->gizmo_axis_active == (Axis)-1) {
-          color = mix(color, Vector4(1.0f, 1.0f, 1.0f, 1.0f), 0.3f);
-        }
-        if (editor->gizmo_axis_active == axis) {
-          color = mix(color, Vector4(1.0f, 1.0f, 1.0f, 1.0f), 0.3f);
-        }
-
-        for (int vert_idx = 0; vert_idx < mesh->positions.count; vert_idx++) {
-          Vector3 p = mesh->positions[vert_idx];
-          Vector2 uv = Vector2();
-          Vector3 normal = Vector3();
-          draw_immediate_vertex(batch, p, normal, color, uv);
-        }
+      Vector4 color = Vector4(0, 0, 0, 1);
+      switch (axis) {
+      case AXIS_X:
+        color = Vector4(1, 0, 0, 1);
+        break;
+      case AXIS_Y:
+        color = Vector4(0, 1, 0, 1);
+        break;
+      case AXIS_Z:
+        color = Vector4(0, 0, 1, 1);
+        break;
       }
+      if (editor->gizmo_axis_hover == axis && editor->gizmo_axis_active == (Axis)-1) {
+        color = mix(color, Vector4(1.0f, 1.0f, 1.0f, 1.0f), 0.4f);
+      }
+      if (editor->gizmo_axis_active == axis) {
+        color = mix(color, Vector4(1.0f, 1.0f, 1.0f, 1.0f), 0.4f);
+      }
+
+      draw_mesh(mesh, true, color);
     }
   }
+
 }
 
 internal u64 djb2_hash(const char *str) {
@@ -506,7 +422,7 @@ internal Entity *entity_from_prototype(Entity_Prototype *prototype) {
   entity->prototype_id = prototype->id;
   entity->kind  = prototype->entity.kind;
   entity->flags = prototype->entity.flags;
-  entity->model = prototype->entity.model;
+  entity->mesh = prototype->entity.mesh;
   return entity;
 }
 
@@ -514,7 +430,7 @@ internal void entity_from_prototype(Entity *entity, Entity_Prototype *prototype)
   entity->prototype_id = prototype->id;
   entity->kind  = prototype->entity.kind;
   entity->flags = prototype->entity.flags;
-  entity->model = prototype->entity.model;
+  entity->mesh = prototype->entity.mesh;
 }
 
 internal void editor_present_ui() {
@@ -522,7 +438,7 @@ internal void editor_present_ui() {
   
   ui_set_next_pref_width(ui_pixels(110.f));
   ui_set_next_pref_height(ui_pixels(300.f));
-  UI_Box *column = ui_box_create(0, str8_lit("##column"));
+  UI_Box *column = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, str8_lit("##column"));
   ui_push_parent(column);
 
   //@Note Level name
@@ -841,7 +757,7 @@ internal void editor_present_ui() {
       ui_set_next_fixed_height(200.0f);
       ui_set_next_child_layout_axis(AXIS_Y);
       ui_push_background_color(Vector4(0.37f, 0.12f, 0.43f, 1.0f));
-      UI_Box *flag_panel = ui_box_create(0, str8_lit("##flag_panel"));
+      UI_Box *flag_panel = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, str8_lit("##flag_panel"));
       ui_push_parent(flag_panel);
       for (int i = 0; i < ArrayCount(entity_flag_array); i++) {
         Entity_Flags flag = entity_flag_array[i];

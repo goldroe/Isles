@@ -2,6 +2,7 @@
 #define EDITOR_H
 
 struct World;
+struct Picker;
 
 enum Gizmo_Kind {
   GIZMO_NIL = -1,
@@ -73,13 +74,13 @@ struct Editor {
 
   Camera camera;
 
-  Model *gizmo_models[GIZMO_COUNT][3];
+  Triangle_Mesh *gizmo_meshes[GIZMO_COUNT][3];
 
   void update_entity_panel();
   void select_entity(Entity *e);
 };
 
-
+internal Picker *make_picker(int width, int height);
 internal inline Editor *get_editor();
 internal Entity_Prototype *entity_prototype_lookup(u64 prototype_id);
 
