@@ -1,5 +1,5 @@
 
-internal Render_Target *make_render_target(int width, int height, DXGI_FORMAT format) {
+internal Render_Target *make_render_target(int width, int height, DXGI_FORMAT format, DXGI_FORMAT depth_format) {
   R_D3D11_State *d3d = r_d3d11_state();
   Render_Target *render_target = new Render_Target();
   render_target->width = width;
@@ -38,7 +38,7 @@ internal Render_Target *make_render_target(int width, int height, DXGI_FORMAT fo
     desc.Height = height;
     desc.MipLevels = 1;
     desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    desc.Format = depth_format;
     desc.SampleDesc.Count = 1;
     desc.SampleDesc.Quality = 0;
     desc.Usage = D3D11_USAGE_DEFAULT;
