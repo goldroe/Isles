@@ -17,7 +17,7 @@ union Vector2 {
   };
   float elements[2];
 
-  Vector2() {}
+  Vector2() { x = y = 0; }
   Vector2(float x, float y) : x(x), y(y) {}
   float &operator[](int idx) {
     assert(idx < 2);
@@ -33,7 +33,7 @@ union Vector3 {
   };
   float elements[3];
 
-  Vector3() {}
+  Vector3() { x = y = z = 0; }
   Vector3(float x, float y, float z) : x(x), y(y), z(z) {}
   float &operator[](int idx) {
     assert(idx < 3);
@@ -53,7 +53,7 @@ union Vector4 {
   };
   float elements[4];
 
-  Vector4() {}
+  Vector4() { x = y = z = w = 0; }
   Vector4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
   float &operator[](int idx) {
     assert(idx < 4);
@@ -68,7 +68,7 @@ union Vector2Int {
   };
   int elements[2];
 
-  Vector2Int() {}
+  Vector2Int() { x = y = 0; }
   Vector2Int(int x, int y) : x(x), y(y) {}
   int &operator[](int idx) {
     assert(idx < 2);
@@ -84,7 +84,7 @@ union Vector3Int {
   };
   int elements[3];
 
-  Vector3Int() {}
+  Vector3Int() { x = y = z = 0; }
   Vector3Int(int x, int y, int z) : x(x), y(y), z(z) {}
   int &operator[](int idx) {
     assert(idx < 3);
@@ -104,7 +104,7 @@ union Vector4Int {
   };
   int elements[4];
 
-  Vector4Int() {}
+  Vector4Int() { x = y = z = w = 0; }
   Vector4Int(int x, int y, int z, int w) : x(x), y(y), z(z), w(w) {}
   int &operator[](int idx) {
     assert(idx < 4);
