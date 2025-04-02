@@ -1,61 +1,16 @@
 #ifndef DRAW_H
 #define DRAW_H
 
-#include <vector>
+internal void draw_world(World *world, Camera camera);
 
-enum Draw_Bucket_Kind {
-  DRAW_BUCKET_IMMEDIATE,
-  DRAW_BUCKET_QUAD,
-  DRAW_BUCKET_COUNT
-};
+internal void set_shader(Shader_Kind shader_kind);
 
-struct Draw_Immediate_Batch {
-  Draw_Immediate_Batch *prev;
-  Draw_Immediate_Batch *next;
+internal void set_rasterizer_state(Rasterizer_State_Kind rasterizer_kind);
+internal void set_blend_state(Blend_State_Kind blend_state_kind);
+internal void set_depth_state(Depth_State_Kind depth_state_kind);
 
-  Texture *texture;
-  Matrix4 world;
-  Matrix4 view;
-  Matrix4 projection;
-  Auto_Array<Vertex_3D> vertices;
-};
-
-struct Draw_Immediate_Batch_List {
-  Draw_Immediate_Batch *first;
-  Draw_Immediate_Batch *last;
-  int count;
-};
-
-struct Draw_Immediate_Bucket {
-  Vector3 light_dir;
-  R_Depth_State_Kind depth_state;
-  Draw_Immediate_Batch_List batches;
-  b32 clear_depth_buffer;
-  R_Blend_State_Kind blend_state;
-};
-
-struct Draw_Bucket {
-  Draw_Bucket *next = nullptr;
-  Draw_Bucket *prev = nullptr;
-
-  int stack_gen = 0;
-
-  Draw_Bucket_Kind kind;
-  union {
-    Draw_Immediate_Bucket immediate;
-  };
-};
-
-struct Draw_Bucket_List {
-  Draw_Bucket *first;
-  Draw_Bucket *last;
-  int count;
-};
-
-struct Draw_State {
-  Arena *arena = nullptr;
-  Draw_Bucket_List bucket_list;
-  int next_stack_gen = 0;
-};
+internal void draw_imm_cube(Vector3 center, f32 size, Vector4 color);
+internal void draw_imm_rectangle(Vector3 position, Vector3 size, Vector4 color);
+internal void draw_imm_quad(Texture *texture, Vector2 position, Vector2 size, Vector2 uv, Vector2 uv_size, Vector4 color);
 
 #endif // DRAW_H
