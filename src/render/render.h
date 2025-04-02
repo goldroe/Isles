@@ -4,24 +4,45 @@
 #include <d3dcompiler.h>
 #include <D3d11.h>
 
-enum R_Texture_Format {
-  R_TEXTURE_FORMAT_R8G8B8A8,
-};
-
 struct Texture {
   int width;
   int height;
-  R_Texture_Format format;
+  DXGI_FORMAT format;
   union {
     void *view;
   };
 };
 
-enum D3D11_Shader_Kind {
-  D3D11_SHADER_BASIC_3D,
-  D3D11_SHADER_RECT,
-  D3D11_SHADER_PICKER,
-  D3D11_SHADER_COUNT
+enum Depth_State_Kind {
+  DEPTH_STATE_DEFAULT,
+  DEPTH_STATE_DISABLE,
+  DEPTH_STATE_COUNT
+};
+
+enum Rasterizer_State_Kind {
+  RASTERIZER_STATE_DEFAULT,
+  RASTERIZER_STATE_NO_CULL,
+  RASTERIZER_STATE_TEXT,
+  RASTERIZER_STATE_COUNT
+};
+
+enum Blend_State_Kind {
+  BLEND_STATE_DEFAULT,
+  BLEND_STATE_ALPHA,
+  BLEND_STATE_COUNT
+};
+
+enum Sampler_State_Kind {
+  SAMPLER_STATE_LINEAR,
+  SAMPLER_STATE_POINT,
+  SAMPLER_STATE_COUNT
+};
+
+enum Shader_Kind {
+  SHADER_IMMEDIATE,
+  SHADER_RECT,
+  SHADER_PICKER,
+  SHADER_COUNT
 };
 
 struct Shader {
@@ -34,42 +55,16 @@ struct Shader {
   ID3D11PixelShader *pixel_shader;
 };
 
-enum D3D11_Uniform_Kind {
-  D3D11_UNIFORM_BASIC_3D,
-  D3D11_UNIFORM_RECT,
-  D3D11_UNIFORM_PICKER,
-  D3D11_UNIFORM_COUNT
-};
-
-enum R_Depth_State_Kind {
-  R_DEPTH_STENCIL_STATE_DEFAULT,
-  R_DEPTH_STENCIL_STATE_DISABLE,
-  R_DEPTH_STENCIL_STATE_COUNT
-};
-
-enum R_Rasterizer_Kind {
-  R_RASTERIZER_STATE_DEFAULT,
-  R_RASTERIZER_STATE_TEXT,
-  R_RASTERIZER_STATE_COUNT
-};
-
-enum R_Blend_State_Kind {
-  R_BLEND_STATE_DEFAULT,
-  R_BLEND_STATE_ALPHA,
-  R_BLEND_STATE_COUNT
-};
-
-enum R_Sampler_State_Kind {
-  R_SAMPLER_STATE_LINEAR,
-  R_SAMPLER_STATE_POINT,
-  R_SAMPLER_STATE_COUNT
+enum Uniform_Kind {
+  UNIFORM_IMMEDIATE,
+  UNIFORM_RECT,
+  UNIFORM_PICKER,
+  UNIFORM_COUNT 
 };
 
 struct R_D3D11_Uniform_Basic_3D {
   Matrix4 transform;
   Matrix4 world_matrix;
-  // Matrix4 view_matrix;
-  // Matrix4 projection_matrix;
   Vector3 light_dir;
   f32 _p0;
 };
@@ -94,13 +89,13 @@ struct R_D3D11_State {
   IDXGISwapChain *swap_chain = nullptr;
   ID3D11RenderTargetView *render_target_view = nullptr;
   ID3D11DepthStencilView *depth_stencil_view = nullptr;
-  ID3D11DepthStencilState *depth_stencil_states[R_DEPTH_STENCIL_STATE_COUNT];
-  ID3D11RasterizerState *rasterizer_states[R_RASTERIZER_STATE_COUNT];
-  ID3D11BlendState *blend_states[R_BLEND_STATE_COUNT];
-  ID3D11SamplerState *sampler_states[R_SAMPLER_STATE_COUNT];
+  ID3D11DepthStencilState *depth_stencil_states[DEPTH_STATE_COUNT];
+  ID3D11RasterizerState *rasterizer_states[RASTERIZER_STATE_COUNT];
+  ID3D11BlendState *blend_states[BLEND_STATE_COUNT];
+  ID3D11SamplerState *sampler_states[SAMPLER_STATE_COUNT];
 
-  Shader *shaders[D3D11_SHADER_COUNT];
-  ID3D11Buffer *uniform_buffers[D3D11_UNIFORM_COUNT];
+  Shader *shaders[SHADER_COUNT];
+  ID3D11Buffer *uniform_buffers[UNIFORM_COUNT];
 
   ID3D11ShaderResourceView *fallback_tex;
 };
@@ -108,10 +103,14 @@ struct R_D3D11_State {
 
 internal inline R_D3D11_State *r_d3d11_state();
 
-internal Texture *r_create_texture_from_file(String8 file_name);
-internal Texture *r_create_texture(u8 *data, R_Texture_Format format, int w, int h);
+internal ID3D11Buffer *make_vertex_buffer(void *data, size_t elem_count, size_t elem_size);
+internal void write_uniform_buffer(ID3D11Buffer *buffer, void *data, UINT offset, UINT bytes);
 
-internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, D3D11_Shader_Kind shader_kind, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count);
+internal Texture *r_create_texture_from_file(String8 file_name);
+internal Texture *r_create_texture(u8 *data, DXGI_FORMAT format, int w, int h);
+
+
+internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, Shader_Kind shader_kind, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count);
 internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, ID3D11VertexShader **vertex_shader, ID3D11PixelShader **pixel_shader, ID3D11InputLayout **input_layout, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count);
 
 #endif // RENDER_H

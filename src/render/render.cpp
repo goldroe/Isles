@@ -7,23 +7,8 @@ internal inline R_D3D11_State *r_d3d11_state() {
 
 internal void r_clear_color(f32 r, f32 g, f32 b, f32 a) {
   R_D3D11_State *d3d11_state = r_d3d11_state();
-  d3d11_state->clear_color = Vector4(r, g, b, a);
-}
-
-internal DXGI_FORMAT r_dxgi_format_from(R_Texture_Format format) {
-  switch (format) {
-  case R_TEXTURE_FORMAT_R8G8B8A8:
-    return DXGI_FORMAT_R8G8B8A8_UNORM;
-  }
-  return DXGI_FORMAT_UNKNOWN;
-}
-
-internal u32 r_size_from_format(R_Texture_Format format) {
-  switch (format) {
-  case R_TEXTURE_FORMAT_R8G8B8A8:
-    return 4;
-  }
-  return 0;
+  FLOAT color[4] = {r, g, b, a};
+  d3d11_state->device_context->ClearRenderTargetView(d3d11_state->render_target_view, color);
 }
 
 UINT get_num_mip_levels(UINT width, UINT height) {
@@ -36,7 +21,190 @@ UINT get_num_mip_levels(UINT width, UINT height) {
   return levels;
 }
 
-internal Texture *r_create_texture(u8 *data, R_Texture_Format format, int w, int h) {
+internal ID3D11Buffer *make_vertex_buffer(void *data, size_t elem_count, size_t elem_size) {
+  UINT bytes = (UINT)(elem_count * elem_size);
+
+  ID3D11Buffer *vertex_buffer = nullptr;
+  D3D11_BUFFER_DESC desc = {};
+  desc.Usage = D3D11_USAGE_DEFAULT;
+  desc.ByteWidth = bytes;
+  desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+  desc.CPUAccessFlags = 0;
+  desc.MiscFlags = 0;
+  D3D11_SUBRESOURCE_DATA res = {};
+  res.pSysMem = data;
+  res.SysMemPitch = 0;
+  res.SysMemSlicePitch = 0;
+  r_g_d3d11_state->device->CreateBuffer(&desc, &res, &vertex_buffer);
+  return vertex_buffer;
+}
+
+internal void write_uniform_buffer(ID3D11Buffer *buffer, void *data, UINT offset, UINT bytes) {
+  R_D3D11_State *d3d = r_d3d11_state();
+  D3D11_MAPPED_SUBRESOURCE res = {};
+  if (d3d->device_context->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res) == S_OK) {
+    memcpy((u8 *)res.pData + offset, data, bytes);
+    d3d->device_context->Unmap(buffer, 0);
+  } else {
+    logprint("Failed to write to constant buffer.\n");
+  }
+}
+
+internal int bytes_from_format(DXGI_FORMAT fmt) {
+  switch (fmt) {
+  case DXGI_FORMAT_R32G32B32A32_TYPELESS:
+  case DXGI_FORMAT_R32G32B32A32_FLOAT:
+  case DXGI_FORMAT_R32G32B32A32_UINT:
+  case DXGI_FORMAT_R32G32B32A32_SINT:
+    return 16;
+
+  case DXGI_FORMAT_R32G32B32_TYPELESS:
+  case DXGI_FORMAT_R32G32B32_FLOAT:
+  case DXGI_FORMAT_R32G32B32_UINT:
+  case DXGI_FORMAT_R32G32B32_SINT:
+    return 12;
+
+  case DXGI_FORMAT_R16G16B16A16_TYPELESS:
+  case DXGI_FORMAT_R16G16B16A16_FLOAT:
+  case DXGI_FORMAT_R16G16B16A16_UNORM:
+  case DXGI_FORMAT_R16G16B16A16_UINT:
+  case DXGI_FORMAT_R16G16B16A16_SNORM:
+  case DXGI_FORMAT_R16G16B16A16_SINT:
+  case DXGI_FORMAT_R32G32_TYPELESS:
+  case DXGI_FORMAT_R32G32_FLOAT:
+  case DXGI_FORMAT_R32G32_UINT:
+  case DXGI_FORMAT_R32G32_SINT:
+  case DXGI_FORMAT_R32G8X24_TYPELESS:
+  case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+  case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS:
+  case DXGI_FORMAT_X32_TYPELESS_G8X24_UINT:
+  case DXGI_FORMAT_Y416:
+  case DXGI_FORMAT_Y210:
+  case DXGI_FORMAT_Y216:
+    return 8;
+
+  case DXGI_FORMAT_R10G10B10A2_TYPELESS:
+  case DXGI_FORMAT_R10G10B10A2_UNORM:
+  case DXGI_FORMAT_R10G10B10A2_UINT:
+  case DXGI_FORMAT_R11G11B10_FLOAT:
+  case DXGI_FORMAT_R8G8B8A8_TYPELESS:
+  case DXGI_FORMAT_R8G8B8A8_UNORM:
+  case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+  case DXGI_FORMAT_R8G8B8A8_UINT:
+  case DXGI_FORMAT_R8G8B8A8_SNORM:
+  case DXGI_FORMAT_R8G8B8A8_SINT:
+  case DXGI_FORMAT_R16G16_TYPELESS:
+  case DXGI_FORMAT_R16G16_FLOAT:
+  case DXGI_FORMAT_R16G16_UNORM:
+  case DXGI_FORMAT_R16G16_UINT:
+  case DXGI_FORMAT_R16G16_SNORM:
+  case DXGI_FORMAT_R16G16_SINT:
+  case DXGI_FORMAT_R32_TYPELESS:
+  case DXGI_FORMAT_D32_FLOAT:
+  case DXGI_FORMAT_R32_FLOAT:
+  case DXGI_FORMAT_R32_UINT:
+  case DXGI_FORMAT_R32_SINT:
+  case DXGI_FORMAT_R24G8_TYPELESS:
+  case DXGI_FORMAT_D24_UNORM_S8_UINT:
+  case DXGI_FORMAT_R24_UNORM_X8_TYPELESS:
+  case DXGI_FORMAT_X24_TYPELESS_G8_UINT:
+  case DXGI_FORMAT_R9G9B9E5_SHAREDEXP:
+  case DXGI_FORMAT_R8G8_B8G8_UNORM:
+  case DXGI_FORMAT_G8R8_G8B8_UNORM:
+  case DXGI_FORMAT_B8G8R8A8_UNORM:
+  case DXGI_FORMAT_B8G8R8X8_UNORM:
+  case DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM:
+  case DXGI_FORMAT_B8G8R8A8_TYPELESS:
+  case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+  case DXGI_FORMAT_B8G8R8X8_TYPELESS:
+  case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
+  case DXGI_FORMAT_AYUV:
+  case DXGI_FORMAT_Y410:
+  case DXGI_FORMAT_YUY2:
+  // case XBOX_DXGI_FORMAT_R10G10B10_7E3_A2_FLOAT:
+  // case XBOX_DXGI_FORMAT_R10G10B10_6E4_A2_FLOAT:
+  // case XBOX_DXGI_FORMAT_R10G10B10_SNORM_A2_UNORM:
+    return 4;
+
+  case DXGI_FORMAT_P010:
+  case DXGI_FORMAT_P016:
+  // case XBOX_DXGI_FORMAT_D16_UNORM_S8_UINT:
+  // case XBOX_DXGI_FORMAT_R16_UNORM_X8_TYPELESS:
+  // case XBOX_DXGI_FORMAT_X16_TYPELESS_G8_UINT:
+  // case WIN10_DXGI_FORMAT_V408:
+    return 3;
+
+  case DXGI_FORMAT_R8G8_TYPELESS:
+  case DXGI_FORMAT_R8G8_UNORM:
+  case DXGI_FORMAT_R8G8_UINT:
+  case DXGI_FORMAT_R8G8_SNORM:
+  case DXGI_FORMAT_R8G8_SINT:
+  case DXGI_FORMAT_R16_TYPELESS:
+  case DXGI_FORMAT_R16_FLOAT:
+  case DXGI_FORMAT_D16_UNORM:
+  case DXGI_FORMAT_R16_UNORM:
+  case DXGI_FORMAT_R16_UINT:
+  case DXGI_FORMAT_R16_SNORM:
+  case DXGI_FORMAT_R16_SINT:
+  case DXGI_FORMAT_B5G6R5_UNORM:
+  case DXGI_FORMAT_B5G5R5A1_UNORM:
+  case DXGI_FORMAT_A8P8:
+  case DXGI_FORMAT_B4G4R4A4_UNORM:
+  // case WIN10_DXGI_FORMAT_P208:
+  // case WIN10_DXGI_FORMAT_V208:
+    return 2;
+
+  // case DXGI_FORMAT_NV12:
+  // case DXGI_FORMAT_420_OPAQUE:
+  // case DXGI_FORMAT_NV11:
+    // return 12;//bits
+
+  case DXGI_FORMAT_R8_TYPELESS:
+  case DXGI_FORMAT_R8_UNORM:
+  case DXGI_FORMAT_R8_UINT:
+  case DXGI_FORMAT_R8_SNORM:
+  case DXGI_FORMAT_R8_SINT:
+  case DXGI_FORMAT_A8_UNORM:
+  case DXGI_FORMAT_AI44:
+  case DXGI_FORMAT_IA44:
+  case DXGI_FORMAT_P8:
+  // case XBOX_DXGI_FORMAT_R4G4_UNORM:
+    return 1;
+
+  case DXGI_FORMAT_R1_UNORM:
+    return 1;
+
+  // case DXGI_FORMAT_BC1_TYPELESS:
+  // case DXGI_FORMAT_BC1_UNORM:
+  // case DXGI_FORMAT_BC1_UNORM_SRGB:
+  // case DXGI_FORMAT_BC4_TYPELESS:
+  // case DXGI_FORMAT_BC4_UNORM:
+  // case DXGI_FORMAT_BC4_SNORM:
+  //   return 4; // bits
+
+  case DXGI_FORMAT_BC2_TYPELESS:
+  case DXGI_FORMAT_BC2_UNORM:
+  case DXGI_FORMAT_BC2_UNORM_SRGB:
+  case DXGI_FORMAT_BC3_TYPELESS:
+  case DXGI_FORMAT_BC3_UNORM:
+  case DXGI_FORMAT_BC3_UNORM_SRGB:
+  case DXGI_FORMAT_BC5_TYPELESS:
+  case DXGI_FORMAT_BC5_UNORM:
+  case DXGI_FORMAT_BC5_SNORM:
+  case DXGI_FORMAT_BC6H_TYPELESS:
+  case DXGI_FORMAT_BC6H_UF16:
+  case DXGI_FORMAT_BC6H_SF16:
+  case DXGI_FORMAT_BC7_TYPELESS:
+  case DXGI_FORMAT_BC7_UNORM:
+  case DXGI_FORMAT_BC7_UNORM_SRGB:
+    return 2;
+
+  default:
+    return 0;
+  }
+}
+
+internal Texture *r_create_texture(u8 *data, DXGI_FORMAT format, int w, int h) {
   HRESULT hr = S_OK;
 
   UINT mip_levels = get_num_mip_levels(w, h);
@@ -54,7 +222,7 @@ internal Texture *r_create_texture(u8 *data, R_Texture_Format format, int w, int
   desc.Height = (UINT)h;
   desc.MipLevels = mip_levels;
   desc.ArraySize = 1;
-  desc.Format = r_dxgi_format_from(format);
+  desc.Format = format;
   desc.SampleDesc.Count = 1;
   desc.SampleDesc.Quality = 0;
   desc.Usage = D3D11_USAGE_DEFAULT;
@@ -62,7 +230,7 @@ internal Texture *r_create_texture(u8 *data, R_Texture_Format format, int w, int
   desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
 
   hr = d3d11_state->device->CreateTexture2D(&desc, NULL, &tex2d);
-  d3d11_state->device_context->UpdateSubresource(tex2d, 0, NULL, data, w * r_size_from_format(format), 0);
+  d3d11_state->device_context->UpdateSubresource(tex2d, 0, NULL, data, w * bytes_from_format(format), 0);
     
   ID3D11ShaderResourceView *view = nullptr;
 	D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
@@ -84,7 +252,7 @@ internal Texture *r_create_texture_from_file(String8 file_name) {
   if (!data) {
     fprintf(stderr, "cannot load '%s'\n", (char *)file_name.data);
   }
-  Texture *texture = r_create_texture(data, R_TEXTURE_FORMAT_R8G8B8A8, x, y);
+  Texture *texture = r_create_texture(data, DXGI_FORMAT_R8G8B8A8_UNORM, x, y);
   return texture;
 }
 
@@ -205,9 +373,9 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.FrontFace.StencilFailOp = desc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
     desc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
     desc.BackFace = desc.FrontFace;
-    d3d11_state->device->CreateDepthStencilState(&desc, &d3d11_state->depth_stencil_states[R_DEPTH_STENCIL_STATE_DEFAULT]);
+    d3d11_state->device->CreateDepthStencilState(&desc, &d3d11_state->depth_stencil_states[DEPTH_STATE_DEFAULT]);
 
-    memset(&desc, sizeof(desc), 0);
+    desc = {};
     desc.DepthEnable = false;
     desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
     desc.DepthFunc = D3D11_COMPARISON_ALWAYS;
@@ -215,7 +383,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.FrontFace.StencilFailOp = desc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
     desc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
     desc.BackFace = desc.FrontFace;
-    d3d11_state->device->CreateDepthStencilState(&desc, &d3d11_state->depth_stencil_states[R_DEPTH_STENCIL_STATE_DISABLE]);
+    d3d11_state->device->CreateDepthStencilState(&desc, &d3d11_state->depth_stencil_states[DEPTH_STATE_DISABLE]);
   }
 
   //@Note Create rasterizer states
@@ -229,7 +397,18 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.ScissorEnable = false;
     desc.MultisampleEnable = true;
     desc.AntialiasedLineEnable = false;
-    d3d11_state->device->CreateRasterizerState(&desc, &d3d11_state->rasterizer_states[R_RASTERIZER_STATE_DEFAULT]);
+    d3d11_state->device->CreateRasterizerState(&desc, &d3d11_state->rasterizer_states[RASTERIZER_STATE_DEFAULT]);
+
+    desc = {};
+    desc.FillMode = D3D11_FILL_SOLID;
+    desc.CullMode = D3D11_CULL_NONE;
+    desc.FrontCounterClockwise = true;
+    desc.DepthBias = 0;
+    desc.DepthClipEnable = false;
+    desc.ScissorEnable = false;
+    desc.MultisampleEnable = false;
+    desc.AntialiasedLineEnable = false;
+    d3d11_state->device->CreateRasterizerState(&desc, &d3d11_state->rasterizer_states[RASTERIZER_STATE_NO_CULL]);
 
     desc = {};
     desc.FillMode = D3D11_FILL_SOLID;
@@ -238,25 +417,36 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.DepthClipEnable = false;
     desc.FrontCounterClockwise = true;
     desc.MultisampleEnable = true;
-    d3d11_state->device->CreateRasterizerState(&desc, &d3d11_state->rasterizer_states[R_RASTERIZER_STATE_TEXT]);
+    d3d11_state->device->CreateRasterizerState(&desc, &d3d11_state->rasterizer_states[RASTERIZER_STATE_TEXT]);
   }
 
   {
     D3D11_BLEND_DESC desc = {};
     desc.AlphaToCoverageEnable = false;
     desc.IndependentBlendEnable = false;
-    D3D11_RENDER_TARGET_BLEND_DESC rt = {};
-    rt.BlendEnable = true;
-    rt.SrcBlend = D3D11_BLEND_SRC_ALPHA;
-    rt.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
-    rt.BlendOp = D3D11_BLEND_OP_ADD;
-    rt.SrcBlendAlpha = D3D11_BLEND_ONE;
-    rt.DestBlendAlpha = D3D11_BLEND_ZERO;
-    // rt.DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
-    rt.BlendOpAlpha = D3D11_BLEND_OP_ADD;
-    rt.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-    desc.RenderTarget[0] = rt;
-    d3d11_state->device->CreateBlendState(&desc, &d3d11_state->blend_states[R_BLEND_STATE_ALPHA]);
+    desc.RenderTarget[0].BlendEnable = false;
+    desc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+    desc.RenderTarget[0].DestBlend = D3D11_BLEND_ZERO;
+    desc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+    desc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+    desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+    desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    d3d11_state->device->CreateBlendState(&desc, &d3d11_state->blend_states[BLEND_STATE_DEFAULT]);
+
+    desc = {};
+    desc.AlphaToCoverageEnable = false;
+    desc.IndependentBlendEnable = false;
+    desc.RenderTarget[0].BlendEnable = true;
+    desc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+    desc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+    desc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+    desc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+    desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+    // desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+    desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    d3d11_state->device->CreateBlendState(&desc, &d3d11_state->blend_states[BLEND_STATE_ALPHA]);
   }
 
   //@Note Create Sampler states
@@ -281,7 +471,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.MipLODBias = 0;
     desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 
-    d3d11_state->device->CreateSamplerState(&desc, &d3d11_state->sampler_states[R_SAMPLER_STATE_LINEAR]);
+    d3d11_state->device->CreateSamplerState(&desc, &d3d11_state->sampler_states[SAMPLER_STATE_LINEAR]);
 
     desc = {};
     desc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
@@ -290,7 +480,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
     desc.MipLODBias = 0;
     desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-    d3d11_state->device->CreateSamplerState(&desc, &d3d11_state->sampler_states[R_SAMPLER_STATE_POINT]);
+    d3d11_state->device->CreateSamplerState(&desc, &d3d11_state->sampler_states[SAMPLER_STATE_POINT]);
   }
 
   {
@@ -298,7 +488,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
       0xFFFFFFFF, 0xFFFFFFFF,
       0xFFFFFFFF, 0xFFFFFFFF
     };
-    d3d11_state->fallback_tex = (ID3D11ShaderResourceView *)r_create_texture((u8 *)white_bitmap, R_TEXTURE_FORMAT_R8G8B8A8, 2, 2)->view;
+    d3d11_state->fallback_tex = (ID3D11ShaderResourceView *)r_create_texture((u8 *)white_bitmap, DXGI_FORMAT_R8G8B8A8_UNORM, 2, 2)->view;
   }
 
   {
@@ -307,13 +497,13 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.ByteWidth = sizeof(R_D3D11_Uniform_Basic_3D);
     desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-    d3d11_state->device->CreateBuffer(&desc, nullptr, &d3d11_state->uniform_buffers[D3D11_UNIFORM_BASIC_3D]);
+    d3d11_state->device->CreateBuffer(&desc, nullptr, &d3d11_state->uniform_buffers[UNIFORM_IMMEDIATE]);
 
     desc.ByteWidth = sizeof(R_D3D11_Uniform_Picker);
-    d3d11_state->device->CreateBuffer(&desc, nullptr, &d3d11_state->uniform_buffers[D3D11_UNIFORM_PICKER]);
+    d3d11_state->device->CreateBuffer(&desc, nullptr, &d3d11_state->uniform_buffers[UNIFORM_PICKER]);
 
     desc.ByteWidth = sizeof(R_D3D11_Uniform_Rect);
-    d3d11_state->device->CreateBuffer(&desc, nullptr, &d3d11_state->uniform_buffers[D3D11_UNIFORM_RECT]);
+    d3d11_state->device->CreateBuffer(&desc, nullptr, &d3d11_state->uniform_buffers[UNIFORM_RECT]);
   }
 
   //@Note Compile shaders
@@ -323,7 +513,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  r_d3d11_make_shader(str8_lit("data/shaders/mesh_3d.hlsl"), str8_lit("Mesh3D"), D3D11_SHADER_BASIC_3D, mesh_3d_ilay, ArrayCount(mesh_3d_ilay));
+  r_d3d11_make_shader(str8_lit("data/shaders/mesh_3d.hlsl"), str8_lit("Mesh3D"), SHADER_IMMEDIATE, mesh_3d_ilay, ArrayCount(mesh_3d_ilay));
 
   D3D11_INPUT_ELEMENT_DESC rect_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -331,18 +521,17 @@ internal void r_d3d11_initialize(HWND window_handle) {
     { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "STYLE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  r_d3d11_make_shader(str8_lit("data/shaders/rect.hlsl"), str8_lit("Rect"), D3D11_SHADER_RECT, rect_ilay, ArrayCount(rect_ilay));
+  r_d3d11_make_shader(str8_lit("data/shaders/rect.hlsl"), str8_lit("Rect"), SHADER_RECT, rect_ilay, ArrayCount(rect_ilay));
 
 
   D3D11_INPUT_ELEMENT_DESC picker_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  r_d3d11_make_shader(str8_lit("data/shaders/picker.hlsl"), str8_lit("Picker"), D3D11_SHADER_PICKER, picker_ilay, ArrayCount(picker_ilay));
+  r_d3d11_make_shader(str8_lit("data/shaders/picker.hlsl"), str8_lit("Picker"), SHADER_PICKER, picker_ilay, ArrayCount(picker_ilay));
 }
 
-internal void r_d3d11_render(OS_Handle window_handle, Draw_Bucket_List *bucket_list) {
+internal void r_d3d11_begin(OS_Handle window_handle) {
   R_D3D11_State *d3d11_state = r_d3d11_state();
-
   d3d11_state->device_context->OMSetRenderTargets(1, &d3d11_state->render_target_view, d3d11_state->depth_stencil_view);
 
   HRESULT hr = S_OK;
@@ -355,130 +544,18 @@ internal void r_d3d11_render(OS_Handle window_handle, Draw_Bucket_List *bucket_l
   viewport.MaxDepth = 1.0f;
   d3d11_state->device_context->RSSetViewports(1, &viewport);
 
-  float clear_color[4] = { d3d11_state->clear_color.x, d3d11_state->clear_color.y, d3d11_state->clear_color.z, d3d11_state->clear_color.w };
-  d3d11_state->device_context->ClearRenderTargetView(d3d11_state->render_target_view, clear_color);
+  d3d11_state->device_context->RSSetState(d3d11_state->rasterizer_states[RASTERIZER_STATE_DEFAULT]);
+
   d3d11_state->device_context->ClearDepthStencilView(d3d11_state->depth_stencil_view, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
 
   d3d11_state->device_context->OMSetBlendState(nullptr, NULL, 0xffffffff);
 
-  for (Draw_Bucket *bucket = bucket_list->first; bucket; bucket = bucket->next) {
-    switch (bucket->kind) {
-    case DRAW_BUCKET_IMMEDIATE:
-    {
-      if (bucket->immediate.clear_depth_buffer) {
-        d3d11_state->device_context->ClearDepthStencilView(d3d11_state->depth_stencil_view, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
-      }
-      ID3D11DepthStencilState *depth_stencil_state = d3d11_state->depth_stencil_states[bucket->immediate.depth_state];
-      d3d11_state->device_context->OMSetDepthStencilState(depth_stencil_state, 0);
-      d3d11_state->device_context->RSSetState(d3d11_state->rasterizer_states[R_RASTERIZER_STATE_DEFAULT]);
-
-      ID3D11BlendState *blend_state = d3d11_state->blend_states[bucket->immediate.blend_state];
-      d3d11_state->device_context->OMSetBlendState(blend_state, NULL, 0xffffffff);
-
-      ID3D11Buffer *uniform_buffer = d3d11_state->uniform_buffers[D3D11_UNIFORM_BASIC_3D];
-      d3d11_state->device_context->VSSetConstantBuffers(0, 1, &uniform_buffer);
-      d3d11_state->device_context->PSSetConstantBuffers(0, 1, &uniform_buffer);
-
-      d3d11_state->device_context->PSSetSamplers(0, 1, &d3d11_state->sampler_states[R_SAMPLER_STATE_LINEAR]);
-
-      Shader *shader = d3d11_state->shaders[D3D11_SHADER_BASIC_3D];
-            
-      ID3D11VertexShader *vertex_shader = shader->vertex_shader;
-      ID3D11PixelShader *pixel_shader = shader->pixel_shader;
-      d3d11_state->device_context->VSSetShader(vertex_shader, nullptr, 0);
-      d3d11_state->device_context->PSSetShader(pixel_shader, nullptr, 0);
-
-      ID3D11InputLayout *input_layout = shader->input_layout;
-      d3d11_state->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-      d3d11_state->device_context->IASetInputLayout(input_layout);
-
-      for (Draw_Immediate_Batch *batch = bucket->immediate.batches.first; batch; batch = batch->next) {
-        if (batch->texture) {
-          d3d11_state->device_context->PSSetShaderResources(0, 1, (ID3D11ShaderResourceView**)&batch->texture->view);
-        } else {
-          d3d11_state->device_context->PSSetShaderResources(0, 1, (ID3D11ShaderResourceView**)&d3d11_state->fallback_tex);
-        }
-
-        R_D3D11_Uniform_Basic_3D uniform_mesh = {};
-        uniform_mesh.transform = batch->projection * batch->view * batch->world;
-        uniform_mesh.world_matrix = batch->world;
-        // uniform_mesh.projection_matrix = batch->projection;
-        // uniform_mesh.view_matrix = batch->view;
-        uniform_mesh.light_dir = bucket->immediate.light_dir;
-
-        {
-          D3D11_MAPPED_SUBRESOURCE resource = {};
-          if (d3d11_state->device_context->Map(uniform_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &resource) == S_OK) {
-            memcpy(resource.pData, &uniform_mesh, sizeof(uniform_mesh));
-            d3d11_state->device_context->Unmap(uniform_buffer, 0);
-          }
-        }
-
-        int vertices_count = (int)batch->vertices.count;
-        Vertex_3D *vertices = batch->vertices.data;
-
-        ID3D11Buffer *vertex_buffer = nullptr;
-        {
-          D3D11_BUFFER_DESC desc = {};
-          desc.Usage = D3D11_USAGE_DEFAULT;
-          desc.ByteWidth = sizeof(Vertex_3D) * vertices_count;
-          desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-          desc.CPUAccessFlags = 0;
-          desc.MiscFlags = 0;
-          D3D11_SUBRESOURCE_DATA data = {};
-          data.pSysMem = vertices;
-          data.SysMemPitch = 0;
-          data.SysMemSlicePitch = 0;
-          hr = d3d11_state->device->CreateBuffer(&desc, &data, &vertex_buffer);
-        }
-        UINT stride = sizeof(Vertex_3D), offset = 0;
-        d3d11_state->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
-
-        /*
-          int indices_count = vertices_count * 6 / 4;
-          u32 *indices = (u32 *)malloc(indices_count * sizeof(u32));
-
-          for (int index = 0, it = 0; index < vertices_count; index += 4) {
-          indices[it++] = index + 0;
-          indices[it++] = index + 1;
-          indices[it++] = index + 2;
-          indices[it++] = index + 0;
-          indices[it++] = index + 2;
-          indices[it++] = index + 3;
-          }
-
-          ID3D11Buffer *index_buffer = nullptr;
-          {
-          D3D11_BUFFER_DESC desc = {};
-          desc.Usage = D3D11_USAGE_DEFAULT;
-          desc.ByteWidth = sizeof(u32) * indices_count;
-          desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-          desc.CPUAccessFlags = 0;
-          desc.MiscFlags = 0;
-          D3D11_SUBRESOURCE_DATA data = {};
-          data.pSysMem = indices;
-          data.SysMemPitch = 0;
-          data.SysMemSlicePitch = 0;
-          hr = d3d11_state->device->CreateBuffer(&desc, &data, &index_buffer);
-          }
-          d3d11_state->device_context->IASetIndexBuffer(index_buffer, DXGI_FORMAT_R32_UINT, 0);
-        */
-        // d3d11_state->device_context->DrawIndexed((UINT)indices_count, 0, 0);
-
-        d3d11_state->device_context->Draw(vertices_count, 0);
-
-        // if (index_buffer) index_buffer->Release();
-        if (vertex_buffer) vertex_buffer->Release();
-        batch->vertices.clear();
-        // free(indices);
-      }
-      break;
-    }
-    }
-  }
+  d3d11_state->device_context->VSSetShader(nullptr, nullptr, 0);
+  d3d11_state->device_context->PSSetShader(nullptr, nullptr, 0);
+  d3d11_state->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
-internal void r_d3d11_recompile_shader(D3D11_Shader_Kind kind) {
+internal void r_d3d11_recompile_shader(Shader_Kind kind) {
   R_D3D11_State *d3d11_state = r_d3d11_state();
   Shader *shader = d3d11_state->shaders[kind];
   ID3DBlob *vs_blob, *ps_blob;
@@ -579,7 +656,7 @@ internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, ID
   if (ps_error) ps_error->Release();
 }
 
-internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, D3D11_Shader_Kind shader_kind, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count) {
+internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, Shader_Kind shader_kind, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count) {
   R_D3D11_State *d3d11_state = r_d3d11_state();
 
   Shader *shader = new Shader();
@@ -601,8 +678,8 @@ internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, D3
 internal void r_d3d11_update_dirty_shaders() {
   R_D3D11_State *d3d11_state = r_d3d11_state();
 
-  for (int i = D3D11_SHADER_BASIC_3D; i < D3D11_SHADER_COUNT; i++) {
-    D3D11_Shader_Kind shader_kind = (D3D11_Shader_Kind)i;
+  for (int i = SHADER_IMMEDIATE; i < SHADER_COUNT; i++) {
+    Shader_Kind shader_kind = (Shader_Kind)i;
     Shader *shader = d3d11_state->shaders[i];
 
     if (!shader) continue;
