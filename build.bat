@@ -14,7 +14,7 @@ set COMPILER_FLAGS=%COMMON_COMPILER_FLAGS%
 if %MODE%==release (
   set COMPILER_FLAGS=/O2 /D /MD %COMPILER_FLAGS%
 ) else if %mode%==debug (
-  set COMPILER_FLAGS=/Zi /Od /MDd %COMPILER_FLAGS%
+  set COMPILER_FLAGS=/Zi /Od %COMPILER_FLAGS%
 ) else (
   echo Unkown build mode
   exit /B 2
