@@ -763,13 +763,15 @@ internal void draw_ui_box(UI_Box *box) {
     batch->font = box->font;
   }
 
-  if (box->background_color.w != 0) {
+  if (box->flags & UI_BOX_FLAG_DRAW_BACKGROUND) {
     draw_ui_rect(batch, box->rect, box->background_color);
-    if (box->flags & UI_BOX_FLAG_DRAW_HOT_EFFECTS) {
-      Vector4 hot_color = box->hot_t * Vector4(1, 1, 1, 0.3f);
-      draw_ui_rect(batch, box->rect, hot_color);
-    }
   }
+
+  if (box->flags & UI_BOX_FLAG_DRAW_HOT_EFFECTS) {
+    Vector4 hot_color = box->hot_t * Vector4(1, 1, 1, 0.3f);
+    draw_ui_rect(batch, box->rect, hot_color);
+  }
+
 
   if (box->flags & UI_BOX_FLAG_DRAW_BORDER) {
     draw_ui_border(batch, box->rect, Vector4(0.88f, 0.88f, 0.88f, 1.0f));
@@ -799,14 +801,10 @@ internal void draw_ui_layout() {
 
   UI_Draw_Bucket *bucket = ui_g_state->draw_bucket;
 
-  Shader *shader = d3d11_state->shaders[D3D11_SHADER_RECT];
-  d3d11_state->device_context->VSSetShader(shader->vertex_shader, nullptr, 0);
-  d3d11_state->device_context->PSSetShader(shader->pixel_shader, nullptr, 0);
-
-  d3d11_state->device_context->IASetInputLayout(shader->input_layout);
+  set_shader(SHADER_RECT);
   d3d11_state->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-  ID3D11Buffer *uniform_buffer = d3d11_state->uniform_buffers[D3D11_UNIFORM_RECT];
+  ID3D11Buffer *uniform_buffer = d3d11_state->uniform_buffers[UNIFORM_RECT];
   d3d11_state->device_context->VSSetConstantBuffers(0, 1, &uniform_buffer);
   d3d11_state->device_context->PSSetConstantBuffers(0, 1, &uniform_buffer);
 
@@ -822,17 +820,16 @@ internal void draw_ui_layout() {
     d3d11_state->device_context->Unmap(uniform_buffer, 0);
   }
     
-  d3d11_state->device_context->PSSetSamplers(0, 1, &d3d11_state->sampler_states[R_SAMPLER_STATE_POINT]);
+  d3d11_state->device_context->PSSetSamplers(0, 1, &d3d11_state->sampler_states[SAMPLER_STATE_POINT]);
 
-  ID3D11DepthStencilState *depth_stencil_state = d3d11_state->depth_stencil_states[R_DEPTH_STENCIL_STATE_DISABLE];
-  d3d11_state->device_context->OMSetDepthStencilState(depth_stencil_state, 0);
-
-  d3d11_state->device_context->OMSetBlendState(d3d11_state->blend_states[R_BLEND_STATE_ALPHA], NULL, 0xffffffff);
-
-  d3d11_state->device_context->RSSetState(d3d11_state->rasterizer_states[R_RASTERIZER_STATE_TEXT]);
+  set_depth_state(DEPTH_STATE_DISABLE);
+  set_blend_state(BLEND_STATE_ALPHA);
+  set_rasterizer_state(RASTERIZER_STATE_TEXT);
 
   for (int i = 0; i < bucket->batches.count; i++) {
     UI_Draw_Batch *batch = bucket->batches[i];
+    if (batch->vertices.count == 0) continue;
+    
     if (batch->font) {
       d3d11_state->device_context->PSSetShaderResources(0, 1, (ID3D11ShaderResourceView**)&batch->font->texture->view);
     } else {
