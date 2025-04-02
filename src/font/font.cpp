@@ -106,7 +106,7 @@ internal Font *load_icon_font(Arena *arena, String8 font_name, int font_height, 
     font->bbox_height = height;
     font->glyph_width = glyph_width;
     font->glyph_height = glyph_height;
-    font->texture = r_create_texture(bitmap, R_TEXTURE_FORMAT_R8G8B8A8, atlas_width, atlas_height);
+    font->texture = r_create_texture(bitmap, DXGI_FORMAT_R8G8B8A8_UNORM, atlas_width, atlas_height);
 
     arena_temp_end(temp);
 
@@ -225,7 +225,7 @@ internal Font *load_font(Arena *arena, String8 font_name, int font_height) {
     font->bbox_height = height;
     font->glyph_width = glyph_width;
     font->glyph_height = glyph_height;
-    font->texture = r_create_texture(bitmap, R_TEXTURE_FORMAT_R8G8B8A8, atlas_width, atlas_height);
+    font->texture = r_create_texture(bitmap, DXGI_FORMAT_R8G8B8A8_UNORM, atlas_width, atlas_height);
 
     arena_temp_end(temp);
 
