@@ -1,6 +1,14 @@
 #ifndef DRAW_H
 #define DRAW_H
 
+struct Shadow_Map {
+  int width = 0;
+  int height = 0;
+  ID3D11Texture2D *map = nullptr;
+  ID3D11DepthStencilView *depth_stencil_view = nullptr;
+  ID3D11ShaderResourceView *srv = nullptr;
+};
+
 internal void draw_world(World *world, Camera camera);
 
 internal void set_shader(Shader_Kind shader_kind);

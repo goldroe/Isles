@@ -8,7 +8,7 @@ internal inline R_D3D11_State *r_d3d11_state() {
 internal void r_clear_color(f32 r, f32 g, f32 b, f32 a) {
   R_D3D11_State *d3d11_state = r_d3d11_state();
   FLOAT color[4] = {r, g, b, a};
-  d3d11_state->device_context->ClearRenderTargetView(d3d11_state->render_target_view, color);
+  d3d11_state->device_context->ClearRenderTargetView((ID3D11RenderTargetView*)d3d11_state->default_render_target->render_target_view, color);
 }
 
 UINT get_num_mip_levels(UINT width, UINT height) {
@@ -279,8 +279,10 @@ internal void r_resize_render_target(Vector2Int dimension) {
   // NOTE: Resize render target view
   d3d11_state->device_context->OMSetRenderTargets(0, 0, 0);
 
+  Render_Target *render_target = d3d11_state->default_render_target;
+
   // Release all outstanding references to the swap chain's buffers.
-  if (d3d11_state->render_target_view) d3d11_state->render_target_view->Release();
+  if (render_target->render_target_view) ((ID3D11RenderTargetView*)render_target->render_target_view)->Release();
 
   // Preserve the existing buffer count and format.
   // Automatically choose the width and height to match the client rect for HWNDs.
@@ -290,11 +292,11 @@ internal void r_resize_render_target(Vector2Int dimension) {
   ID3D11Texture2D *backbuffer;
   hr = d3d11_state->swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&backbuffer);
 
-  hr = d3d11_state->device->CreateRenderTargetView(backbuffer, NULL, &d3d11_state->render_target_view);
+  hr = d3d11_state->device->CreateRenderTargetView(backbuffer, NULL, (ID3D11RenderTargetView **)&render_target->render_target_view);
 
-  backbuffer->Release();
+  render_target->texture = backbuffer;
 
-  if (d3d11_state->depth_stencil_view) d3d11_state->depth_stencil_view->Release();
+  if (render_target->depth_stencil_view) ((ID3D11DepthStencilView *)render_target->depth_stencil_view)->Release();
 
   {
     D3D11_TEXTURE2D_DESC desc{};
@@ -312,10 +314,10 @@ internal void r_resize_render_target(Vector2Int dimension) {
 
     ID3D11Texture2D *depth_stencil_buffer = nullptr;
     hr = d3d11_state->device->CreateTexture2D(&desc, NULL, &depth_stencil_buffer);
-    hr = d3d11_state->device->CreateDepthStencilView(depth_stencil_buffer, NULL, &d3d11_state->depth_stencil_view);
+    hr = d3d11_state->device->CreateDepthStencilView(depth_stencil_buffer, NULL, (ID3D11DepthStencilView **)&render_target->depth_stencil_view);
   }
 
-  d3d11_state->device_context->OMSetRenderTargets(1, &d3d11_state->render_target_view, d3d11_state->depth_stencil_view);
+  d3d11_state->device_context->OMSetRenderTargets(1, (ID3D11RenderTargetView **)&render_target->render_target_view, (ID3D11DepthStencilView*)render_target->depth_stencil_view);
 }
 
 internal void r_d3d11_initialize(HWND window_handle) {
@@ -357,9 +359,10 @@ internal void r_d3d11_initialize(HWND window_handle) {
 
   //@Note Initialize render target view
   {
+    d3d11_state->default_render_target = new Render_Target();
     ID3D11Texture2D *back_buffer;
     hr = d3d11_state->swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&back_buffer);
-    hr = d3d11_state->device->CreateRenderTargetView(back_buffer, NULL, &d3d11_state->render_target_view);
+    hr = d3d11_state->device->CreateRenderTargetView(back_buffer, NULL, (ID3D11RenderTargetView **)&d3d11_state->default_render_target->render_target_view);
     back_buffer->Release();
   }
 
@@ -504,6 +507,9 @@ internal void r_d3d11_initialize(HWND window_handle) {
 
     desc.ByteWidth = sizeof(R_D3D11_Uniform_Rect);
     d3d11_state->device->CreateBuffer(&desc, nullptr, &d3d11_state->uniform_buffers[UNIFORM_RECT]);
+
+    desc.ByteWidth = sizeof(R_Uniform_Shadow_Map);
+    d3d11_state->device->CreateBuffer(&desc, nullptr, &d3d11_state->uniform_buffers[UNIFORM_SHADOW_MAP]);
   }
 
   //@Note Compile shaders
@@ -528,11 +534,18 @@ internal void r_d3d11_initialize(HWND window_handle) {
     { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
   r_d3d11_make_shader(str8_lit("data/shaders/picker.hlsl"), str8_lit("Picker"), SHADER_PICKER, picker_ilay, ArrayCount(picker_ilay));
+
+  D3D11_INPUT_ELEMENT_DESC shadowmap_ilay[] = {
+    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+  };
+  r_d3d11_make_shader(str8_lit("data/shaders/shadow_map.hlsl"), str8_lit("ShadowMap"), SHADER_SHADOW_MAP, shadowmap_ilay, ArrayCount(shadowmap_ilay));
+
+
 }
 
 internal void r_d3d11_begin(OS_Handle window_handle) {
   R_D3D11_State *d3d11_state = r_d3d11_state();
-  d3d11_state->device_context->OMSetRenderTargets(1, &d3d11_state->render_target_view, d3d11_state->depth_stencil_view);
+  d3d11_state->device_context->OMSetRenderTargets(1, (ID3D11RenderTargetView **)&d3d11_state->default_render_target->render_target_view, (ID3D11DepthStencilView *)d3d11_state->default_render_target->depth_stencil_view);
 
   HRESULT hr = S_OK;
   D3D11_VIEWPORT viewport{};
@@ -546,7 +559,7 @@ internal void r_d3d11_begin(OS_Handle window_handle) {
 
   d3d11_state->device_context->RSSetState(d3d11_state->rasterizer_states[RASTERIZER_STATE_DEFAULT]);
 
-  d3d11_state->device_context->ClearDepthStencilView(d3d11_state->depth_stencil_view, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
+  d3d11_state->device_context->ClearDepthStencilView((ID3D11DepthStencilView*)d3d11_state->default_render_target->depth_stencil_view, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
 
   d3d11_state->device_context->OMSetBlendState(nullptr, NULL, 0xffffffff);
 

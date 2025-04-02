@@ -42,6 +42,7 @@ enum Shader_Kind {
   SHADER_IMMEDIATE,
   SHADER_RECT,
   SHADER_PICKER,
+  SHADER_SHADOW_MAP,
   SHADER_COUNT
 };
 
@@ -59,6 +60,7 @@ enum Uniform_Kind {
   UNIFORM_IMMEDIATE,
   UNIFORM_RECT,
   UNIFORM_PICKER,
+  UNIFORM_SHADOW_MAP,
   UNIFORM_COUNT 
 };
 
@@ -78,6 +80,13 @@ struct R_D3D11_Uniform_Picker {
   Vector4 pick_color;
 };
 
+struct R_Uniform_Shadow_Map {
+  Matrix4 world;
+  Matrix4 light_view_projection;
+};
+
+struct Render_Target;
+
 struct R_D3D11_State {
   Arena *arena;
   Rect draw_region;
@@ -87,8 +96,7 @@ struct R_D3D11_State {
   ID3D11Device *device = nullptr;
   ID3D11DeviceContext *device_context = nullptr;
   IDXGISwapChain *swap_chain = nullptr;
-  ID3D11RenderTargetView *render_target_view = nullptr;
-  ID3D11DepthStencilView *depth_stencil_view = nullptr;
+  Render_Target *default_render_target = nullptr;
   ID3D11DepthStencilState *depth_stencil_states[DEPTH_STATE_COUNT];
   ID3D11RasterizerState *rasterizer_states[RASTERIZER_STATE_COUNT];
   ID3D11BlendState *blend_states[BLEND_STATE_COUNT];
