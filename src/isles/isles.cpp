@@ -487,138 +487,6 @@ void Entity::update() {
   }
 }
 
-internal void draw_world(World *world, Camera camera) {
-  //@Note Draw world
-  Vector3 light_dir = {0, 0, 0};
-  light_dir.x = 10.0f;
-  light_dir.y = 4.0f;
-
-  draw_immediate_begin();
-
-  Draw_Bucket *bucket = draw_top();
-  bucket->immediate.depth_state = R_DEPTH_STENCIL_STATE_DEFAULT;
-  bucket->immediate.light_dir = normalize(light_dir);
-
-  for (int i = 0; i < world->entities.count; i++) {
-    Entity *e = world->entities[i];
-    Model *model = e->model;
-
-    Matrix4 rotation_matrix = rotate_rh(e->theta, camera.up);
-    Matrix4 world_matrix = translate(e->visual_position) * rotation_matrix * translate(-e->visual_position);
-    Matrix4 view = camera.view_matrix;
-
-    for (int mesh_idx = 0; mesh_idx < model->meshes.count; mesh_idx++) {
-      Mesh *mesh = model->meshes[mesh_idx];
-
-      Draw_Immediate_Batch *batch = push_immediate_batch(bucket);
-      batch->world = world_matrix;
-      batch->view = camera.view_matrix;
-      batch->projection = camera.projection_matrix;
-      batch->texture = mesh->material.texture;
-            
-      for (int vert_idx = 0; vert_idx < mesh->positions.count; vert_idx++) {
-        Vector3 p = e->visual_position + mesh->positions[vert_idx];
-        Vector4 color = e->override_color;
-        Vector2 uv = mesh->tex_coords[vert_idx];
-        Vector3 normal = mesh->has_normals ? mesh->normals[vert_idx] : Vector3(0, 0, 0);
-        draw_immediate_vertex(batch, p, normal, color, uv);
-      }
-    }
-  }
-
-  Entity *mirror = nullptr;
-  if (world->guy && (mirror = lookup_entity(world->guy->mirror_id))) {
-    //@Note Draw guy clone
-    {
-      draw_immediate_begin();
-      Draw_Bucket *bucket = draw_top();
-      bucket->immediate.depth_state = R_DEPTH_STENCIL_STATE_DEFAULT;
-
-      Guy *guy = world->guy;
-      Model *model = guy->model;
-
-      Matrix4 rotation_matrix = rotate_rh(guy->theta, camera.up);
-      Matrix4 world_matrix = translate(to_vector3(guy->reflect_position)) * rotation_matrix * translate(to_vector3(-guy->reflect_position));
-      Matrix4 view = camera.view_matrix;
-
-      for (int mesh_idx = 0; mesh_idx < model->meshes.count; mesh_idx++) {
-        Mesh *mesh = model->meshes[mesh_idx];
-
-        Draw_Immediate_Batch *batch = push_immediate_batch(bucket);
-        batch->world = world_matrix;
-        batch->view = camera.view_matrix;
-        batch->projection = camera.projection_matrix;
-        batch->texture = mesh->material.texture;
-            
-        for (int vert_idx = 0; vert_idx < mesh->positions.count; vert_idx++) {
-          Vector3 p = to_vector3(guy->reflect_position) + mesh->positions[vert_idx];
-          Vector4 color = Vector4(0.4f, 0.4f, 0.4f, 1.0f);
-          Vector2 uv = mesh->tex_coords[vert_idx];
-          Vector3 normal = mesh->has_normals ? mesh->normals[vert_idx] : Vector3(0, 0, 0);
-          draw_immediate_vertex(batch, p, normal, color, uv);
-        }
-      }
-    }
-
-
-    //@Note Draw reflection beams
-    draw_immediate_begin();
-    Draw_Bucket *bucket = draw_top();
-    bucket->immediate.depth_state = R_DEPTH_STENCIL_STATE_DEFAULT;
-    bucket->immediate.blend_state = R_BLEND_STATE_ALPHA;
-
-    Vector3 mirror_forward = to_vector3(rotate_rh(-mirror->theta,  Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1));
-    Vector3 direction = to_vector3(world->guy->position - mirror->position);
-    int distance = (int)Abs(magnitude(direction));
-
-    Vector3 beam_size = Vector3(1, 1, 1);
-    Vector4 beam_color = Vector4(1, 1, 1, 0.5f);
-    Vector3 beam_start = to_vector3(mirror->position);
-    f32 dx = mirror_forward.x > 0 ? 1.0f : -1.0f;
-    f32 dz = mirror_forward.z > 0 ? 1.0f : -1.0f;
-    f32 beam_start_x = (f32)mirror->position.x + dx;
-    f32 beam_start_z = (f32)mirror->position.z + dz;
-
-    Vector3 beam_position;
-
-    Draw_Immediate_Batch *batch = nullptr;
-
-    // x
-    batch = push_immediate_batch(bucket);
-    beam_start = to_vector3(mirror->position);
-    beam_start.x = beam_start_x;
-
-    batch->world = translate(beam_start);
-    batch->view = camera.view_matrix;
-    batch->projection = camera.projection_matrix;
-    batch->texture = nullptr;
-
-    beam_size = Vector3(dx * (f32)distance, 1.f, 1.f);
-    beam_size -= Vector3(0.f, 0.1f, 0.1f);
-    beam_position = Vector3(dx * -0.5f, 0.001f, -0.5f);
-    beam_position += Vector3(0.f, 0.05f, 0.05f);
-    draw_rectangle(batch, beam_position, beam_size, beam_color);
-
-    // z
-    batch = push_immediate_batch(bucket);
-    beam_start = to_vector3(mirror->position);
-    beam_start.z = beam_start_z;
-
-    batch = push_immediate_batch(bucket);
-    batch->world = translate(beam_start);
-    batch->view = camera.view_matrix;
-    batch->projection = camera.projection_matrix;
-    batch->texture = nullptr;
-
-    beam_size = Vector3(1.f, 1.f, dz * (f32)distance);
-    beam_size -= Vector3(0.1f, 0.1f, 0.f);
-    beam_position = Vector3(dz * -0.5f, 0.001f, -0.5f);
-    beam_position += Vector3(0.05f, 0.05f, 0.0f);
-    draw_rectangle(batch, beam_position, beam_size, beam_color);
-
-  }
-}
-
 #define SIGN(x) (x > 0 ? 1 : (x < 0 ? -1 : 0))
 #define FRAC0(x) (x - floor(x))
 #define FRAC1(x) (1 - x + floor(x))
@@ -743,11 +611,7 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     ui_set_state(ui_state);
     ui_state->arena = arena_alloc(get_virtual_allocator(), MB(4));
 
-    g_picker = new Picker();
-    g_picker->dimension = {0, 0};
-    g_picker->texture = nullptr;
-    g_picker->select_texture = nullptr;
-    g_picker->render_target_view = nullptr;
+    g_picker = make_picker(1280, 720);
 
     game_state = new Game_State();
     game_state->paused = false;
@@ -756,53 +620,50 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     Arena *temp = make_arena(get_malloc_allocator());
     default_font = load_font(temp, str8_lit("data/fonts/seguisb.ttf"), 15);
 
-    Model *guy_model = load_model("data/models/Character/character.obj");
-    Model *block_model = load_model("data/models/tile.obj");
-    Model *stone_model = load_model("data/models/stone.obj");
-    Model *mirror_model = load_model("data/models/mirror/mirror.obj");
-    Model *crate_model = load_model("data/models/Crate.obj");
-    Model *sand_model = load_model("data/models/sand.obj");
+    Triangle_Mesh *guy_mesh      = load_mesh("data/meshes/Character/character.obj");
+    Triangle_Mesh *block_mesh    = load_mesh("data/meshes/tile.obj");
+    Triangle_Mesh *stone_mesh    = load_mesh("data/meshes/stone.obj");
+    Triangle_Mesh *mirror_mesh   = load_mesh("data/meshes/mirror/mirror.obj");
+    Triangle_Mesh *crate_mesh    = load_mesh("data/meshes/Crate.obj");
+    Triangle_Mesh *sand_mesh     = load_mesh("data/meshes/sand.obj");
 
     init_editor();
 
     Entity_Prototype *guy_prototype = entity_prototype_create("Guy");
     guy_prototype->entity.kind = ENTITY_GUY;
     guy_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
-    guy_prototype->entity.model = guy_model;
+    guy_prototype->entity.mesh = guy_mesh;
     guy_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
     Entity_Prototype *mirror_prototype = entity_prototype_create("Mirror");
     mirror_prototype->entity.kind = ENTITY_MIRROR;
     mirror_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
-    mirror_prototype->entity.model = mirror_model;
+    mirror_prototype->entity.mesh = mirror_mesh;
     mirror_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
     Entity_Prototype *block_prototype = entity_prototype_create("Block");
     block_prototype->entity.kind = ENTITY_BLOCK;
     block_prototype->entity.flags = ENTITY_FLAG_STATIC;
-    block_prototype->entity.model = block_model;
+    block_prototype->entity.mesh = block_mesh;
     block_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
     Entity_Prototype *stone_prototype = entity_prototype_create("Stone");
     stone_prototype->entity.kind = ENTITY_BLOCK;
     stone_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
-    stone_prototype->entity.model = stone_model;
+    stone_prototype->entity.mesh = stone_mesh;
     stone_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
     Entity_Prototype *crate_prototype = entity_prototype_create("Crate");
     crate_prototype->entity.kind = ENTITY_BLOCK;
     crate_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
-    crate_prototype->entity.model = crate_model;
+    crate_prototype->entity.mesh = crate_mesh;
     crate_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
     Entity_Prototype *sand_prototype = entity_prototype_create("Sand");
     sand_prototype->entity.kind = ENTITY_BLOCK;
     sand_prototype->entity.flags = ENTITY_FLAG_STATIC;
-    sand_prototype->entity.model = sand_model;
+    sand_prototype->entity.mesh = sand_mesh;
     sand_prototype->entity.override_color = Vector4(1, 1, 1, 1);
-
-    Draw_State *draw_state = new Draw_State();
-    draw_set_state(draw_state);
 
     game_state->camera.origin = Vector3(0, 0, 0);
     game_state->camera.up = Vector3(0, 1, 0);
@@ -853,11 +714,6 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     g_viewport->dimension = window_dim;
   }
 
-  if (g_picker->dimension != game_state->window_dim) {
-    g_picker->dimension = game_state->window_dim;
-    r_picker_init(g_picker);
-  }
-
   os_set_cursor(OS_Cursor_Arrow);
 
   f32 aspect = (f32)game_state->window_dim.x / (f32)game_state->window_dim.y;
@@ -866,12 +722,13 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
 
   input_begin(window_handle, events);
 
-  draw_begin(window_handle);
-
-  // r_clear_color(0.51f, 0.75f, 0.87f, 1.0f);
-  r_clear_color(0.0f, 0.0f, 0.0f, 1.0f);
+  // draw_begin(window_handle);
 
   r_resize_render_target(game_state->window_dim);
+
+  r_d3d11_begin(window_handle);
+
+  r_clear_color(0.0f, 0.0f, 0.0f, 1.0f);
 
   for (int i = 0; i < get_world()->entities.count; i++) {
     Entity *e = get_world()->entities[i];
@@ -883,7 +740,6 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
 
   if (game_state->paused) {
     input_set_mouse_capture(false);
-    draw_world(get_world(), game_state->camera);
   }
 
   if (game_state->editing) {
@@ -919,14 +775,10 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     editor_present_ui(); 
   }
 
-  r_d3d11_render(window_handle, &g_draw_state->bucket_list);
-
   ui_layout_apply();
   draw_ui_layout();
 
   r_d3d11_state()->swap_chain->Present(1, 0);
-
-  draw_end();
 
   input_end(window_handle);
 
