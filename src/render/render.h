@@ -2,7 +2,8 @@
 #define RENDER_H
 
 #include <d3dcompiler.h>
-#include <D3d11.h>
+#include <d3d11shader.h>
+#include <d3d11.h>
 
 struct Texture {
   int width;
@@ -47,6 +48,35 @@ enum Shader_Kind {
   SHADER_COUNT
 };
 
+struct Shader_Uniform {
+  String8 name;
+  ID3D11Buffer *buffer = nullptr;
+  u32 size = 0;
+};
+
+struct Shader_Variable {
+  String8 name;
+  Shader_Uniform *uniform;
+  u32 offset = 0;
+  u32 size = 0;
+};
+
+struct Shader_Loc {
+  String8 name;
+  int vertex = -1;
+  int pixel  = -1;
+};
+
+struct Shader_Bindings {
+  Auto_Array<Shader_Variable> variables;
+  Auto_Array<Shader_Loc> texture_locations;
+  Auto_Array<Shader_Loc> sampler_locations;
+  Auto_Array<Shader_Loc> uniform_locations;
+  Auto_Array<Shader_Uniform*> uniforms;
+
+  Shader_Uniform *lookup_uniform(String8 name);
+};
+
 struct Shader {
   String8 name;
   String8 file_name;
@@ -55,15 +85,7 @@ struct Shader {
   ID3D11InputLayout *input_layout;
   ID3D11VertexShader *vertex_shader;
   ID3D11PixelShader *pixel_shader;
-};
-
-enum Uniform_Kind {
-  UNIFORM_BASIC,
-  UNIFORM_MESH,
-  UNIFORM_RECT,
-  UNIFORM_PICKER,
-  UNIFORM_SHADOW_MAP,
-  UNIFORM_COUNT 
+  Shader_Bindings *bindings;
 };
 
 struct R_Uniform_Basic3D {
@@ -77,11 +99,11 @@ struct R_Uniform_Mesh {
   f32 _p0;
 };
 
-struct R_D3D11_Uniform_Rect {
+struct R_Uniform_Rect {
   Matrix4 transform;
 };
 
-struct R_D3D11_Uniform_Picker {
+struct R_Uniform_Picker {
   Matrix4 transform;
   Vector4 pick_color;
 };
@@ -109,7 +131,6 @@ struct R_D3D11_State {
   ID3D11SamplerState *sampler_states[SAMPLER_STATE_COUNT];
 
   Shader *shaders[SHADER_COUNT];
-  ID3D11Buffer *uniform_buffers[UNIFORM_COUNT];
 
   ID3D11ShaderResourceView *fallback_tex;
 };
@@ -118,7 +139,7 @@ struct R_D3D11_State {
 internal inline R_D3D11_State *r_d3d11_state();
 
 internal ID3D11Buffer *make_vertex_buffer(void *data, size_t elem_count, size_t elem_size);
-internal void write_uniform_buffer(ID3D11Buffer *buffer, void *data, UINT offset, UINT bytes);
+internal void write_uniform_buffer(ID3D11Buffer *buffer, void *data, UINT bytes);
 
 internal Texture *r_create_texture_from_file(String8 file_name);
 internal Texture *r_create_texture(u8 *data, DXGI_FORMAT format, int w, int h);

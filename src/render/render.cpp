@@ -1,4 +1,3 @@
-
 global R_D3D11_State *r_g_d3d11_state;
 
 internal inline R_D3D11_State *r_d3d11_state() {
@@ -21,6 +20,17 @@ UINT get_num_mip_levels(UINT width, UINT height) {
   return levels;
 }
 
+internal ID3D11Buffer *make_uniform_buffer(u32 bytes) {
+  ID3D11Buffer *buffer;
+  D3D11_BUFFER_DESC desc = {};
+  desc.Usage          = D3D11_USAGE_DYNAMIC;
+  desc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
+  desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+  desc.ByteWidth      = bytes;
+  r_d3d11_state()->device->CreateBuffer(&desc, nullptr, &buffer);
+  return buffer;
+}
+
 internal ID3D11Buffer *make_vertex_buffer(void *data, size_t elem_count, size_t elem_size) {
   UINT bytes = (UINT)(elem_count * elem_size);
 
@@ -39,11 +49,11 @@ internal ID3D11Buffer *make_vertex_buffer(void *data, size_t elem_count, size_t 
   return vertex_buffer;
 }
 
-internal void write_uniform_buffer(ID3D11Buffer *buffer, void *data, UINT offset, UINT bytes) {
+internal void write_uniform_buffer(ID3D11Buffer *buffer, void *data, UINT bytes) {
   R_D3D11_State *d3d = r_d3d11_state();
   D3D11_MAPPED_SUBRESOURCE res = {};
   if (d3d->device_context->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res) == S_OK) {
-    memcpy((u8 *)res.pData + offset, data, bytes);
+    memcpy((u8 *)res.pData, data, bytes);
     d3d->device_context->Unmap(buffer, 0);
   } else {
     logprint("Failed to write to constant buffer.\n");
@@ -250,7 +260,7 @@ internal Texture *r_create_texture_from_file(String8 file_name) {
   int x, y, n;
   u8 *data = stbi_load((char *)file_name.data, &x, &y, &n, 4);
   if (!data) {
-    fprintf(stderr, "cannot load '%s'\n", (char *)file_name.data);
+    logprint("Cannot load '%S'\n", file_name);
   }
   Texture *texture = r_create_texture(data, DXGI_FORMAT_R8G8B8A8_UNORM, x, y);
   return texture;
@@ -494,28 +504,6 @@ internal void r_d3d11_initialize(HWND window_handle) {
     d3d11_state->fallback_tex = (ID3D11ShaderResourceView *)r_create_texture((u8 *)white_bitmap, DXGI_FORMAT_R8G8B8A8_UNORM, 2, 2)->view;
   }
 
-  {
-    D3D11_BUFFER_DESC desc = {};
-    desc.Usage = D3D11_USAGE_DYNAMIC;
-    desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-    desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-
-    desc.ByteWidth = sizeof(R_Uniform_Basic3D);
-    d3d11_state->device->CreateBuffer(&desc, nullptr, &d3d11_state->uniform_buffers[UNIFORM_BASIC]);
-
-    desc.ByteWidth = sizeof(R_Uniform_Mesh);
-    d3d11_state->device->CreateBuffer(&desc, nullptr, &d3d11_state->uniform_buffers[UNIFORM_MESH]);
-
-    desc.ByteWidth = sizeof(R_D3D11_Uniform_Picker);
-    d3d11_state->device->CreateBuffer(&desc, nullptr, &d3d11_state->uniform_buffers[UNIFORM_PICKER]);
-
-    desc.ByteWidth = sizeof(R_D3D11_Uniform_Rect);
-    d3d11_state->device->CreateBuffer(&desc, nullptr, &d3d11_state->uniform_buffers[UNIFORM_RECT]);
-
-    desc.ByteWidth = sizeof(R_Uniform_Shadow_Map);
-    d3d11_state->device->CreateBuffer(&desc, nullptr, &d3d11_state->uniform_buffers[UNIFORM_SHADOW_MAP]);
-  }
-
   //@Note Compile shaders
   D3D11_INPUT_ELEMENT_DESC basic_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -523,6 +511,8 @@ internal void r_d3d11_initialize(HWND window_handle) {
     { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
   r_d3d11_make_shader(str8_lit("data/shaders/basic_3d.hlsl"), str8_lit("Basic"), SHADER_BASIC, basic_ilay, ArrayCount(basic_ilay));
+
+
 
   //@Note Compile shaders
   D3D11_INPUT_ELEMENT_DESC mesh_ilay[] = {
@@ -605,15 +595,15 @@ internal void r_d3d11_recompile_shader(Shader_Kind kind) {
   hr = D3DCompile(contents.data, contents.count, (LPCSTR)shader->name.data, NULL, NULL, "vs_main", "vs_5_0", compile_flags, 0, &vs_blob, &vs_error);
   if (hr != S_OK) {
     compilation_success = false;
-    printf("Error compiling vertex shader %s\n", (char *)shader->name.data);
-    printf("%s\n", (char *)vs_error->GetBufferPointer());
+    logprint("Error compiling vertex shader %S\n", shader->name);
+    logprint("%s\n", vs_error->GetBufferPointer());
   }
     
   hr = D3DCompile(contents.data, contents.count, (LPCSTR)shader->name.data, NULL, NULL, "ps_main", "ps_5_0", compile_flags, 0, &ps_blob, &ps_error);
   if (hr != S_OK) {
     compilation_success = false;
-    printf("Error compiling pixel shader %s\n", (char *)shader->name.data);
-    printf("%s\n", (char *)ps_error->GetBufferPointer());
+    logprint("Error compiling pixel shader %S\n", shader->name);
+    logprint("%s\n", ps_error->GetBufferPointer());
   }
 
   ID3D11VertexShader *vertex_shader = nullptr;
@@ -633,7 +623,171 @@ internal void r_d3d11_recompile_shader(Shader_Kind kind) {
   shader->pixel_shader = pixel_shader;
 }
 
-internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, ID3D11VertexShader **vertex_shader, ID3D11PixelShader **pixel_shader, ID3D11InputLayout **input_layout, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count) {
+internal char *copy_str(const char *src) {
+  size_t len = strlen(src);
+  char *dst = (char *)malloc(len + 1);
+  strcpy(dst, src);
+  return dst;
+}
+
+internal void fill_shader_bindings(Shader_Bindings *bindings, void *byte_code, size_t byte_code_size, bool is_vertex_shader) {
+  ID3D11ShaderReflection* reflection = nullptr;
+
+  if (D3DReflect(byte_code, byte_code_size, IID_ID3D11ShaderReflection, (void**)&reflection) == S_OK) {
+    D3D11_SHADER_DESC shader_desc;
+    reflection->GetDesc(&shader_desc);
+
+    for (UINT i = 0; i < shader_desc.BoundResources; i++) {
+      D3D11_SHADER_INPUT_BIND_DESC desc;
+      reflection->GetResourceBindingDesc(i, &desc);
+      char *str = copy_str(desc.Name);
+      String8 name = str8_cstring(str);
+      u32 bind = desc.BindPoint;
+
+      switch (desc.Type) {
+      case D3D_SIT_CBUFFER: {
+        bool found = false;
+        for (int i = 0; i < bindings->uniform_locations.count; i++) {
+          Shader_Loc *loc = &bindings->uniform_locations[i]; 
+          if (str8_equal(loc->name, name)) {
+            found = true;
+            if (is_vertex_shader) {
+              loc->vertex = bind;
+            } else {
+              loc->pixel = bind;
+            }
+            break;
+          }
+        }
+
+        if (!found) {
+          Shader_Loc loc;
+          loc.name = name;
+          if (is_vertex_shader) {
+            loc.vertex = bind;
+          } else {
+            loc.pixel = bind;
+          }
+          bindings->uniform_locations.push(loc);
+        }
+        break;
+      }
+
+      case D3D_SIT_TEXTURE:
+      {
+        bool found = false;
+        for (int i = 0; i < bindings->texture_locations.count; i++) {
+          Shader_Loc *loc = &bindings->texture_locations[i]; 
+          if (str8_equal(loc->name, name)) {
+            found = true;
+            if (is_vertex_shader) {
+              loc->vertex = bind;
+            } else {
+              loc->pixel = bind;
+            }
+            break;
+          }
+        }
+
+        if (!found) {
+          Shader_Loc loc;
+          loc.name = name;
+          if (is_vertex_shader) {
+            loc.vertex = bind;
+          } else {
+            loc.pixel = bind;
+          }
+          bindings->texture_locations.push(loc);
+        }
+        break;
+      }
+
+      case D3D_SIT_SAMPLER:
+      {
+        bool found = false;
+        for (int i = 0; i < bindings->sampler_locations.count; i++) {
+          Shader_Loc *loc = &bindings->sampler_locations[i]; 
+          if (str8_equal(loc->name, name)) {
+            found = true;
+            if (is_vertex_shader) {
+              loc->vertex = bind;
+            } else {
+              loc->pixel = bind;
+            }
+            break;
+          }
+        }
+
+        if (!found) {
+          Shader_Loc loc;
+          loc.name = name;
+          if (is_vertex_shader) {
+            loc.vertex = bind;
+          } else {
+            loc.pixel = bind;
+          }
+          bindings->sampler_locations.push(loc);
+        }
+        break;
+      }
+      }
+    }
+
+    for (UINT cb_idx = 0; cb_idx < shader_desc.ConstantBuffers; cb_idx++) {
+      ID3D11ShaderReflectionConstantBuffer *cbuffer = reflection->GetConstantBufferByIndex(cb_idx);
+      D3D11_SHADER_BUFFER_DESC buffer_desc;
+      cbuffer->GetDesc(&buffer_desc);
+
+      Shader_Uniform *uniform = nullptr;
+      String8 buffer_name = str8_cstring(copy_str(buffer_desc.Name));
+      for (int i = 0; i < bindings->uniforms.count; i++) {
+        uniform = bindings->uniforms[i];
+        if (str8_equal(buffer_name, uniform->name)) {
+          break;
+        }
+        uniform = nullptr;
+      }
+      if (!uniform) {
+        ID3D11Buffer *uniform_buffer = make_uniform_buffer(buffer_desc.Size);
+        uniform = new Shader_Uniform();
+        uniform->name = buffer_name;
+        uniform->buffer = uniform_buffer;
+        uniform->size = buffer_desc.Size;
+        bindings->uniforms.push(uniform);
+     }
+
+      for (UINT var_idx = 0; var_idx < buffer_desc.Variables; var_idx++) {
+        ID3D11ShaderReflectionVariable *reflect_variable = cbuffer->GetVariableByIndex(var_idx);
+        D3D11_SHADER_VARIABLE_DESC var_desc;
+        reflect_variable->GetDesc(&var_desc);
+
+        char *str = copy_str(var_desc.Name);
+        String8 name = str8_cstring(str);
+
+        Shader_Variable *found = nullptr;
+        for (int i = 0; i < bindings->variables.count; i++) {
+          Shader_Variable *variable = &bindings->variables[i];
+          if (str8_equal(name, variable->name)) {
+            found = variable;
+            break;
+          }
+        }
+        if (found) continue;
+
+        Shader_Variable variable;
+        variable.name = name;
+        variable.offset = var_desc.StartOffset;
+        variable.size = var_desc.Size;
+        variable.uniform = uniform;
+        bindings->variables.push(variable);
+      }
+    }
+  }
+
+  if (reflection) reflection->Release();
+}
+
+internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, ID3D11VertexShader **vertex_shader, ID3D11PixelShader **pixel_shader, ID3D11InputLayout **input_layout, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count, Shader_Bindings *bindings) {
   R_D3D11_State *d3d11_state = r_d3d11_state();
   ID3DBlob *vs_blob, *ps_blob;
   ID3DBlob *vs_error, *ps_error;
@@ -656,15 +810,15 @@ internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, ID
   hr = D3DCompile(contents.data, contents.count, (LPCSTR)program_name.data, NULL, NULL, "vs_main", "vs_5_0", compile_flags, 0, &vs_blob, &vs_error);
   if (hr != S_OK) {
     compilation_success = false;
-    printf("Error compiling vertex shader %s\n", (char *)program_name.data);
-    printf("%s\n", (char *)vs_error->GetBufferPointer());
+    logprint("Error compiling vertex shader %S\n", program_name);
+    logprint("%s\n", vs_error->GetBufferPointer());
   }
     
   hr = D3DCompile(contents.data, contents.count, (LPCSTR)program_name.data, NULL, NULL, "ps_main", "ps_5_0", compile_flags, 0, &ps_blob, &ps_error);
   if (hr != S_OK) {
     compilation_success = false;
-    printf("Error compiling pixel shader %s\n", (char *)program_name.data);
-    printf("%s\n", (char *)ps_error->GetBufferPointer());
+    logprint("Error compiling pixel shader %S\n", program_name);
+    logprint("%s\n", ps_error->GetBufferPointer());
   }
 
   if (compilation_success) {
@@ -674,6 +828,9 @@ internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, ID
 
     hr = d3d11_state->device->CreateInputLayout(input_elements, elements_count, vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), input_layout);
   }
+
+  fill_shader_bindings(bindings, vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), true);
+  fill_shader_bindings(bindings, ps_blob->GetBufferPointer(), ps_blob->GetBufferSize(), false);
 
   if (vs_blob)  vs_blob->Release();
   if (ps_blob)  ps_blob->Release();
@@ -685,10 +842,12 @@ internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, Sh
   R_D3D11_State *d3d11_state = r_d3d11_state();
 
   Shader *shader = new Shader();
+  shader->bindings = new Shader_Bindings();
+
   shader->name = str8_copy(d3d11_state->arena, program_name);
   shader->file_name = str8_copy(d3d11_state->arena, file_name);
 
-  r_d3d11_compile_shader(file_name, program_name, &shader->vertex_shader, &shader->pixel_shader, &shader->input_layout, input_elements, elements_count);
+  r_d3d11_compile_shader(file_name, program_name, &shader->vertex_shader, &shader->pixel_shader, &shader->input_layout, input_elements, elements_count, shader->bindings);
 
   OS_Handle file_handle = os_open_file(file_name, OS_AccessFlag_Read);
   if (os_valid_handle(file_handle)) {
@@ -715,7 +874,17 @@ internal void r_d3d11_update_dirty_shaders() {
 
     if (shader->last_write_time != last_write_time) {
       r_d3d11_recompile_shader(shader_kind);
-
     }
   }
+}
+
+
+Shader_Uniform* Shader_Bindings::lookup_uniform(String8 name) {
+  for (int i = 0; i < uniforms.count; i++) {
+    Shader_Uniform *uniform = uniforms[i];
+    if (str8_equal(name, uniform->name)) {
+      return uniform;
+    }
+  }
+  return nullptr;
 }
