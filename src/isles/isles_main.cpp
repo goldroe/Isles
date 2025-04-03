@@ -62,10 +62,10 @@
 
 #include "core.cpp"
 #include "audio.cpp"
-#include "ui/ui_core.cpp"
-#include "ui/ui_widgets.cpp"
 #include "draw.cpp"
 #include "render/render.cpp"
+#include "ui/ui_core.cpp"
+#include "ui/ui_widgets.cpp"
 #include "mesh.cpp"
 #include "input.cpp"
 #include "editor.cpp"
