@@ -5,6 +5,10 @@
 #include <d3d11shader.h>
 #include <d3d11.h>
 
+enum {
+  TEXTURE_FLAG_GENERATE_MIPS = (1<<0),
+};
+
 struct Texture {
   int width;
   int height;
@@ -132,7 +136,7 @@ struct R_D3D11_State {
 
   Shader *shaders[SHADER_COUNT];
 
-  ID3D11ShaderResourceView *fallback_tex;
+  Texture *fallback_tex;
 };
 
 
@@ -141,8 +145,8 @@ internal inline R_D3D11_State *r_d3d11_state();
 internal ID3D11Buffer *make_vertex_buffer(void *data, size_t elem_count, size_t elem_size);
 internal void write_uniform_buffer(ID3D11Buffer *buffer, void *data, UINT bytes);
 
-internal Texture *r_create_texture_from_file(String8 file_name);
-internal Texture *r_create_texture(u8 *data, DXGI_FORMAT format, int w, int h);
+internal Texture *r_create_texture_from_file(String8 file_name, int flags);
+internal Texture *r_create_texture(u8 *data, DXGI_FORMAT format, int w, int h, int flags);
 
 
 internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, Shader_Kind shader_kind, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count);

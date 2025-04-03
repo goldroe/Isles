@@ -74,7 +74,7 @@ internal void set_texture(String8 name, Texture *texture) {
     return;
   }
 
-  ID3D11ShaderResourceView *view = texture ? (ID3D11ShaderResourceView *)texture->view : d3d->fallback_tex;
+  ID3D11ShaderResourceView *view = texture ? (ID3D11ShaderResourceView *)texture->view : (ID3D11ShaderResourceView *)d3d->fallback_tex->view;
   if (loc->vertex != -1) {
     d3d->device_context->VSSetShaderResources(loc->vertex, 1, &view);
   }

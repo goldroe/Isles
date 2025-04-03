@@ -214,10 +214,11 @@ internal int bytes_from_format(DXGI_FORMAT fmt) {
   }
 }
 
-internal Texture *r_create_texture(u8 *data, DXGI_FORMAT format, int w, int h) {
+internal Texture *r_create_texture(u8 *data, DXGI_FORMAT format, int w, int h, int flags) {
   HRESULT hr = S_OK;
 
-  UINT mip_levels = get_num_mip_levels(w, h);
+  UINT mip_levels = 1;
+  if (flags & TEXTURE_FLAG_GENERATE_MIPS) mip_levels = get_num_mip_levels(w, h);
 
   R_D3D11_State *d3d11_state = r_d3d11_state();
 
@@ -236,8 +237,12 @@ internal Texture *r_create_texture(u8 *data, DXGI_FORMAT format, int w, int h) {
   desc.SampleDesc.Count = 1;
   desc.SampleDesc.Quality = 0;
   desc.Usage = D3D11_USAGE_DEFAULT;
-  desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-  desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+  desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+  desc.MiscFlags = 0;
+  if (flags & TEXTURE_FLAG_GENERATE_MIPS) {
+    desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
+    desc.MiscFlags |= D3D11_RESOURCE_MISC_GENERATE_MIPS;
+  }
 
   hr = d3d11_state->device->CreateTexture2D(&desc, NULL, &tex2d);
   d3d11_state->device_context->UpdateSubresource(tex2d, 0, NULL, data, w * bytes_from_format(format), 0);
@@ -250,19 +255,21 @@ internal Texture *r_create_texture(u8 *data, DXGI_FORMAT format, int w, int h) {
 	srv_desc.Texture2D.MostDetailedMip = 0;
   hr = d3d11_state->device->CreateShaderResourceView(tex2d, &srv_desc, &view);
 
-  d3d11_state->device_context->GenerateMips(view);
+  if (flags & TEXTURE_FLAG_GENERATE_MIPS) {
+    d3d11_state->device_context->GenerateMips(view); 
+  }
 
   texture->view = (void *)view;
   return texture;
 }
 
-internal Texture *r_create_texture_from_file(String8 file_name) {
+internal Texture *r_create_texture_from_file(String8 file_name, int flags) {
   int x, y, n;
   u8 *data = stbi_load((char *)file_name.data, &x, &y, &n, 4);
   if (!data) {
     logprint("Cannot load '%S'\n", file_name);
   }
-  Texture *texture = r_create_texture(data, DXGI_FORMAT_R8G8B8A8_UNORM, x, y);
+  Texture *texture = r_create_texture(data, DXGI_FORMAT_R8G8B8A8_UNORM, x, y, flags);
   return texture;
 }
 
@@ -501,7 +508,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
       0xFFFFFFFF, 0xFFFFFFFF,
       0xFFFFFFFF, 0xFFFFFFFF
     };
-    d3d11_state->fallback_tex = (ID3D11ShaderResourceView *)r_create_texture((u8 *)white_bitmap, DXGI_FORMAT_R8G8B8A8_UNORM, 2, 2)->view;
+    d3d11_state->fallback_tex = r_create_texture((u8 *)white_bitmap, DXGI_FORMAT_R8G8B8A8_UNORM, 2, 2, 0);
   }
 
   //@Note Compile shaders
