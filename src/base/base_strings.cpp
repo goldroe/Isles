@@ -17,6 +17,10 @@ internal String8 str8(u8 *c, u64 count) {
     return result;
 }
 
+internal bool str8_equal(String8 first, String8 second) {
+  return first.count == second.count && (strncmp((const char *)first.data, (const char *)second.data, first.count) == 0); 
+}
+
 internal String8 str8_cstring(const char *c) {
     String8 result;
     result.count = cstr8_length(c);
@@ -119,6 +123,15 @@ internal u64 str8_find_substr(String8 string, String8 substring) {
         }
     }
     return result;
+}
+
+internal u64 djb2_hash(const char *str) {
+  u64 hash = 5381;
+  int c;
+  while (c = *str++) {
+    hash = ((hash << 5) + hash) + c;
+  }
+  return hash;
 }
 
 internal u64 djb2_hash_string(String8 string) {
