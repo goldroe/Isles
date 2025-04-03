@@ -90,9 +90,8 @@ internal void r_picker_render_gizmo(Picker *picker) {
   d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
   set_shader(SHADER_PICKER);
-  ID3D11Buffer *uniform_buffer = d3d->uniform_buffers[UNIFORM_PICKER];
-  d3d->device_context->VSSetConstantBuffers(0, 1, &uniform_buffer);
-  d3d->device_context->PSSetConstantBuffers(0, 1, &uniform_buffer);
+
+  bind_uniform(current_shader, str8_lit("Constants"));
 
   Entity *e = editor->selected_entity;
 
@@ -113,11 +112,11 @@ internal void r_picker_render_gizmo(Picker *picker) {
     pick_color.z = ((id & 0x00FF00FF) >> 16) / 255.0f;
     pick_color.w = ((id & 0xFF0000FF) >> 24) / 255.0f;
 
-    R_D3D11_Uniform_Picker uniform = {};
-    uniform.transform = transform;
-    uniform.pick_color = pick_color;
-
-    write_uniform_buffer(uniform_buffer, &uniform, 0, sizeof(uniform));
+    R_Uniform_Picker uniform_picker;
+    uniform_picker.transform = transform;
+    uniform_picker.pick_color = pick_color;
+    Shader_Uniform *uniform = current_shader->bindings->lookup_uniform(str8_lit("Constants"));
+    write_uniform_buffer(uniform->buffer, &uniform_picker, sizeof(uniform_picker));
 
     UINT stride = sizeof(Vector3), offset = 0;
     ID3D11Buffer *vertex_buffer = make_vertex_buffer(mesh->vertices.data, mesh->vertices.count, sizeof(Vector3));
@@ -145,6 +144,9 @@ internal void picker_render(Picker *picker) {
   d3d->device_context->ClearDepthStencilView((ID3D11DepthStencilView *)render_target->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
   set_shader(SHADER_PICKER);
+
+  bind_uniform(current_shader, str8_lit("Constants"));
+
   d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
   Game_State *game_state = get_game_state();
@@ -165,20 +167,11 @@ internal void picker_render(Picker *picker) {
     pick_color.z = ((e->id & 0x00FF00FF) >> 16) / 255.0f;
     pick_color.w = ((e->id & 0xFF0000FF) >> 24) / 255.0f;
 
-    R_D3D11_Uniform_Picker uniform = {};
-    uniform.transform = transform;
-    uniform.pick_color = pick_color;
-
-    ID3D11Buffer *uniform_buffer = d3d->uniform_buffers[UNIFORM_PICKER];
-    d3d->device_context->VSSetConstantBuffers(0, 1, &uniform_buffer);
-    d3d->device_context->PSSetConstantBuffers(0, 1, &uniform_buffer);
-    {
-      D3D11_MAPPED_SUBRESOURCE resource = {};
-      if (d3d->device_context->Map(uniform_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &resource) == S_OK) {
-        memcpy(resource.pData, &uniform, sizeof(uniform));
-        d3d->device_context->Unmap(uniform_buffer, 0);
-      }
-    }
+    R_Uniform_Picker uniform_picker;
+    uniform_picker.transform = transform;
+    uniform_picker.pick_color = pick_color;
+    Shader_Uniform *uniform = current_shader->bindings->lookup_uniform(str8_lit("Constants"));
+    write_uniform_buffer(uniform->buffer, &uniform_picker, sizeof(uniform_picker));
 
     ID3D11Buffer *vertex_buffer = make_vertex_buffer(mesh->vertices.data, mesh->vertices.count, sizeof(Vector3));
     UINT stride = sizeof(Vector3), offset = 0;
@@ -350,11 +343,11 @@ internal void update_editor() {
       Matrix4 world_matrix = translate(selected_entity->visual_position.x, selected_entity->visual_position.y, selected_entity->visual_position.z) * scale(Vector3(gizmo_scale_factor, gizmo_scale_factor, gizmo_scale_factor));
       Matrix4 view_matrix = editor->camera.view_matrix;
       Matrix4 transform = editor->camera.projection_matrix * view_matrix * world_matrix;
-      R_Uniform_Mesh uniform = {};
-      uniform.transform = transform;
-      uniform.world_matrix = world_matrix;
-      ID3D11Buffer *uniform_buffer = r_d3d11_state()->uniform_buffers[SHADER_MESH];
-      write_uniform_buffer(uniform_buffer, &uniform, 0, sizeof(uniform));
+      R_Uniform_Mesh uniform_mesh = {};
+      uniform_mesh.transform = transform;
+      uniform_mesh.world_matrix = world_matrix;
+      Shader_Uniform *uniform = current_shader->bindings->lookup_uniform(str8_lit("Constants"));
+      write_uniform_buffer(uniform->buffer, &uniform_mesh, sizeof(uniform_mesh));
 
       Vector4 color;
       switch (axis) {
@@ -373,15 +366,6 @@ internal void update_editor() {
       draw_mesh(mesh, true, color);
     }
   }
-}
-
-internal u64 djb2_hash(const char *str) {
-  u64 hash = 5381;
-  int c;
-  while (c = *str++) {
-    hash = ((hash << 5) + hash) + c;
-  }
-  return hash;
 }
 
 internal Entity_Prototype *entity_prototype_lookup(u64 prototype_id) {
