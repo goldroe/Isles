@@ -15,8 +15,8 @@ struct Vertex_Output {
   float4 color : COLOR;
 };
 
-SamplerState main_sampler;
-Texture2D main_texture;
+SamplerState diffuse_sampler;
+Texture2D    diffuse_texture;
 
 Vertex_Output vs_main(Vertex_Input input) {
   Vertex_Output output;
@@ -27,7 +27,7 @@ Vertex_Output vs_main(Vertex_Input input) {
 }
 
 float4 ps_main(Vertex_Output input) : SV_TARGET {
-  float4 diffuse_color = main_texture.Sample(main_sampler, input.uv);
+  float4 diffuse_color = diffuse_texture.Sample(diffuse_sampler, input.uv);
   float4 final_color;
   final_color = diffuse_color * input.color;
   return final_color;

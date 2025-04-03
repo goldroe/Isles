@@ -1,7 +1,7 @@
 
 cbuffer Constants : register(b0) {
     matrix xform;
-    matrix world_matrix;
+    matrix world;
     // matrix view_matrix;
     // matrix projection_matrix;
     float3 light_dir;
@@ -22,19 +22,19 @@ struct Vertex_Output {
     float4 color : COLOR;
 };
 
-Texture2D diffuse_texture : register(t0);
-Texture2D shadow_map : register(t1);
-
 SamplerState diffuse_sampler : register(s0);
-SamplerState point_sampler : register(s1);
+SamplerState point_sampler   : register(s1);
+
+Texture2D diffuse_texture : register(t0);
+Texture2D shadow_map      : register(t1);
 
 Vertex_Output vs_main(Vertex_Input input) {
     Vertex_Output output;
     output.pos_h = mul(xform, float4(input.pos_l, 1.0));
-    output.pos_w = mul(world_matrix, float4(input.pos_l, 1.0)).xyz;
+    output.pos_w = mul(world, float4(input.pos_l, 1.0)).xyz;
     output.color = input.color;
     output.uv = input.uv;
-    output.normal = mul((float3x3)world_matrix, input.normal);
+    output.normal = mul((float3x3)world, input.normal);
     return output;
 }
 

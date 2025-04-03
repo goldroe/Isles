@@ -1,6 +1,6 @@
 
 cbuffer Constants : register(b0) {
-    matrix transform;
+    matrix xform;
     float4 pick_color;
 };
 
@@ -14,7 +14,7 @@ struct Vertex_Output {
 
 Vertex_Output vs_main(Vertex_Input input) {
     Vertex_Output output;
-    output.pos_h = mul(transform, float4(input.pos_l, 1.0));
+    output.pos_h = mul(xform, float4(input.pos_l, 1.0));
     return output;
 }
 

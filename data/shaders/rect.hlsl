@@ -1,5 +1,5 @@
 cbuffer Constants : register(b0) {
-    matrix transform;
+    matrix xform;
 };
 
 struct Vertex_Input {
@@ -16,12 +16,12 @@ struct Vertex_Output {
     nointerpolation float4 style : STYLE;
 };
 
-SamplerState main_sampler : register(s0);
-Texture2D main_texture : register(t0);
+SamplerState diffuse_sampler : register(s0);
+Texture2D    diffuse_texture : register(t0);
 
 Vertex_Output vs_main(Vertex_Input input) {
     Vertex_Output output;
-    output.position = mul(transform, float4(input.position, 0, 1));
+    output.position = mul(xform, float4(input.position, 0, 1));
     output.uv = input.uv;
     output.color = input.color;
     output.style = input.style;
@@ -33,7 +33,7 @@ float4 ps_main(Vertex_Output input) : SV_TARGET {
 
     float4 diffuse = float4(1, 1, 1, 1);
     if (!omit_tex) {
-        diffuse = main_texture.Sample(main_sampler, input.uv);   
+        diffuse = diffuse_texture.Sample(diffuse_sampler, input.uv);   
     }
 
     float4 final_color;
