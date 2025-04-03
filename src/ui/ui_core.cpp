@@ -804,23 +804,17 @@ internal void draw_ui_layout() {
   set_shader(SHADER_RECT);
   d3d11_state->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-  ID3D11Buffer *uniform_buffer = d3d11_state->uniform_buffers[UNIFORM_RECT];
-  d3d11_state->device_context->VSSetConstantBuffers(0, 1, &uniform_buffer);
-  d3d11_state->device_context->PSSetConstantBuffers(0, 1, &uniform_buffer);
+  bind_uniform(current_shader, str8_lit("Constants"));
 
   Vector2Int window_dim = ui_g_state->window_dimension;
   Matrix4 projection = ortho_rh_zo(0.0f, (f32)window_dim.x, (f32)window_dim.y, 0.0f, -1.0f, 1.0f);
 
-  R_D3D11_Uniform_Rect uniform_rect = {};
-  uniform_rect.transform = projection;
-  {
-    D3D11_MAPPED_SUBRESOURCE res = {};
-    d3d11_state->device_context->Map(uniform_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res);
-    memcpy(res.pData, &uniform_rect, sizeof(uniform_rect));
-    d3d11_state->device_context->Unmap(uniform_buffer, 0);
-  }
-    
-  d3d11_state->device_context->PSSetSamplers(0, 1, &d3d11_state->sampler_states[SAMPLER_STATE_POINT]);
+  R_Uniform_Rect rect_uniform;
+  rect_uniform.transform = projection;
+  Shader_Uniform *uniform = current_shader->bindings->lookup_uniform(str8_lit("Constants"));
+  write_uniform_buffer(uniform->buffer, &rect_uniform, sizeof(rect_uniform));
+  
+  set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_POINT);
 
   set_depth_state(DEPTH_STATE_DISABLE);
   set_blend_state(BLEND_STATE_ALPHA);
@@ -830,11 +824,7 @@ internal void draw_ui_layout() {
     UI_Draw_Batch *batch = bucket->batches[i];
     if (batch->vertices.count == 0) continue;
     
-    if (batch->font) {
-      d3d11_state->device_context->PSSetShaderResources(0, 1, (ID3D11ShaderResourceView**)&batch->font->texture->view);
-    } else {
-      d3d11_state->device_context->PSSetShaderResources(0, 1, (ID3D11ShaderResourceView**)&d3d11_state->fallback_tex);
-    }
+    set_texture(str8_lit("diffuse_texture"), batch->font->texture);
 
     ID3D11Buffer *vertex_buffer = nullptr;
     {
