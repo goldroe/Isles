@@ -30,4 +30,7 @@ internal String8 str8_zero();
 internal u64 cstr8_length(const char *c);
 internal String8 str8_cstring(const char *c);
 
+
+internal u64 djb2_hash(const char *str);
+
 #endif // BASE_STRINGS_H
