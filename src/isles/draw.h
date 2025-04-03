@@ -12,6 +12,7 @@ struct Shadow_Map {
 internal void draw_world(World *world, Camera camera);
 
 internal void set_shader(Shader_Kind shader_kind);
+internal void set_texture(String8 name, Texture *texture);
 
 internal void set_rasterizer_state(Rasterizer_State_Kind rasterizer_kind);
 internal void set_blend_state(Blend_State_Kind blend_state_kind);

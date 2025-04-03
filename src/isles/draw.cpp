@@ -1,4 +1,3 @@
-
 global Shader *current_shader;
 global Auto_Array<Vertex_3D> immediate_vertices;
 
@@ -54,6 +53,140 @@ internal void set_shader(Shader_Kind shader_kind) {
     d3d->device_context->VSSetShader(shader->vertex_shader, nullptr, 0);
     d3d->device_context->PSSetShader(shader->pixel_shader, nullptr, 0);
     d3d->device_context->IASetInputLayout(shader->input_layout);
+  }
+}
+
+internal void set_texture(String8 name, Texture *texture) {
+  R_D3D11_State *d3d = r_d3d11_state();
+
+  Shader_Bindings *bindings = current_shader->bindings;
+  Shader_Loc *loc = nullptr;
+  for (int i = 0; i < bindings->texture_locations.count; i++) {
+    loc = &bindings->texture_locations[i];
+    if (str8_equal(name, loc->name)) {
+      break;
+    }
+    loc = nullptr;
+  }
+
+  if (!loc) {
+    logprint("Could not find texture '%S'\n", name);
+    return;
+  }
+
+  ID3D11ShaderResourceView *view = texture ? (ID3D11ShaderResourceView *)texture->view : d3d->fallback_tex;
+  if (loc->vertex != -1) {
+    d3d->device_context->VSSetShaderResources(loc->vertex, 1, &view);
+  }
+  if (loc->pixel != -1) {
+    d3d->device_context->PSSetShaderResources(loc->pixel, 1, &view);
+  }
+}
+
+internal void bind_uniform(Shader *shader, String8 name) {
+  R_D3D11_State *d3d = r_d3d11_state();
+
+  Shader_Bindings *bindings = shader->bindings;
+  Shader_Loc *loc = nullptr;
+  for (int i = 0; i < bindings->uniform_locations.count; i++) {
+    loc = &bindings->uniform_locations[i];
+    if (str8_equal(name, loc->name)) {
+      break;
+    }
+    loc = nullptr;
+  }
+
+  Shader_Uniform *uniform = nullptr;
+  for (int i = 0; i < bindings->uniforms.count; i++) {
+    uniform = bindings->uniforms[i];
+    if (str8_equal(name, uniform->name)) {
+      break;
+    }
+    uniform = nullptr;
+  }
+
+  if (!uniform || !loc) {
+    logprint("Could not find uniform '%S'\n", name);
+    return;
+  }
+
+  if (loc->vertex != -1) {
+    d3d->device_context->VSSetConstantBuffers(loc->vertex, 1, &uniform->buffer);
+  }
+  if (loc->pixel != -1) {
+    d3d->device_context->PSSetConstantBuffers(loc->pixel, 1, &uniform->buffer);
+  }
+}
+
+//@Dumb Thing i was doing to emulate opengl uniform stuff, now I know it doesn't work with constant buffers...
+//      unless i reserve CPU memory for each buffer and write the whole buffer on update which doesn't seem good
+#if 0
+internal void set_variable(Shader *shader, String8 name, void *ptr, u32 size) {
+  Shader_Bindings *bindings = shader->bindings;
+  
+  Shader_Variable *variable = nullptr;
+  for (int i = 0; i < bindings->variables.count; i++) {
+    variable = &bindings->variables[i];
+    if (str8_equal(variable->name, name)) {
+      break;
+    }
+    variable = nullptr;
+  }
+
+  if (!variable) {
+    logprint("Could not find variable '%S'\n", name);
+  }
+
+  Shader_Uniform *uniform = variable->uniform;
+  write_uniform_buffer(uniform->buffer, ptr, size);
+}
+
+internal void set_float(Shader *shader, String8 name, f32 f) {
+  set_variable(shader, name, &f, sizeof(f32));
+}
+
+internal void set_float2(Shader *shader, String8 name, Vector2 v) {
+  set_variable(shader, name, &v, sizeof(v));
+}
+
+internal void set_float3(Shader *shader, String8 name, Vector3 v) {
+  set_variable(shader, name, &v, sizeof(v));
+}
+
+internal void set_float4(Shader *shader, String8 name, Vector4 v) {
+  set_variable(shader, name, &v, sizeof(v));
+}
+
+internal void set_matrix4(Shader *shader, String8 name, Matrix4 matrix) {
+  set_variable(shader, name, &matrix, sizeof(Matrix4));
+}
+#endif
+
+internal void set_sampler(String8 name, Sampler_State_Kind sampler_kind) {
+  R_D3D11_State *d3d = r_d3d11_state();
+
+  ID3D11SamplerState *sampler = d3d->sampler_states[sampler_kind];
+
+  Shader_Bindings *bindings = current_shader->bindings;
+  Shader_Loc *loc = nullptr;
+  for (int i = 0; i < bindings->sampler_locations.count; i++) {
+    loc = &bindings->sampler_locations[i];
+    if (str8_equal(loc->name, name)) {
+      break;
+    }
+    loc = nullptr;
+  }
+
+  if (!loc) {
+    logprint("Could not find sampler '%S'\n", name);
+    return;
+  }
+
+  if (loc->vertex != -1) {
+    d3d->device_context->VSSetSamplers(loc->vertex, 1, &sampler);
+  }
+  if (loc->pixel != -1) {
+    d3d->device_context->PSSetSamplers(loc->pixel, 1, &sampler);
   }
 }
 
@@ -131,8 +264,6 @@ internal void immediate_begin() {
 }
 
 internal void draw_mesh(Triangle_Mesh *mesh, bool use_override_color, Vector4 override_color) {
-  set_shader(SHADER_MESH);
-
   R_D3D11_State *d3d = r_d3d11_state();
 
   Auto_Array<Vertex_XNCUU> vertices;
@@ -150,18 +281,13 @@ internal void draw_mesh(Triangle_Mesh *mesh, bool use_override_color, Vector4 ov
   ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices.data, vertices.count, sizeof(Vertex_XNCUU));
   d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
 
-  ID3D11SamplerState *sampler = d3d->sampler_states[SAMPLER_STATE_LINEAR];
-  d3d->device_context->PSSetSamplers(0, 1, &sampler);
+  set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
 
   for (int i = 0; i < mesh->triangle_list_info.count; i++) {
     Triangle_List_Info triangle_list_info = mesh->triangle_list_info[i];
 
     Material *material = mesh->materials[triangle_list_info.material_index];
-    if (material->texture) {
-      d3d->device_context->PSSetShaderResources(0, 1, (ID3D11ShaderResourceView **)&material->texture->view);
-    } else {
-      d3d->device_context->PSSetShaderResources(0, 1, &d3d->fallback_tex);
-    }
+    set_texture(str8_lit("diffuse_texture"), material->texture);
 
     d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     d3d->device_context->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
@@ -186,8 +312,7 @@ internal void draw_scene() {
   }
 
   local_persist Shadow_Map *shadow_map = make_shadow_map(1024, 1024);
-
-  //@Note Shadow mapping
+  // @Note Shadow mapping
   {
     set_viewport(0, 0, (f32)shadow_map->width, (f32)shadow_map->height);
     set_depth_state(DEPTH_STATE_DEFAULT);
@@ -204,6 +329,9 @@ internal void draw_scene() {
     Matrix4 light_projection = ortho_rh_zo(-10.f, 10.f, -10.f, 10.f, 1.0f, 7.5f);
     Matrix4 light_view_projection = light_projection * light_view;
 
+    bind_uniform(current_shader, str8_lit("Constants"));
+    Shader_Uniform *shadow_map_uniform = current_shader->bindings->lookup_uniform(str8_lit("Constants"));
+
     for (int i = 0; i < world->entities.count; i++) {
       Entity *entity = world->entities[i];
       Triangle_Mesh *mesh = entity->mesh;
@@ -212,20 +340,16 @@ internal void draw_scene() {
       Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
       Matrix4 world_matrix = translate(entity->visual_position) * rotation_matrix;
 
-      R_Uniform_Shadow_Map uniform = {};
-      uniform.world = world_matrix;
-      uniform.light_view_projection = light_view_projection;
-      ID3D11Buffer *uniform_buffer = d3d->uniform_buffers[UNIFORM_SHADOW_MAP];
-      write_uniform_buffer(uniform_buffer, &uniform, 0, sizeof(uniform));
-
-      d3d->device_context->VSSetConstantBuffers(0, 1, &uniform_buffer);
+      R_Uniform_Shadow_Map uniform_shadow_map;
+      uniform_shadow_map.world = world_matrix;
+      uniform_shadow_map.light_view_projection = light_view_projection;
+      write_uniform_buffer(shadow_map_uniform->buffer, &uniform_shadow_map, sizeof(uniform_shadow_map));
 
       ID3D11Buffer *vertex_buffer = make_vertex_buffer(mesh->vertices.data, mesh->vertices.count, sizeof(Vector3));
       UINT stride = sizeof(Vector3), offset = 0;
       d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
       d3d->device_context->Draw((UINT)mesh->vertices.count, 0);
       vertex_buffer->Release();
-
     }
 
     reset_viewport();
@@ -235,7 +359,7 @@ internal void draw_scene() {
   set_blend_state(BLEND_STATE_DEFAULT);
   set_rasterizer_state(RASTERIZER_STATE_DEFAULT);
   set_render_target(d3d->default_render_target);
-  
+
   draw_world(world, camera);
 
   if (!game_state->editing) {
@@ -251,11 +375,13 @@ internal void draw_scene() {
 
         set_shader(SHADER_MESH);
 
-        R_Uniform_Mesh uniform = {};
-        uniform.transform = transform;
-        uniform.world_matrix = world_matrix;
-        ID3D11Buffer *uniform_buffer = d3d->uniform_buffers[UNIFORM_MESH];
-        write_uniform_buffer(uniform_buffer, &uniform, 0, sizeof(uniform));
+        bind_uniform(current_shader, str8_lit("Constants"));
+
+        Shader_Uniform *uniform = current_shader->bindings->lookup_uniform(str8_lit("Constants"));
+        R_Uniform_Mesh uniform_mesh;
+        uniform_mesh.transform = transform;
+        uniform_mesh.world_matrix = world_matrix;
+        write_uniform_buffer(uniform->buffer, &uniform_mesh, sizeof(uniform_mesh));
 
         draw_mesh(guy->mesh, true, Vector4(0.4f, 0.4f, 0.4f, 1.0f));
       }
@@ -317,21 +443,24 @@ internal void draw_scene() {
 internal void draw_world(World *world, Camera camera) {
   R_D3D11_State *d3d = r_d3d11_state();
 
+  set_shader(SHADER_MESH);
+
+  Shader_Uniform *uniform = current_shader->bindings->lookup_uniform(str8_lit("Constants"));
+  d3d->device_context->VSSetConstantBuffers(0, 1, &uniform->buffer);
+
   for (int i = 0; i < world->entities.count; i++) {
     Entity *entity = world->entities[i];
     Triangle_Mesh *mesh = entity->mesh;
 
-    //@Todo Set Transform
     Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
     Matrix4 world_matrix = translate(entity->visual_position) * rotation_matrix;
     Matrix4 transform = camera.projection_matrix * camera.view_matrix * world_matrix;
 
-    R_Uniform_Mesh uniform = {};
-    uniform.transform = transform;
-    ID3D11Buffer *uniform_buffer = d3d->uniform_buffers[UNIFORM_MESH];
-    write_uniform_buffer(uniform_buffer, &uniform, 0, sizeof(uniform));
 
-    d3d->device_context->VSSetConstantBuffers(0, 1, &uniform_buffer);
+    R_Uniform_Mesh uniform_mesh = {};
+    uniform_mesh.transform = transform;
+    uniform_mesh.world_matrix = world_matrix;
+    write_uniform_buffer(uniform->buffer, &uniform_mesh, sizeof(uniform_mesh));
 
     draw_mesh(mesh, entity->use_override_color, entity->override_color);
   }
