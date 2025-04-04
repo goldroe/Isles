@@ -66,6 +66,12 @@ struct Vertex_XNCUU {
   Vector2 uv;
 };
 
+struct Vertex_ARGB {
+  Vector2 position;
+  Vector2 uv;
+  ARGB argb;
+};
+
 #define ALLOCATOR_RESERVE_SIG(name) void * name(u64 bytes)
 typedef ALLOCATOR_RESERVE_SIG(Allocator_Reserve);
 
