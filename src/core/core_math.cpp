@@ -678,6 +678,15 @@ internal inline Matrix4 scale(Vector3 v) {
   return result;
 }
 
+internal inline Matrix4 scale(f32 x, f32 y, f32 z) {
+  Matrix4 result = make_matrix4(1.0f);
+  result._00 = x;
+  result._11 = y;
+  result._22 = z;
+  result._33 = 1.0f;
+  return result;
+}
+
 internal inline Matrix4 look_at_rh(Vector3 eye, Vector3 target, Vector3 up) {
   Vector3 F = normalize(target - eye);
   Vector3 R = normalize(cross(F, up));
@@ -726,15 +735,42 @@ internal inline Matrix4 rotate_rh(f32 angle, Vector3 axis) {
   return result; 
 }
 
+// internal inline Matrix4 ortho_rh_zo(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far) {
+//   Matrix4 result = make_matrix4(1.0f);
+//   result._00 = 2.0f / (right - left);
+//   result._11 = 2.0f / (top - bottom);
+//   result._22 = 1.0f / (far - near);
+//   result._30 = - (right + left) / (right - left);
+//   result._31 = - (top + bottom) / (top - bottom);
+//   result._32 = -(near + far) / (far - near);
+//   // result._32 = - near / (far - near);
+//   return result;
+// }
+
 internal inline Matrix4 ortho_rh_zo(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far) {
+  Matrix4 result = make_matrix4(1.0f);
+  result._00 = static_cast<f32>(2) / (right - left);
+  result._11 = static_cast<f32>(2) / (top - bottom);
+  result._30 = -(right + left) / (right - left);
+  result._31 = -(top + bottom) / (top - bottom);
+// #if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#if 0
+  result._22 = -1.0f / (far - near);
+  result._32 = -near / (far - near);
+#else
+  result._22 = -2.0f / (far - near);
+  result._32 = -(far + near) / (far - near);
+#endif
+  return result;
+}
+
+internal inline Matrix4 ortho_rh_zo(f32 left, f32 right, f32 bottom, f32 top) {
   Matrix4 result = make_matrix4(1.0f);
   result._00 = 2.0f / (right - left);
   result._11 = 2.0f / (top - bottom);
-  result._22 = 1.0f / (far - near);
-  result._30 = - (right + left) / (right - left);
-  result._31 = - (top + bottom) / (top - bottom);
-  // result._32 = - near / (far - near);
-  result._32 = -(near + far) / (far - near);
+  result._22 = -1.0f;
+  result._30 = -(right + left) / (right - left);
+  result._31 = -(top + bottom) / (top - bottom);
   return result;
 }
 
