@@ -472,14 +472,14 @@ internal void r_d3d11_initialize(HWND window_handle) {
   //@Note Create Sampler states
   {
     D3D11_SAMPLER_DESC desc = {};
-    // desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-    // desc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
-    // desc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
-    // desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
-    // desc.MinLOD = 0;
-    // desc.MaxLOD = D3D11_FLOAT32_MAX;
-    // desc.MipLODBias = 0;
-    // desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    desc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+    desc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+    desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+    desc.MinLOD = 0;
+    desc.MaxLOD = D3D11_FLOAT32_MAX;
+    desc.MipLODBias = 0;
+    desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 
     desc.Filter = D3D11_FILTER_ANISOTROPIC;
     desc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
@@ -517,19 +517,22 @@ internal void r_d3d11_initialize(HWND window_handle) {
     { "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  r_d3d11_make_shader(str8_lit("data/shaders/basic_3d.hlsl"), str8_lit("Basic"), SHADER_BASIC, basic_ilay, ArrayCount(basic_ilay));
+  shader_basic = r_d3d11_make_shader(str8_lit("data/shaders/basic_3d.hlsl"), str8_lit("Basic"), basic_ilay, ArrayCount(basic_ilay));
 
-
-
-  //@Note Compile shaders
   D3D11_INPUT_ELEMENT_DESC mesh_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT,      0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  r_d3d11_make_shader(str8_lit("data/shaders/mesh.hlsl"), str8_lit("Mesh"), SHADER_MESH, mesh_ilay, ArrayCount(mesh_ilay));
+  shader_mesh = r_d3d11_make_shader(str8_lit("data/shaders/mesh.hlsl"), str8_lit("Mesh"), mesh_ilay, ArrayCount(mesh_ilay));
 
+  D3D11_INPUT_ELEMENT_DESC argb_texture_ilay[] = {
+    { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "ARGB",     0, DXGI_FORMAT_R32_UINT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+  };
+  shader_argb_texture = r_d3d11_make_shader(str8_lit("data/shaders/argb_texture.hlsl"), str8_lit("ARGB Texture"), argb_texture_ilay, ArrayCount(argb_texture_ilay));
 
   D3D11_INPUT_ELEMENT_DESC rect_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -537,19 +540,17 @@ internal void r_d3d11_initialize(HWND window_handle) {
     { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "STYLE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  r_d3d11_make_shader(str8_lit("data/shaders/rect.hlsl"), str8_lit("Rect"), SHADER_RECT, rect_ilay, ArrayCount(rect_ilay));
-
+  shader_rect = r_d3d11_make_shader(str8_lit("data/shaders/rect.hlsl"), str8_lit("Rect"), rect_ilay, ArrayCount(rect_ilay));
 
   D3D11_INPUT_ELEMENT_DESC picker_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  r_d3d11_make_shader(str8_lit("data/shaders/picker.hlsl"), str8_lit("Picker"), SHADER_PICKER, picker_ilay, ArrayCount(picker_ilay));
+  shader_picker = r_d3d11_make_shader(str8_lit("data/shaders/picker.hlsl"), str8_lit("Picker"), picker_ilay, ArrayCount(picker_ilay));
 
   D3D11_INPUT_ELEMENT_DESC shadowmap_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  r_d3d11_make_shader(str8_lit("data/shaders/shadow_map.hlsl"), str8_lit("ShadowMap"), SHADER_SHADOW_MAP, shadowmap_ilay, ArrayCount(shadowmap_ilay));
-
+  shader_shadow_map = r_d3d11_make_shader(str8_lit("data/shaders/shadow_map.hlsl"), str8_lit("ShadowMap"), shadowmap_ilay, ArrayCount(shadowmap_ilay));
 }
 
 internal void r_d3d11_begin(OS_Handle window_handle) {
@@ -575,11 +576,15 @@ internal void r_d3d11_begin(OS_Handle window_handle) {
   d3d11_state->device_context->VSSetShader(nullptr, nullptr, 0);
   d3d11_state->device_context->PSSetShader(nullptr, nullptr, 0);
   d3d11_state->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+  Matrix4 screen_ortho = ortho_rh_zo(0, rect_width(d3d11_state->draw_region), 0.0f, rect_height(d3d11_state->draw_region));
+
+  Shader_Uniform *uniform_argb = shader_argb_texture->bindings->lookup_uniform(str8_lit("Constants"));
+  write_uniform_buffer(uniform_argb->buffer, &screen_ortho, sizeof(screen_ortho));
 }
 
-internal void r_d3d11_recompile_shader(Shader_Kind kind) {
+internal void r_d3d11_recompile_shader(Shader *shader) {
   R_D3D11_State *d3d11_state = r_d3d11_state();
-  Shader *shader = d3d11_state->shaders[kind];
   ID3DBlob *vs_blob, *ps_blob;
   ID3DBlob *vs_error, *ps_error;
 
@@ -845,7 +850,7 @@ internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, ID
   if (ps_error) ps_error->Release();
 }
 
-internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, Shader_Kind shader_kind, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count) {
+internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count) {
   R_D3D11_State *d3d11_state = r_d3d11_state();
 
   Shader *shader = new Shader();
@@ -862,25 +867,21 @@ internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, Sh
     os_close_handle(file_handle);
   }
 
-  d3d11_state->shaders[shader_kind] = shader;
+  d3d11_state->shaders.push(shader);
   return shader;
 }
 
 internal void r_d3d11_update_dirty_shaders() {
   R_D3D11_State *d3d11_state = r_d3d11_state();
 
-  for (int i = 0; i < SHADER_COUNT; i++) {
-    Shader_Kind shader_kind = (Shader_Kind)i;
+  for (int i = 0; i < d3d11_state->shaders.count; i++) {
     Shader *shader = d3d11_state->shaders[i];
-
-    if (!shader) continue;
-
     OS_Handle file = os_open_file(shader->file_name, OS_AccessFlag_Read);
     u64 last_write_time = os_file_last_write_time(file);
     os_close_handle(file);
 
     if (shader->last_write_time != last_write_time) {
-      r_d3d11_recompile_shader(shader_kind);
+      r_d3d11_recompile_shader(shader);
     }
   }
 }

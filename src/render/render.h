@@ -43,15 +43,6 @@ enum Sampler_State_Kind {
   SAMPLER_STATE_COUNT
 };
 
-enum Shader_Kind {
-  SHADER_BASIC,
-  SHADER_MESH,
-  SHADER_RECT,
-  SHADER_PICKER,
-  SHADER_SHADOW_MAP,
-  SHADER_COUNT
-};
-
 struct Shader_Uniform {
   String8 name;
   ID3D11Buffer *buffer = nullptr;
@@ -81,6 +72,14 @@ struct Shader_Bindings {
   Shader_Uniform *lookup_uniform(String8 name);
 };
 
+// enum {
+//   VERTEX_FORMAT_XCUU,
+//   VERTEX_FORMAT_XNCUU,
+//   VERTEX_FORMAT_XYZ,
+//   VERTEX_FORMAT_RECT,
+//   VERTEX_FORMAT_XUUARGB,
+// };
+
 struct Shader {
   String8 name;
   String8 file_name;
@@ -99,8 +98,9 @@ struct R_Uniform_Basic3D {
 struct R_Uniform_Mesh {
   Matrix4 transform;
   Matrix4 world_matrix;
-  Vector3 light_dir;
-  f32 _p0;
+  Matrix4 light_xform;
+  // Vector3 light_dir;
+  // f32 _p0;
 };
 
 struct R_Uniform_Rect {
@@ -134,7 +134,7 @@ struct R_D3D11_State {
   ID3D11BlendState *blend_states[BLEND_STATE_COUNT];
   ID3D11SamplerState *sampler_states[SAMPLER_STATE_COUNT];
 
-  Shader *shaders[SHADER_COUNT];
+  Auto_Array<Shader *> shaders;
 
   Texture *fallback_tex;
 };
@@ -149,7 +149,7 @@ internal Texture *r_create_texture_from_file(String8 file_name, int flags);
 internal Texture *r_create_texture(u8 *data, DXGI_FORMAT format, int w, int h, int flags);
 
 
-internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, Shader_Kind shader_kind, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count);
+internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count);
 internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, ID3D11VertexShader **vertex_shader, ID3D11PixelShader **pixel_shader, ID3D11InputLayout **input_layout, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count);
 
 #endif // RENDER_H
