@@ -89,9 +89,9 @@ internal void r_picker_render_gizmo(Picker *picker) {
 
   d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-  set_shader(SHADER_PICKER);
+  set_shader(shader_picker);
 
-  bind_uniform(current_shader, str8_lit("Constants"));
+  bind_uniform(shader_picker, str8_lit("Constants"));
 
   Entity *e = editor->selected_entity;
 
@@ -115,7 +115,7 @@ internal void r_picker_render_gizmo(Picker *picker) {
     R_Uniform_Picker uniform_picker;
     uniform_picker.transform = transform;
     uniform_picker.pick_color = pick_color;
-    Shader_Uniform *uniform = current_shader->bindings->lookup_uniform(str8_lit("Constants"));
+    Shader_Uniform *uniform = shader_picker->bindings->lookup_uniform(str8_lit("Constants"));
     write_uniform_buffer(uniform->buffer, &uniform_picker, sizeof(uniform_picker));
 
     UINT stride = sizeof(Vector3), offset = 0;
@@ -143,9 +143,9 @@ internal void picker_render(Picker *picker) {
   d3d->device_context->ClearRenderTargetView((ID3D11RenderTargetView *)render_target->render_target_view, clear_color);
   d3d->device_context->ClearDepthStencilView((ID3D11DepthStencilView *)render_target->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
-  set_shader(SHADER_PICKER);
+  set_shader(shader_picker);
 
-  bind_uniform(current_shader, str8_lit("Constants"));
+  bind_uniform(shader_picker, str8_lit("Constants"));
 
   d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -170,7 +170,7 @@ internal void picker_render(Picker *picker) {
     R_Uniform_Picker uniform_picker;
     uniform_picker.transform = transform;
     uniform_picker.pick_color = pick_color;
-    Shader_Uniform *uniform = current_shader->bindings->lookup_uniform(str8_lit("Constants"));
+    Shader_Uniform *uniform = shader_picker->bindings->lookup_uniform(str8_lit("Constants"));
     write_uniform_buffer(uniform->buffer, &uniform_picker, sizeof(uniform_picker));
 
     ID3D11Buffer *vertex_buffer = make_vertex_buffer(mesh->vertices.data, mesh->vertices.count, sizeof(Vector3));
@@ -346,7 +346,7 @@ internal void update_editor() {
       R_Uniform_Mesh uniform_mesh = {};
       uniform_mesh.transform = transform;
       uniform_mesh.world_matrix = world_matrix;
-      Shader_Uniform *uniform = current_shader->bindings->lookup_uniform(str8_lit("Constants"));
+      Shader_Uniform *uniform = shader_mesh->bindings->lookup_uniform(str8_lit("Constants"));
       write_uniform_buffer(uniform->buffer, &uniform_mesh, sizeof(uniform_mesh));
 
       Vector4 color;
