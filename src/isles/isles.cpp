@@ -675,7 +675,7 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
 
     game_state->camera.update_euler_angles(-PI * 0.5f, 0.0f);
 
-    load_world(str8_lit("overworld.lvl"));
+    load_world(str8_lit("0.lvl"));
 
     g_viewport = new Viewport();
     g_viewport->dimension.x = 1;
