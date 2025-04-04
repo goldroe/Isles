@@ -801,13 +801,13 @@ internal void draw_ui_layout() {
 
   UI_Draw_Bucket *bucket = ui_g_state->draw_bucket;
 
-  set_shader(SHADER_RECT);
+  set_shader(shader_rect);
   d3d11_state->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
   bind_uniform(current_shader, str8_lit("Constants"));
 
   Vector2Int window_dim = ui_g_state->window_dimension;
-  Matrix4 projection = ortho_rh_zo(0.0f, (f32)window_dim.x, (f32)window_dim.y, 0.0f, -1.0f, 1.0f);
+  Matrix4 projection = ortho_rh_zo(0.0f, (f32)window_dim.x, (f32)window_dim.y, 0.0f);
 
   R_Uniform_Rect rect_uniform;
   rect_uniform.transform = projection;
