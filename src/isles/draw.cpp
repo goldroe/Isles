@@ -1,5 +1,18 @@
+global Shader *shader_basic;
+global Shader *shader_mesh;
+global Shader *shader_rect;
+global Shader *shader_picker;
+global Shader *shader_shadow_map;
+global Shader *shader_argb_texture;
+
 global Shader *current_shader;
-global Auto_Array<Vertex_3D> immediate_vertices;
+global Vertex_List immediate_vertices;
+
+global Vector3 light_position = Vector3(40, 0, 0);
+global Vector3 light_direction = normalize(Vector3(-1.0f, 0.0f, 0.0f));
+global Matrix4 light_projection = ortho_rh_zo(-10.f, 10.f, -10.f, 10.f, -100.0f, 100.0f);
+
+global Shadow_Map *shadow_map;
 
 internal Shadow_Map *make_shadow_map(int width, int height) {
   R_D3D11_State *d3d = r_d3d11_state();
@@ -29,30 +42,57 @@ internal Shadow_Map *make_shadow_map(int width, int height) {
   srv_desc.Texture2D.MostDetailedMip = 0;
 
   HRESULT hr = S_OK;
-  ID3D11Texture2D *texture = nullptr;
+  ID3D11Texture2D *tex2d = nullptr;
   ID3D11DepthStencilView *depth_stencil_view = nullptr;
   ID3D11ShaderResourceView *srv = nullptr;
-  hr = d3d->device->CreateTexture2D(&desc, NULL, &texture);
-  hr = d3d->device->CreateDepthStencilView(texture, &depth_desc, &depth_stencil_view);
-  hr = d3d->device->CreateShaderResourceView(texture, &srv_desc, &srv);
+  hr = d3d->device->CreateTexture2D(&desc, NULL, &tex2d);
+  hr = d3d->device->CreateDepthStencilView(tex2d, &depth_desc, &depth_stencil_view);
+  hr = d3d->device->CreateShaderResourceView(tex2d, &srv_desc, &srv);
+
+  Texture *texture = new Texture();
+  texture->width = width;
+  texture->height = height;
+  texture->format = desc.Format;
+  texture->view = srv;
 
   Shadow_Map *map = new Shadow_Map();
-  map->width = width;
-  map->height = height;
-  map->map = texture;
+  map->tex2d = tex2d;
   map->depth_stencil_view = depth_stencil_view;
-  map->srv = srv;
+  map->texture = texture;
   return map;
 }
 
-internal void set_shader(Shader_Kind shader_kind) {
+internal void set_shader(Shader *shader) {
   R_D3D11_State *d3d = r_d3d11_state();
-  Shader *shader = d3d->shaders[shader_kind];
   if (shader != current_shader) {
     current_shader = shader;
     d3d->device_context->VSSetShader(shader->vertex_shader, nullptr, 0);
     d3d->device_context->PSSetShader(shader->pixel_shader, nullptr, 0);
     d3d->device_context->IASetInputLayout(shader->input_layout);
+  }
+}
+
+internal void reset_texture(String8 name) {
+  R_D3D11_State *d3d = r_d3d11_state();
+
+  Shader_Bindings *bindings = current_shader->bindings;
+  Shader_Loc *loc = nullptr;
+  for (int i = 0; i < bindings->texture_locations.count; i++) {
+    loc = &bindings->texture_locations[i];
+    if (str8_equal(name, loc->name)) {
+      break;
+    }
+    loc = nullptr;
+  }
+
+  if (!loc) return;
+
+  ID3D11ShaderResourceView *null_srv[1] = {nullptr};
+  if (loc->vertex != -1) {
+    d3d->device_context->VSSetShaderResources(loc->vertex, 1, null_srv);
+  }
+  if (loc->pixel != -1) {
+    d3d->device_context->PSSetShaderResources(loc->pixel, 1, null_srv);
   }
 }
 
@@ -230,33 +270,66 @@ internal void reset_viewport() {
   set_viewport(0, 0, (f32)d3d->window_dimension.x, (f32)d3d->window_dimension.y);
 }
 
+internal inline void grow_immediate_vertices(u64 min_capacity) {
+  u64 new_capacity = immediate_vertices.byte_capacity;
+  while (new_capacity < min_capacity) {
+    new_capacity = new_capacity * 8 / 5 + 1; // golden ratio 1.6
+  }
+  immediate_vertices.data = realloc(immediate_vertices.data, new_capacity);
+  immediate_vertices.byte_capacity = new_capacity;
+}
+
+internal inline void ensure_immediate_capacity(size_t size) {
+  if (immediate_vertices.byte_count + size >= immediate_vertices.byte_capacity) {
+    grow_immediate_vertices(immediate_vertices.byte_count + size);
+  }
+}
+
+internal inline void *get_immediate_ptr() {
+  return (void *)((uintptr_t)immediate_vertices.data + immediate_vertices.byte_count);
+}
+
+internal inline void put_immediate_vertex(void *v, size_t size) {
+  ensure_immediate_capacity(size);
+  void *ptr = get_immediate_ptr();
+  MemoryCopy(ptr, v, size);
+  immediate_vertices.byte_count += size;
+}
+
 internal inline void immediate_vertex(Vector3 v, Vector4 c, Vector2 uv) {
   Vertex_3D vertex;
   vertex.position = v;
   vertex.color = c;
   vertex.uv = uv;
-  immediate_vertices.push(vertex);
+  put_immediate_vertex(&vertex, sizeof(Vertex_3D));
 }
 
 internal void immediate_flush() {
-  set_shader(SHADER_BASIC);
-
-  if (immediate_vertices.count == 0) {
+  if (immediate_vertices.byte_count == 0) {
     return;
   }
 
   R_D3D11_State *d3d = r_d3d11_state();
 
-  ID3D11Buffer *vertex_buffer = make_vertex_buffer(immediate_vertices.data, immediate_vertices.count, sizeof(Vertex_3D));
-  d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  UINT format_size = 0;
+  if (current_shader == shader_basic) {
+    format_size = sizeof(Vertex_3D);
+  } else if (current_shader == shader_argb_texture) {
+    format_size = sizeof(Vertex_ARGB);
+  } else {
+    Assert(0);
+  }
+  UINT offset = 0;
+  UINT vertices_count = (UINT)(immediate_vertices.byte_count / (u64)format_size);
 
-  UINT stride = sizeof(Vertex_3D), offset = 0;
-  d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+  ID3D11Buffer *vertex_buffer = make_vertex_buffer(immediate_vertices.data, immediate_vertices.byte_count, 1);
 
-  d3d->device_context->Draw((UINT)immediate_vertices.count, 0);
+  d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &format_size, &offset);
+
+  d3d->device_context->Draw(vertices_count, 0);
 
   vertex_buffer->Release();
-  immediate_vertices.reset_count();
+  immediate_vertices.byte_count = 0;
 }
 
 internal void immediate_begin() {
@@ -281,15 +354,12 @@ internal void draw_mesh(Triangle_Mesh *mesh, bool use_override_color, Vector4 ov
   ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices.data, vertices.count, sizeof(Vertex_XNCUU));
   d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
 
-  set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
-
   for (int i = 0; i < mesh->triangle_list_info.count; i++) {
     Triangle_List_Info triangle_list_info = mesh->triangle_list_info[i];
 
     Material *material = mesh->materials[triangle_list_info.material_index];
     set_texture(str8_lit("diffuse_texture"), material->texture);
 
-    d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     d3d->device_context->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
   }
 
@@ -298,6 +368,12 @@ internal void draw_mesh(Triangle_Mesh *mesh, bool use_override_color, Vector4 ov
 }
 
 internal void draw_scene() {
+  local_persist bool first_call = true;
+  if (first_call) {
+    first_call = false;
+    shadow_map = make_shadow_map(1024, 1024);
+  }
+
   R_D3D11_State *d3d = r_d3d11_state();
 
   Game_State *game_state = get_game_state();
@@ -311,26 +387,21 @@ internal void draw_scene() {
     camera = game_state->camera;
   }
 
-  local_persist Shadow_Map *shadow_map = make_shadow_map(1024, 1024);
+  Matrix4 light_view = look_at_rh(light_position, Vector3(), Vector3(0, 1, 0));
+  Matrix4 light_view_projection = light_projection * light_view;
+
   // @Note Shadow mapping
   {
-    set_viewport(0, 0, (f32)shadow_map->width, (f32)shadow_map->height);
+    set_viewport(0, 0, (f32)shadow_map->texture->width, (f32)shadow_map->texture->height);
     set_depth_state(DEPTH_STATE_DEFAULT);
     set_rasterizer_state(RASTERIZER_STATE_DEFAULT);
     d3d->device_context->OMSetRenderTargets(0, nullptr, shadow_map->depth_stencil_view);
     d3d->device_context->ClearDepthStencilView(shadow_map->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
-    set_shader(SHADER_SHADOW_MAP);
+    set_shader(shader_shadow_map);
 
-    Vector3 light_position = Vector3(100, 100, 100);
-    Vector3 light_direction = Vector3(-1.0f, -1.0f, -1.0f);
-    light_direction = normalize(light_direction);
-    Matrix4 light_view = look_at_rh(light_position, Vector3(), Vector3(0, 1, 0));
-    Matrix4 light_projection = ortho_rh_zo(-10.f, 10.f, -10.f, 10.f, 1.0f, 7.5f);
-    Matrix4 light_view_projection = light_projection * light_view;
-
-    bind_uniform(current_shader, str8_lit("Constants"));
-    Shader_Uniform *shadow_map_uniform = current_shader->bindings->lookup_uniform(str8_lit("Constants"));
+    bind_uniform(shader_shadow_map, str8_lit("Constants"));
+    Shader_Uniform *shadow_map_uniform = shader_shadow_map->bindings->lookup_uniform(str8_lit("Constants"));
 
     for (int i = 0; i < world->entities.count; i++) {
       Entity *entity = world->entities[i];
@@ -373,15 +444,20 @@ internal void draw_scene() {
         Matrix4 world_matrix = translate(to_vector3(guy->reflect_position)) * rotation_matrix;
         Matrix4 transform = camera.projection_matrix * camera.view_matrix * world_matrix;
 
-        set_shader(SHADER_MESH);
+        set_shader(shader_mesh);
 
-        bind_uniform(current_shader, str8_lit("Constants"));
+        bind_uniform(shader_mesh, str8_lit("Constants"));
 
-        Shader_Uniform *uniform = current_shader->bindings->lookup_uniform(str8_lit("Constants"));
+        Shader_Uniform *uniform = shader_mesh->bindings->lookup_uniform(str8_lit("Constants"));
         R_Uniform_Mesh uniform_mesh;
         uniform_mesh.transform = transform;
         uniform_mesh.world_matrix = world_matrix;
+        // uniform_mesh.light_xform = depth_bias * light_view_projection;
         write_uniform_buffer(uniform->buffer, &uniform_mesh, sizeof(uniform_mesh));
+
+
+        set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
+        set_sampler(str8_lit("point_sampler"), SAMPLER_STATE_POINT);
 
         draw_mesh(guy->mesh, true, Vector4(0.4f, 0.4f, 0.4f, 1.0f));
       }
@@ -443,10 +519,18 @@ internal void draw_scene() {
 internal void draw_world(World *world, Camera camera) {
   R_D3D11_State *d3d = r_d3d11_state();
 
-  set_shader(SHADER_MESH);
+  set_shader(shader_mesh);
 
-  Shader_Uniform *uniform = current_shader->bindings->lookup_uniform(str8_lit("Constants"));
-  d3d->device_context->VSSetConstantBuffers(0, 1, &uniform->buffer);
+  Shader_Uniform *uniform = shader_mesh->bindings->lookup_uniform(str8_lit("Constants"));
+  bind_uniform(shader_mesh, str8_lit("Constants"));
+
+  // Matrix4 depth_bias_xform = translate(0.5f, 0.5f, 0.5f) * scale(0.5f, 0.5f, 0.5f);
+  Matrix4 light_view = look_at_rh(light_position, Vector3(), Vector3(0, 1, 0));
+  Matrix4 light_xform = light_projection * light_view;
+
+  set_texture(str8_lit("shadow_map"), shadow_map->texture);
+  set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
+  set_sampler(str8_lit("point_sampler"), SAMPLER_STATE_POINT);
 
   for (int i = 0; i < world->entities.count; i++) {
     Entity *entity = world->entities[i];
@@ -456,32 +540,65 @@ internal void draw_world(World *world, Camera camera) {
     Matrix4 world_matrix = translate(entity->visual_position) * rotation_matrix;
     Matrix4 transform = camera.projection_matrix * camera.view_matrix * world_matrix;
 
-
     R_Uniform_Mesh uniform_mesh = {};
     uniform_mesh.transform = transform;
     uniform_mesh.world_matrix = world_matrix;
+    uniform_mesh.light_xform = light_xform;
     write_uniform_buffer(uniform->buffer, &uniform_mesh, sizeof(uniform_mesh));
 
     draw_mesh(mesh, entity->use_override_color, entity->override_color);
   }
+
+  reset_texture(str8_lit("shadow_map"));
+
+
+  immediate_begin();
+
+  set_shader(shader_argb_texture);
+
+  bind_uniform(shader_argb_texture, str8_lit("Constants"));
+
+  set_texture(str8_lit("diffuse_texture"), shadow_map->texture);
+  set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_POINT);
+
+  set_depth_state(DEPTH_STATE_DISABLE);
+  set_blend_state(BLEND_STATE_ALPHA);
+  set_rasterizer_state(RASTERIZER_STATE_TEXT);
+
+  draw_imm_quad(Vector2(0.0f, 0.0f), Vector2(100.0f, 0.0f), Vector2(100.0f, 100.0f), Vector2(0.0f, 100.0f),
+    Vector2(0.0f, 0.0f), Vector2(1.0f, 0.0f), Vector2(1.0f, 1.0f), Vector2(0.0f, 1.0f),
+    Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+      
+  immediate_flush();
+
+  reset_texture(str8_lit("diffuse_texture"));
 }
 
-internal void draw_imm_quad(Texture *texture, Vector2 position, Vector2 size, Vector2 uv, Vector2 uv_size, Vector4 color) {
-  Vector3 p0 = Vector3(position.x,          position.y, 0.0f);
-  Vector3 p1 = Vector3(position.x + size.x, position.y, 0.0f);
-  Vector3 p2 = Vector3(position.x + size.x, position.y + size.y, 0.0f);
-  Vector3 p3 = Vector3(position.x,          position.y + size.y, 0.0f);
-  Vector2 uv0 = Vector2(uv.x, uv.y);
-  Vector2 uv1 = Vector2(uv.x + uv_size.x, uv.y);
-  Vector2 uv2 = Vector2(uv.x + uv_size.x, uv.y + uv_size.y);
-  Vector2 uv3 = Vector2(uv.x, uv.y + uv_size.y);
+internal inline ARGB argb_from_vector(Vector4 color) {
+  ARGB argb = 0;
+  argb |= (u32)(color.w*255);
+  argb |= (u32)(color.x*255) << 8;
+  argb |= (u32)(color.y*255) << 16;
+  argb |= (u32)(color.z*255) << 24;
+  return argb;
+} 
 
-  immediate_vertex(p0, color, uv0);
-  immediate_vertex(p1, color, uv1);
-  immediate_vertex(p2, color, uv2);
-  immediate_vertex(p0, color, uv0);
-  immediate_vertex(p2, color, uv2);
-  immediate_vertex(p3, color, uv3);
+internal void imm_quad_vertex(Vector2 p, Vector2 uv, ARGB argb) {
+  Vertex_ARGB v;
+  v.position = p;
+  v.uv = uv;
+  v.argb = argb;
+  put_immediate_vertex(&v, sizeof(Vertex_ARGB));
+}
+
+internal void draw_imm_quad(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector2 uv3, Vector4 color) {
+  ARGB argb = argb_from_vector(color);
+  imm_quad_vertex(p0, uv0, argb);
+  imm_quad_vertex(p1, uv1, argb);
+  imm_quad_vertex(p2, uv2, argb);
+  imm_quad_vertex(p0, uv0, argb);
+  imm_quad_vertex(p2, uv2, argb);
+  imm_quad_vertex(p3, uv3, argb);
 }
 
 internal void draw_imm_rectangle(Vector3 position, Vector3 size, Vector4 color) {
