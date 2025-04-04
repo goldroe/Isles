@@ -288,6 +288,9 @@ union RGBA {
     u8 e[4];
 };
 
+typedef u32 ARGB;
+
+
 #define MAX_PROFILES 32
 struct Profile_Scope {
     char *name;
