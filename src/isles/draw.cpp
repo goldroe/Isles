@@ -14,6 +14,8 @@ global Matrix4 light_projection = ortho_rh_zo(-10.f, 10.f, -10.f, 10.f, -100.0f,
 
 global Shadow_Map *shadow_map;
 
+global Texture *sample_texture;
+
 internal Shadow_Map *make_shadow_map(int width, int height) {
   R_D3D11_State *d3d = r_d3d11_state();
 
@@ -66,9 +68,18 @@ internal void set_shader(Shader *shader) {
   R_D3D11_State *d3d = r_d3d11_state();
   if (shader != current_shader) {
     current_shader = shader;
-    d3d->device_context->VSSetShader(shader->vertex_shader, nullptr, 0);
-    d3d->device_context->PSSetShader(shader->pixel_shader, nullptr, 0);
-    d3d->device_context->IASetInputLayout(shader->input_layout);
+
+    ID3D11VertexShader *vs = nullptr;
+    ID3D11PixelShader *ps = nullptr;
+    ID3D11InputLayout *ilay = nullptr;
+    if (shader) {
+      vs = shader->vertex_shader;
+      ps = shader->pixel_shader;
+      ilay = shader->input_layout;
+    }
+    d3d->device_context->VSSetShader(vs, nullptr, 0);
+    d3d->device_context->PSSetShader(ps, nullptr, 0);
+    d3d->device_context->IASetInputLayout(ilay);
   }
 }
 
@@ -158,49 +169,53 @@ internal void bind_uniform(Shader *shader, String8 name) {
   }
 }
 
-//@Dumb Thing i was doing to emulate opengl uniform stuff, now I know it doesn't work with constant buffers...
-//      unless i reserve CPU memory for each buffer and write the whole buffer on update which doesn't seem good
-#if 0
-internal void set_variable(Shader *shader, String8 name, void *ptr, u32 size) {
+internal void apply_constants() {
+  Shader *shader = current_shader;
   Shader_Bindings *bindings = shader->bindings;
-  
-  Shader_Variable *variable = nullptr;
-  for (int i = 0; i < bindings->variables.count; i++) {
-    variable = &bindings->variables[i];
-    if (str8_equal(variable->name, name)) {
+  for (int i = 0; i < bindings->uniforms.count; i++) {
+    Shader_Uniform *uniform = bindings->uniforms[i];
+    if (uniform->dirty) {
+      write_uniform_buffer(uniform->buffer, uniform->memory, uniform->size);
+      uniform->dirty = 0;
+    }
+  }
+}
+
+internal void write_shader_constant(Shader *shader, String8 name, void *ptr, u32 size) {
+  Shader_Bindings *bindings = shader->bindings;
+  Shader_Constant *constant = nullptr;
+  for (int i = 0; i < bindings->constants.count; i++) {
+    constant = &bindings->constants[i];
+    if (str8_equal(constant->name, name)) {
       break;
     }
-    variable = nullptr;
+    constant = nullptr;
   }
 
-  if (!variable) {
-    logprint("Could not find variable '%S'\n", name);
-  }
-
-  Shader_Uniform *uniform = variable->uniform;
-  write_uniform_buffer(uniform->buffer, ptr, size);
+  Shader_Uniform *uniform = constant->uniform;
+  MemoryCopy((void *)((uintptr_t)uniform->memory + constant->offset), ptr, size);
+  uniform->dirty = 1;
 }
 
-internal void set_float(Shader *shader, String8 name, f32 f) {
-  set_variable(shader, name, &f, sizeof(f32));
+internal void set_constant(String8 name, Matrix4 v) {
+  write_shader_constant(current_shader, name, &v, sizeof(v));
 }
 
-internal void set_float2(Shader *shader, String8 name, Vector2 v) {
-  set_variable(shader, name, &v, sizeof(v));
+internal void set_constant(String8 name, Vector4 v) {
+  write_shader_constant(current_shader, name, &v, sizeof(v));
 }
 
-internal void set_float3(Shader *shader, String8 name, Vector3 v) {
-  set_variable(shader, name, &v, sizeof(v));
+internal void set_constant(String8 name, Vector3 v) {
+  write_shader_constant(current_shader, name, &v, sizeof(v));
 }
 
-internal void set_float4(Shader *shader, String8 name, Vector4 v) {
-  set_variable(shader, name, &v, sizeof(v));
+internal void set_constant(String8 name, Vector2 v) {
+  write_shader_constant(current_shader, name, &v, sizeof(v));
 }
 
-internal void set_matrix4(Shader *shader, String8 name, Matrix4 matrix) {
-  set_variable(shader, name, &matrix, sizeof(Matrix4));
+internal void set_constant(String8 name, f32 v) {
+  write_shader_constant(current_shader, name, &v, sizeof(v));
 }
-#endif
 
 internal void set_sampler(String8 name, Sampler_State_Kind sampler_kind) {
   R_D3D11_State *d3d = r_d3d11_state();
@@ -309,6 +324,8 @@ internal void immediate_flush() {
     return;
   }
 
+  apply_constants();
+
   R_D3D11_State *d3d = r_d3d11_state();
 
   UINT format_size = 0;
@@ -411,10 +428,9 @@ internal void draw_scene() {
       Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
       Matrix4 world_matrix = translate(entity->visual_position) * rotation_matrix;
 
-      R_Uniform_Shadow_Map uniform_shadow_map;
-      uniform_shadow_map.world = world_matrix;
-      uniform_shadow_map.light_view_projection = light_view_projection;
-      write_uniform_buffer(shadow_map_uniform->buffer, &uniform_shadow_map, sizeof(uniform_shadow_map));
+      set_constant(str8_lit("world"), world_matrix);
+      set_constant(str8_lit("light_view_projection"), light_view_projection);
+      apply_constants();
 
       ID3D11Buffer *vertex_buffer = make_vertex_buffer(mesh->vertices.data, mesh->vertices.count, sizeof(Vector3));
       UINT stride = sizeof(Vector3), offset = 0;
@@ -442,19 +458,15 @@ internal void draw_scene() {
 
         Matrix4 rotation_matrix = rotate_rh(guy->theta, camera.up);
         Matrix4 world_matrix = translate(to_vector3(guy->reflect_position)) * rotation_matrix;
-        Matrix4 transform = camera.projection_matrix * camera.view_matrix * world_matrix;
+        Matrix4 xform = camera.projection_matrix * camera.view_matrix * world_matrix;
 
         set_shader(shader_mesh);
 
         bind_uniform(shader_mesh, str8_lit("Constants"));
 
-        Shader_Uniform *uniform = shader_mesh->bindings->lookup_uniform(str8_lit("Constants"));
-        R_Uniform_Mesh uniform_mesh;
-        uniform_mesh.transform = transform;
-        uniform_mesh.world_matrix = world_matrix;
-        // uniform_mesh.light_xform = depth_bias * light_view_projection;
-        write_uniform_buffer(uniform->buffer, &uniform_mesh, sizeof(uniform_mesh));
-
+        set_constant(str8_lit("xform"), xform);
+        set_constant(str8_lit("world"), world_matrix);
+        apply_constants(); 
 
         set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
         set_sampler(str8_lit("point_sampler"), SAMPLER_STATE_POINT);
@@ -514,6 +526,20 @@ internal void draw_scene() {
       // }
     }
   }
+
+  immediate_begin();
+  set_shader(shader_argb_texture);
+  set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_POINT);
+  set_depth_state(DEPTH_STATE_DISABLE);
+  set_blend_state(BLEND_STATE_ALPHA);
+  set_rasterizer_state(RASTERIZER_STATE_TEXT);
+
+  bind_uniform(shader_argb_texture, str8_lit("Constants"));
+
+  draw_imm_quad(shadow_map->texture,
+    Vector2(0.0f, 0.0f), Vector2(200.0f, 0.0f), Vector2(200.0f, 200.0f), Vector2(0.0f, 200.0f),
+    Vector2(0.0f, 0.0f), Vector2(1.0f, 0.0f), Vector2(1.0f, 1.0f), Vector2(0.0f, 1.0f),
+    Vector4(1.0f, 1.0f, 1.0f, 0.4f));
 }
 
 internal void draw_world(World *world, Camera camera) {
@@ -538,40 +564,17 @@ internal void draw_world(World *world, Camera camera) {
 
     Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
     Matrix4 world_matrix = translate(entity->visual_position) * rotation_matrix;
-    Matrix4 transform = camera.projection_matrix * camera.view_matrix * world_matrix;
+    Matrix4 xform = camera.projection_matrix * camera.view_matrix * world_matrix;
 
-    R_Uniform_Mesh uniform_mesh = {};
-    uniform_mesh.transform = transform;
-    uniform_mesh.world_matrix = world_matrix;
-    uniform_mesh.light_xform = light_xform;
-    write_uniform_buffer(uniform->buffer, &uniform_mesh, sizeof(uniform_mesh));
+    set_constant(str8_lit("xform"), xform);
+    set_constant(str8_lit("world"), world_matrix);
+    set_constant(str8_lit("light_xform"), light_xform);
+    apply_constants();
 
     draw_mesh(mesh, entity->use_override_color, entity->override_color);
   }
 
   reset_texture(str8_lit("shadow_map"));
-
-
-  immediate_begin();
-
-  set_shader(shader_argb_texture);
-
-  bind_uniform(shader_argb_texture, str8_lit("Constants"));
-
-  set_texture(str8_lit("diffuse_texture"), shadow_map->texture);
-  set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_POINT);
-
-  set_depth_state(DEPTH_STATE_DISABLE);
-  set_blend_state(BLEND_STATE_ALPHA);
-  set_rasterizer_state(RASTERIZER_STATE_TEXT);
-
-  draw_imm_quad(Vector2(0.0f, 0.0f), Vector2(100.0f, 0.0f), Vector2(100.0f, 100.0f), Vector2(0.0f, 100.0f),
-    Vector2(0.0f, 0.0f), Vector2(1.0f, 0.0f), Vector2(1.0f, 1.0f), Vector2(0.0f, 1.0f),
-    Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-      
-  immediate_flush();
-
-  reset_texture(str8_lit("diffuse_texture"));
 }
 
 internal inline ARGB argb_from_vector(Vector4 color) {
@@ -591,7 +594,9 @@ internal void imm_quad_vertex(Vector2 p, Vector2 uv, ARGB argb) {
   put_immediate_vertex(&v, sizeof(Vertex_ARGB));
 }
 
-internal void draw_imm_quad(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector2 uv3, Vector4 color) {
+internal void draw_imm_quad(Texture *texture, Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector2 uv3, Vector4 color) {
+  set_texture(str8_lit("diffuse_texture"), texture);
+
   ARGB argb = argb_from_vector(color);
   imm_quad_vertex(p0, uv0, argb);
   imm_quad_vertex(p1, uv1, argb);
@@ -599,6 +604,8 @@ internal void draw_imm_quad(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, Vect
   imm_quad_vertex(p0, uv0, argb);
   imm_quad_vertex(p2, uv2, argb);
   imm_quad_vertex(p3, uv3, argb);
+
+  immediate_flush();
 }
 
 internal void draw_imm_rectangle(Vector3 position, Vector3 size, Vector4 color) {

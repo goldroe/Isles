@@ -103,7 +103,7 @@ internal void r_picker_render_gizmo(Picker *picker) {
 
     Matrix4 world_matrix = translate(e->visual_position.x, e->visual_position.y, e->visual_position.z) * scale(Vector3(gizmo_scale_factor, gizmo_scale_factor, gizmo_scale_factor));
     Matrix4 view_matrix = editor->camera.view_matrix;
-    Matrix4 transform = editor->camera.projection_matrix * view_matrix * world_matrix;
+    Matrix4 xform = editor->camera.projection_matrix * view_matrix * world_matrix;
 
     u32 id = axis;
     Vector4 pick_color;
@@ -112,11 +112,9 @@ internal void r_picker_render_gizmo(Picker *picker) {
     pick_color.z = ((id & 0x00FF00FF) >> 16) / 255.0f;
     pick_color.w = ((id & 0xFF0000FF) >> 24) / 255.0f;
 
-    R_Uniform_Picker uniform_picker;
-    uniform_picker.transform = transform;
-    uniform_picker.pick_color = pick_color;
-    Shader_Uniform *uniform = shader_picker->bindings->lookup_uniform(str8_lit("Constants"));
-    write_uniform_buffer(uniform->buffer, &uniform_picker, sizeof(uniform_picker));
+    set_constant(str8_lit("xform"), xform);
+    set_constant(str8_lit("pick_color"), pick_color);
+    apply_constants();
 
     UINT stride = sizeof(Vector3), offset = 0;
     ID3D11Buffer *vertex_buffer = make_vertex_buffer(mesh->vertices.data, mesh->vertices.count, sizeof(Vector3));
@@ -159,7 +157,7 @@ internal void picker_render(Picker *picker) {
     Matrix4 rotation_matrix = rotate_rh(e->visual_rotation.y, editor->camera.up);
     Matrix4 world_matrix = translate(e->visual_position) * rotation_matrix;
     Matrix4 view = editor->camera.view_matrix;
-    Matrix4 transform = editor->camera.projection_matrix * editor->camera.view_matrix * world_matrix;
+    Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * world_matrix;
 
     Vector4 pick_color;
     pick_color.x = ((e->id & 0x000000FF) >> 0 ) / 255.0f;
@@ -167,11 +165,9 @@ internal void picker_render(Picker *picker) {
     pick_color.z = ((e->id & 0x00FF00FF) >> 16) / 255.0f;
     pick_color.w = ((e->id & 0xFF0000FF) >> 24) / 255.0f;
 
-    R_Uniform_Picker uniform_picker;
-    uniform_picker.transform = transform;
-    uniform_picker.pick_color = pick_color;
-    Shader_Uniform *uniform = shader_picker->bindings->lookup_uniform(str8_lit("Constants"));
-    write_uniform_buffer(uniform->buffer, &uniform_picker, sizeof(uniform_picker));
+    set_constant(str8_lit("xform"), xform);
+    set_constant(str8_lit("pick_color"), pick_color);
+    apply_constants();
 
     ID3D11Buffer *vertex_buffer = make_vertex_buffer(mesh->vertices.data, mesh->vertices.count, sizeof(Vector3));
     UINT stride = sizeof(Vector3), offset = 0;
@@ -342,12 +338,10 @@ internal void update_editor() {
 
       Matrix4 world_matrix = translate(selected_entity->visual_position.x, selected_entity->visual_position.y, selected_entity->visual_position.z) * scale(Vector3(gizmo_scale_factor, gizmo_scale_factor, gizmo_scale_factor));
       Matrix4 view_matrix = editor->camera.view_matrix;
-      Matrix4 transform = editor->camera.projection_matrix * view_matrix * world_matrix;
-      R_Uniform_Mesh uniform_mesh = {};
-      uniform_mesh.transform = transform;
-      uniform_mesh.world_matrix = world_matrix;
-      Shader_Uniform *uniform = shader_mesh->bindings->lookup_uniform(str8_lit("Constants"));
-      write_uniform_buffer(uniform->buffer, &uniform_mesh, sizeof(uniform_mesh));
+      Matrix4 xform = editor->camera.projection_matrix * view_matrix * world_matrix;
+      set_constant(str8_lit("xform"), xform);
+      set_constant(str8_lit("world"), world_matrix);
+      apply_constants();
 
       Vector4 color;
       switch (axis) {

@@ -25,6 +25,6 @@ internal void set_depth_state(Depth_State_Kind depth_state_kind);
 internal void draw_imm_cube(Vector3 center, f32 size, Vector4 color);
 internal void draw_imm_rectangle(Vector3 position, Vector3 size, Vector4 color);
 
-internal void draw_imm_quad(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector2 uv3, Vector4 color);
+internal void draw_imm_quad(Texture *texture, Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector2 uv3, Vector4 color);
 
 #endif // DRAW_H

@@ -551,6 +551,8 @@ internal void r_d3d11_initialize(HWND window_handle) {
     { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
   shader_shadow_map = r_d3d11_make_shader(str8_lit("data/shaders/shadow_map.hlsl"), str8_lit("ShadowMap"), shadowmap_ilay, ArrayCount(shadowmap_ilay));
+
+  sample_texture = r_create_texture_from_file(str8_lit("data/textures/debug.png"), 0);
 }
 
 internal void r_d3d11_begin(OS_Handle window_handle) {
@@ -577,10 +579,13 @@ internal void r_d3d11_begin(OS_Handle window_handle) {
   d3d11_state->device_context->PSSetShader(nullptr, nullptr, 0);
   d3d11_state->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-  Matrix4 screen_ortho = ortho_rh_zo(0, rect_width(d3d11_state->draw_region), 0.0f, rect_height(d3d11_state->draw_region));
+  Matrix4 screen_projection = ortho_rh_zo(0, rect_width(d3d11_state->draw_region), 0.0f, rect_height(d3d11_state->draw_region));
 
-  Shader_Uniform *uniform_argb = shader_argb_texture->bindings->lookup_uniform(str8_lit("Constants"));
-  write_uniform_buffer(uniform_argb->buffer, &screen_ortho, sizeof(screen_ortho));
+  set_shader(shader_argb_texture);
+  set_constant(str8_lit("projection"), screen_projection);
+  apply_constants();
+
+  set_shader(nullptr);
 }
 
 internal void r_d3d11_recompile_shader(Shader *shader) {
@@ -765,6 +770,8 @@ internal void fill_shader_bindings(Shader_Bindings *bindings, void *byte_code, s
         uniform->name = buffer_name;
         uniform->buffer = uniform_buffer;
         uniform->size = buffer_desc.Size;
+        uniform->memory = new u8[uniform->size];
+        uniform->dirty = 0;
         bindings->uniforms.push(uniform);
      }
 
@@ -776,22 +783,22 @@ internal void fill_shader_bindings(Shader_Bindings *bindings, void *byte_code, s
         char *str = copy_str(var_desc.Name);
         String8 name = str8_cstring(str);
 
-        Shader_Variable *found = nullptr;
-        for (int i = 0; i < bindings->variables.count; i++) {
-          Shader_Variable *variable = &bindings->variables[i];
-          if (str8_equal(name, variable->name)) {
-            found = variable;
+        Shader_Constant *found = nullptr;
+        for (int i = 0; i < bindings->constants.count; i++) {
+          Shader_Constant *constant = &bindings->constants[i];
+          if (str8_equal(name, constant->name)) {
+            found = constant;
             break;
           }
         }
         if (found) continue;
 
-        Shader_Variable variable;
-        variable.name = name;
-        variable.offset = var_desc.StartOffset;
-        variable.size = var_desc.Size;
-        variable.uniform = uniform;
-        bindings->variables.push(variable);
+        Shader_Constant constant;
+        constant.name = name;
+        constant.offset = var_desc.StartOffset;
+        constant.size = var_desc.Size;
+        constant.uniform = uniform;
+        bindings->constants.push(constant);
       }
     }
   }

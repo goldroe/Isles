@@ -46,10 +46,12 @@ enum Sampler_State_Kind {
 struct Shader_Uniform {
   String8 name;
   ID3D11Buffer *buffer = nullptr;
+  void *memory = nullptr;
   u32 size = 0;
+  b32 dirty = 0;
 };
 
-struct Shader_Variable {
+struct Shader_Constant {
   String8 name;
   Shader_Uniform *uniform;
   u32 offset = 0;
@@ -63,7 +65,7 @@ struct Shader_Loc {
 };
 
 struct Shader_Bindings {
-  Auto_Array<Shader_Variable> variables;
+  Auto_Array<Shader_Constant> constants;
   Auto_Array<Shader_Loc> texture_locations;
   Auto_Array<Shader_Loc> sampler_locations;
   Auto_Array<Shader_Loc> uniform_locations;
@@ -91,32 +93,6 @@ struct Shader {
   Shader_Bindings *bindings;
 };
 
-struct R_Uniform_Basic3D {
-  Matrix4 transform;
-};
-
-struct R_Uniform_Mesh {
-  Matrix4 transform;
-  Matrix4 world_matrix;
-  Matrix4 light_xform;
-  // Vector3 light_dir;
-  // f32 _p0;
-};
-
-struct R_Uniform_Rect {
-  Matrix4 transform;
-};
-
-struct R_Uniform_Picker {
-  Matrix4 transform;
-  Vector4 pick_color;
-};
-
-struct R_Uniform_Shadow_Map {
-  Matrix4 world;
-  Matrix4 light_view_projection;
-};
-
 struct Render_Target;
 
 struct R_D3D11_State {
@@ -129,6 +105,7 @@ struct R_D3D11_State {
   ID3D11DeviceContext *device_context = nullptr;
   IDXGISwapChain *swap_chain = nullptr;
   Render_Target *default_render_target = nullptr;
+
   ID3D11DepthStencilState *depth_stencil_states[DEPTH_STATE_COUNT];
   ID3D11RasterizerState *rasterizer_states[RASTERIZER_STATE_COUNT];
   ID3D11BlendState *blend_states[BLEND_STATE_COUNT];

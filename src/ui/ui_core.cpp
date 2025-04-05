@@ -809,10 +809,8 @@ internal void draw_ui_layout() {
   Vector2Int window_dim = ui_g_state->window_dimension;
   Matrix4 projection = ortho_rh_zo(0.0f, (f32)window_dim.x, (f32)window_dim.y, 0.0f);
 
-  R_Uniform_Rect rect_uniform;
-  rect_uniform.transform = projection;
-  Shader_Uniform *uniform = current_shader->bindings->lookup_uniform(str8_lit("Constants"));
-  write_uniform_buffer(uniform->buffer, &rect_uniform, sizeof(rect_uniform));
+  set_constant(str8_lit("xform"), projection);
+  apply_constants();
   
   set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_POINT);
 
