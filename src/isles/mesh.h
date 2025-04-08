@@ -25,4 +25,7 @@ struct Triangle_Mesh {
   Auto_Array<Material*> materials;
 };
 
+
+internal Triangle_Mesh *generate_plane_mesh(Vector2 size);
+
 #endif // MESH_H

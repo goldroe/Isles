@@ -1,17 +1,17 @@
 global Assimp::Importer assimp_importer;
 
-internal inline Vector2 to_vector2(aiVector3D v) {
-  Vector2 result = {v.x, v.y};
+internal inline Vector2 to_vec2(aiVector3D v) {
+  Vector2 result = Vector2(v.x, v.y);
   return result; 
 }
 
-internal inline Vector3 to_vector3(aiVector3D v) {
-  Vector3 result = {v.x, v.y, v.z};
+internal inline Vector3 to_vec3(aiVector3D v) {
+  Vector3 result = Vector3(v.x, v.y, v.z);
   return result; 
 }
 
-internal inline Vector4 to_vector4(aiColor4D v) {
-  Vector4 result = { v.r, v.g, v.b, v.a};
+internal inline Vector4 to_vec4(aiColor4D v) {
+  Vector4 result = Vector4(v.r, v.g, v.b, v.a);
   return result;
 }
 
@@ -46,23 +46,23 @@ internal Triangle_Mesh *load_mesh(std::string file_name) {
       u32 i1 = face->mIndices[1];
       u32 i2 = face->mIndices[2];
 
-      mesh->vertices.push(to_vector3(amesh->mVertices[i0]));
-      mesh->vertices.push(to_vector3(amesh->mVertices[i1]));
-      mesh->vertices.push(to_vector3(amesh->mVertices[i2]));
+      mesh->vertices.push(to_vec3(amesh->mVertices[i0]));
+      mesh->vertices.push(to_vec3(amesh->mVertices[i1]));
+      mesh->vertices.push(to_vec3(amesh->mVertices[i2]));
 
       if (amesh->HasTextureCoords(0)) {
-        mesh->uvs.push(to_vector2(amesh->mTextureCoords[0][i0]));
-        mesh->uvs.push(to_vector2(amesh->mTextureCoords[0][i1]));
-        mesh->uvs.push(to_vector2(amesh->mTextureCoords[0][i2]));
+        mesh->uvs.push(to_vec2(amesh->mTextureCoords[0][i0]));
+        mesh->uvs.push(to_vec2(amesh->mTextureCoords[0][i1]));
+        mesh->uvs.push(to_vec2(amesh->mTextureCoords[0][i2]));
       } else {
         mesh->uvs.push(Vector2(0, 0));
         mesh->uvs.push(Vector2(0, 0));
         mesh->uvs.push(Vector2(0, 0));
       }
 
-      mesh->normals.push(to_vector3(amesh->mNormals[i0])); 
-      mesh->normals.push(to_vector3(amesh->mNormals[i1])); 
-      mesh->normals.push(to_vector3(amesh->mNormals[i2])); 
+      mesh->normals.push(to_vec3(amesh->mNormals[i0])); 
+      mesh->normals.push(to_vec3(amesh->mNormals[i1])); 
+      mesh->normals.push(to_vec3(amesh->mNormals[i2])); 
     }
 
     u32 vertices_count = amesh->mNumFaces * 3;
@@ -99,6 +99,35 @@ internal Triangle_Mesh *load_mesh(std::string file_name) {
 
     mesh->materials.push(material);
   }
+
+  return mesh;
+}
+
+internal Triangle_Mesh *generate_plane_mesh(Vector2 size) {
+  Vector2 half_size = 0.5f * size;
+
+  Triangle_Mesh *mesh = new Triangle_Mesh();
+
+  mesh->vertices.push(Vector3(-half_size.x,  0.0f, -half_size.y));
+  mesh->vertices.push(Vector3(half_size.x,   0.0f, -half_size.y));
+  mesh->vertices.push(Vector3(half_size.x,   0.0f, half_size.y));
+  mesh->vertices.push(Vector3(-half_size.x,  0.0f, -half_size.y));
+  mesh->vertices.push(Vector3(half_size.x,   0.0f, half_size.y));
+  mesh->vertices.push(Vector3(-half_size.x,  0.0f, half_size.y));
+
+  mesh->normals.push(Vector3(0.0f, 1.0f, 0.0f));
+  mesh->normals.push(Vector3(0.0f, 1.0f, 0.0f));
+  mesh->normals.push(Vector3(0.0f, 1.0f, 0.0f));
+  mesh->normals.push(Vector3(0.0f, 1.0f, 0.0f));
+  mesh->normals.push(Vector3(0.0f, 1.0f, 0.0f));
+  mesh->normals.push(Vector3(0.0f, 1.0f, 0.0f));
+
+  mesh->uvs.push((Vector2(0.0f, 0.0f)));
+  mesh->uvs.push((Vector2(1.0f, 0.0f)));
+  mesh->uvs.push((Vector2(1.0f, 1.0f)));
+  mesh->uvs.push((Vector2(0.0f, 0.0f)));
+  mesh->uvs.push((Vector2(1.0f, 1.0f)));
+  mesh->uvs.push((Vector2(0.0f, 1.0f)));
 
   return mesh;
 }
