@@ -453,10 +453,10 @@ void update_guy(Guy *guy) {
   int forward_dt = 0;
   int right_dt = 0;
   if (key_pressed(OS_KEY_UP)) {
-    forward_dt += -1;
+    forward_dt += 1;
   }
   if (key_pressed(OS_KEY_DOWN)) {
-    forward_dt += 1;
+    forward_dt -= 1;
   }
   if (key_pressed(OS_KEY_LEFT)) {
     right_dt += -1;
@@ -470,10 +470,16 @@ void update_guy(Guy *guy) {
 
   if (moving) {
     Vector3 move_direction = Vector3();
+
+    Vector3 forward = camera->forward;
+    forward.y = 0;
+    forward = get_nearest_axis(forward);
+    Vector3 right = normalize(cross(forward, Vector3(0, 1, 0)));
+
     if (forward_dt) {
-      move_direction = Vector3(0, 0, (f32)forward_dt);
+      move_direction = forward * (f32)forward_dt;
     } else if (right_dt) {
-      move_direction = Vector3((f32)right_dt, 0, 0);
+      move_direction = right * (f32)right_dt;
     }
 
     f32 theta = atan2f((f32)-move_direction.z, (f32)move_direction.x);
