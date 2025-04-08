@@ -154,7 +154,7 @@ internal World *load_world(String8 name) {
     Entity *entity = entity_from_prototype(prototype);
     entity->id = id;
     entity->flags = flags;
-    entity->set_position(Vector3Int(x, y, z));
+    entity->set_position(Vector3((f32)x, (f32)y, (f32)z));
     entity->set_theta(theta);
 
     switch (entity->kind) {
@@ -183,7 +183,7 @@ internal World *load_world(String8 name) {
   if (!world->guy) {
     Entity_Prototype *prototype = entity_prototype_lookup("Guy");
     Entity *guy = entity_from_prototype(prototype);
-    guy->set_position(Vector3Int(0, 2, 0));
+    guy->set_position(Vector3(0, 2, 0));
     guy->set_theta(0);
     world->guy = static_cast<Guy*>(guy);
     world->entities.push(guy);
@@ -201,9 +201,9 @@ internal void serialize_entity(Byte_Buffer *buffer, Entity *e) {
   buffer->put_le64(e->flags);
   buffer->put_le64(e->prototype_id);
 
-  buffer->put_le32(e->position.x);
-  buffer->put_le32(e->position.y);
-  buffer->put_le32(e->position.z);
+  buffer->put_le32((u32)e->position.x);
+  buffer->put_le32((u32)e->position.y);
+  buffer->put_le32((u32)e->position.z);
 
   buffer->put_f32(e->theta);
 
@@ -286,10 +286,12 @@ internal Entity *lookup_entity(Pid id) {
   return nullptr;
 }
     
-internal Entity *find_entity_at(World *world, Vector3Int position) {
+internal Entity *find_entity_at(World *world, Vector3 position) {
+  Vector3Int p0 = to_vec3i(position);
   for (int i = 0; i < world->entities.count; i++) {
     Entity *wall = world->entities[i];
-    if (wall->position == position) return wall;
+    Vector3Int p1 = to_vec3i(wall->position);
+    if (p0 == p1) return wall;
   }
   return nullptr;
 }
@@ -309,13 +311,13 @@ internal void update_guy_mirror(Guy *guy) {
     Entity *mirror = mirrors[i];
 
     Vector3 forward = to_vec3(rotate_rh(-mirror->theta, Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1));
-    Vector3Int dist = guy->position - mirror->position;
+    Vector3 dist = guy->position - mirror->position;
     if (dist.y != 0) break;
-    int dx = forward.x > 0 ? 1 : -1;
-    int dz = forward.z > 0 ? 1 : -1;
+    f32 dx = forward.x > 0 ? 1.0f : -1.0f;
+    f32 dz = forward.z > 0 ? 1.0f : -1.0f;
 
-    Vector3Int position = mirror->position;
-    if (mirror->position.z == guy->position.z && (dist.x > 0 == dx > 0)) {
+    Vector3 position = mirror->position;
+    if ((int)mirror->position.z == (int)guy->position.z && (dist.x > 0 == dx > 0)) {
       // Move X
       for (;;) {
         position.x += dx;
@@ -327,7 +329,7 @@ internal void update_guy_mirror(Guy *guy) {
           break;
         }
       }
-    } else if (mirror->position.x == guy->position.x && (dist.z > 0 == dz > 0)) {
+    } else if ((int)mirror->position.x == (int)guy->position.x && (dist.z > 0 == dz > 0)) {
       // Move Z
       for (;;) {
         position.z += dz;
@@ -347,14 +349,14 @@ internal void update_guy_mirror(Guy *guy) {
   Entity *mirror = lookup_entity(guy->mirror_id);
   if (mirror) {
     Vector3 mirror_forward = forward_from_theta(-mirror->theta);
-    Vector3 direction = to_vec3(guy->position - mirror->position);
+    Vector3 direction = guy->position - mirror->position;
     int distance = (int)Abs(length(direction));
 
     if (direction.x) {
-      int dz = (int)roundf(mirror_forward.z);
-      Vector3Int target = mirror->position;
+      f32 dz = roundf(mirror_forward.z);
+      Vector3 target = mirror->position;
       target.z += distance * dz;
-      Vector3Int new_position = mirror->position;
+      Vector3 new_position = mirror->position;
       new_position.z += dz;
 
       for (;;) {
@@ -373,10 +375,10 @@ internal void update_guy_mirror(Guy *guy) {
       guy->reflect_position = new_position;
 
     } else if (direction.z) {
-      int dx = (int)roundf(mirror_forward.x);
-      Vector3Int target = mirror->position;
+      f32 dx = roundf(mirror_forward.x);
+      Vector3 target = mirror->position;
       target.x += distance * dx;
-      Vector3Int new_position = mirror->position;
+      Vector3 new_position = mirror->position;
       new_position.x += dx;
 
       for (;;) {
@@ -406,10 +408,10 @@ internal void update_guy_mirror(Guy *guy) {
   }
 }
 
-internal bool move_entity(Entity *e, Vector3Int distance) {
-  Vector3Int new_position = e->position + distance;
+internal bool move_entity(Entity *e, Vector3 distance) {
+  Vector3 new_position = e->position + distance;
   Entity *wall = find_entity_at(get_world(), new_position);
-  Entity *below = find_entity_at(get_world(), new_position - Vector3Int::Up());
+  Entity *below = find_entity_at(get_world(), new_position - Vector3(0, 1, 0));
 
   bool valid_move = true;
 
@@ -467,11 +469,11 @@ void update_guy(Guy *guy) {
   bool moved = false;
 
   if (moving) {
-    Vector3Int move_direction = {0, 0, 0};
+    Vector3 move_direction = Vector3();
     if (forward_dt) {
-      move_direction = {0, 0, forward_dt};
+      move_direction = Vector3(0, 0, (f32)forward_dt);
     } else if (right_dt) {
-      move_direction = {right_dt, 0, 0};
+      move_direction = Vector3((f32)right_dt, 0, 0);
     }
 
     f32 theta = atan2f((f32)-move_direction.z, (f32)move_direction.x);
@@ -548,6 +550,7 @@ internal void update_entity(Entity *e, f32 dt) {
 #define FRAC0(x) (x - floor(x))
 #define FRAC1(x) (1 - x + floor(x))
 
+#if 0
 internal bool raycast(Vector3 origin, Vector3 direction, f32 max_d, Raycast *raycast) {
   // raycast->ray = make_ray(origin, direction);
   // raycast->block = block_id_zero();
@@ -621,6 +624,7 @@ internal bool raycast(Vector3 origin, Vector3 direction, f32 max_d, Raycast *ray
 
   return false;
 }
+#endif
 
 internal void update_camera_position(Camera *camera) {
   f32 forward_dt =  0.0f;

@@ -12,8 +12,8 @@ struct Action {
   Action_Kind kind;
   Pid actor_id;
 
-  Vector3Int from;
-  Vector3Int to;
+  Vector3 from;
+  Vector3 to;
 };
 
 struct Undo_Stack {

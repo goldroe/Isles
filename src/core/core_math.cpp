@@ -868,3 +868,11 @@ internal inline Vector4 operator*(Matrix4 m, Vector4 v) {
   result.elements[3] = v.elements[0] * m._30 + v.elements[1] * m._31 + v.elements[2] * m._32 + v.elements[3] * m._33;
   return result;
 }
+
+internal inline Vector3 floor(Vector3 v) {
+  Vector3 result = Vector3(
+    floor(v.x),
+    floor(v.y),
+    floor(v.z));
+  return result;
+}

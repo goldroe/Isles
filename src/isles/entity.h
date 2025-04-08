@@ -28,7 +28,7 @@ struct Entity {
   Pid id;
   u64 prototype_id;
 
-  Vector3Int position;
+  Vector3 position;
   Vector3 visual_position;
 
   Vector3 rotation;
@@ -46,13 +46,13 @@ struct Entity {
 
   void update();
 
-  inline void set_position(Vector3Int p) {
+  inline void set_position(Vector3 p) {
     position = p;
-    visual_position = Vector3((f32)p.x, (f32)p.y, (f32)p.z);
+    visual_position = p;
   }
-  inline void set_position(Axis axis, int p) {
+  inline void set_position(Axis axis, f32 p) {
     position[axis] = p;
-    visual_position[axis] = (f32)p;
+    visual_position[axis] = p;
   }
 
   inline void set_theta(f32 t) {
@@ -64,8 +64,8 @@ struct Entity {
 struct Guy : Entity {
   Vector3 forward;
   Pid mirror_id;
-  Vector3Int reflect_target;
-  Vector3Int reflect_position;
+  Vector3 reflect_target;
+  Vector3 reflect_position;
 };
 
 struct Sun : Entity {

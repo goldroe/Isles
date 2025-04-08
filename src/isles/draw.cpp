@@ -464,7 +464,7 @@ internal void draw_scene() {
         Guy *guy = world->guy;
 
         Matrix4 rotation_matrix = rotate_rh(guy->theta, camera.up);
-        Matrix4 world_matrix = translate(to_vec3(guy->reflect_position)) * rotation_matrix;
+        Matrix4 world_matrix = translate(guy->reflect_position) * rotation_matrix;
         Matrix4 xform = camera.projection_matrix * camera.view_matrix * world_matrix;
 
         set_shader(shader_entity);

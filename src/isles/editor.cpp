@@ -37,15 +37,15 @@ void Editor::update_entity_panel() {
   Entity *entity = editor->selected_entity;
   if (entity) {
     int n;
-    n = snprintf((char *)entity_panel->position_x->buffer, entity_panel->position_x->buffer_capacity, "%d", entity->position.x);
+    n = snprintf((char *)entity_panel->position_x->buffer, entity_panel->position_x->buffer_capacity, "%.2f", entity->position.x);
     entity_panel->position_x->buffer_len = n;
     entity_panel->position_x->buffer_pos = n;
 
-    n = snprintf((char *)entity_panel->position_y->buffer, entity_panel->position_y->buffer_capacity, "%d", entity->position.y);
+    n = snprintf((char *)entity_panel->position_y->buffer, entity_panel->position_y->buffer_capacity, "%.2f", entity->position.y);
     entity_panel->position_y->buffer_len = n;
     entity_panel->position_y->buffer_pos = n;
 
-    n = snprintf((char *)entity_panel->position_z->buffer, entity_panel->position_z->buffer_capacity, "%d", entity->position.z);
+    n = snprintf((char *)entity_panel->position_z->buffer, entity_panel->position_z->buffer_capacity, "%.2f", entity->position.z);
     entity_panel->position_z->buffer_len = n;
     entity_panel->position_z->buffer_pos = n;
 
@@ -317,8 +317,8 @@ internal void update_editor() {
       Axis gizmo_axis = editor->gizmo_axis_active;
       Vector3 axis_vector = unit_vector(gizmo_axis);
       Vector3 travel = projection(distance, axis_vector);
+      Vector3 meters = floor(travel);
 
-      Vector3Int meters = to_vec3i(travel);
       editor->selected_entity->set_position(editor->selected_entity->position + meters);
       editor->update_entity_panel();
 
@@ -587,9 +587,9 @@ internal void editor_present_ui() {
 
     if (ui_clicked(ui_button(str8_lit("Instantiate")))) {
       Entity *instance = entity_from_prototype(prototype);
-      instance->set_position(to_vec3i(editor->camera.origin + editor->camera.forward));
+      instance->set_position(floor(editor->camera.origin + editor->camera.forward));
       if (editor->selected_entity) {
-        Vector3Int unit = to_vec3i(get_nearest_axis(editor->camera.origin - to_vec3(editor->selected_entity->position)));
+        Vector3 unit = get_nearest_axis(editor->camera.origin - editor->selected_entity->position);
         instance->set_position(editor->selected_entity->position + unit);
       }
       editor->select_entity(instance);
@@ -640,7 +640,7 @@ internal void editor_present_ui() {
         UI_Signal sig = ui_text_edit(str8_lit("##field_x"), edit_x->buffer, edit_x->buffer_capacity, &edit_x->buffer_pos, &edit_x->buffer_len);
 
         if (sig.flags & UI_SIGNAL_FLAG_PRESSED) {
-          int x = (int)strtol((char *)edit_x->buffer, NULL, 10);
+          f32 x = strtof((char *)edit_x->buffer, NULL);
           entity->set_position(AXIS_X, x);
         }
       }
@@ -662,7 +662,7 @@ internal void editor_present_ui() {
         UI_Signal sig = ui_text_edit(str8_lit("##field_y"), edit_y->buffer, edit_y->buffer_capacity, &edit_y->buffer_pos, &edit_y->buffer_len);
 
         if (sig.flags & UI_SIGNAL_FLAG_PRESSED) {
-          int y = (int)strtol((char *)edit_y->buffer, NULL, 10);
+          f32 y = strtof((char *)edit_y->buffer, NULL);
           entity->set_position(AXIS_Y, y);
         }
       }
@@ -684,7 +684,7 @@ internal void editor_present_ui() {
         UI_Signal sig = ui_text_edit(str8_lit("##field_z"), edit_z->buffer, edit_z->buffer_capacity, &edit_z->buffer_pos, &edit_z->buffer_len);
 
         if (sig.flags & UI_SIGNAL_FLAG_PRESSED) {
-          int z = (int)strtol((char *)edit_z->buffer, NULL, 10);
+          f32 z = (f32)strtof((char *)edit_z->buffer, NULL);
           entity->set_position(AXIS_Z, z);
         }
       }
@@ -864,7 +864,6 @@ internal void editor_present_ui() {
         sun->light_direction = editor->camera.forward;
       }
     }
-    
   }
 
   // How do you deal with entity types in how you initialize default values? I have thought of writing small text files per entity type and I believe you did that with the Witness, however I assume in this game it is different since your language allows for much more extensive metaprogramming.
