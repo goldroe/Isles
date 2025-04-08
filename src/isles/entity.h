@@ -6,8 +6,7 @@ enum Entity_Kind : u16 {
   ENTITY_GUY,
   ENTITY_BLOCK,
   ENTITY_MIRROR,
-  ENTITY_ARROW,
-  ENTITY_PARTICLE,
+  ENTITY_SUN,
   ENTITY_COUNT
 };
 
@@ -67,6 +66,13 @@ struct Guy : Entity {
   Pid mirror_id;
   Vector3Int reflect_target;
   Vector3Int reflect_position;
+};
+
+struct Sun : Entity {
+  Vector3 light_direction;
+  Matrix4 light_view;
+  Matrix4 light_projection;
+  Matrix4 light_space_matrix;
 };
 
 #endif // ENTITY_H
