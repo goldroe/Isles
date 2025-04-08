@@ -858,6 +858,45 @@ internal void editor_present_ui() {
       editor->select_entity(nullptr);
     }
 
+    Vector3 up = Vector3(0, 1, 0);
+    Vector3 forward = editor->camera.forward;
+    forward.y = 0;
+    forward = get_nearest_axis(forward);
+    Vector3 right = normalize(cross(forward, up));
+
+    if (key_down(OS_KEY_CONTROL) && !key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_UP)) {
+      Vector3 position = editor->selected_entity->position;
+      position += forward;
+      editor->selected_entity->set_position(position);
+    }
+    if (key_down(OS_KEY_CONTROL) && !key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_DOWN)) {
+      Vector3 position = editor->selected_entity->position;
+      position -= forward;
+      editor->selected_entity->set_position(position);
+    }
+
+    if (key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_RIGHT)) {
+      Vector3 position = editor->selected_entity->position;
+      position += right;
+      editor->selected_entity->set_position(position);
+    }
+    if (key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_LEFT)) {
+      Vector3 position = editor->selected_entity->position;
+      position -= right;
+      editor->selected_entity->set_position(position);
+    }
+
+    if (key_down(OS_KEY_CONTROL) && key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_UP)) {
+      Vector3 position = editor->selected_entity->position;
+      position += up;
+      editor->selected_entity->set_position(position);
+    }
+    if (key_down(OS_KEY_CONTROL) && key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_DOWN)) {
+      Vector3 position = editor->selected_entity->position;
+      position -= up;
+      editor->selected_entity->set_position(position);
+    }
+
     if (editor->selected_entity->kind == ENTITY_SUN) {
       if (key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_L)) {
         Sun *sun = static_cast<Sun*>(editor->selected_entity);
