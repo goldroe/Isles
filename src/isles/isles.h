@@ -33,6 +33,8 @@ struct World {
   Auto_Array<Entity*> entities;
   Guy *guy = nullptr;
   Pid next_pid = 1;
+
+  AABB bounding_box;
 };
 
 struct Game_State {
@@ -66,5 +68,8 @@ internal void save_world(World *world);
 internal void save_world(World *world, String8 name);
 
 internal void remove_grid_entity(World *world, Entity *entity);
+
+
+internal Sun *get_sun(World *world);
 
 #endif // ISLES_H
