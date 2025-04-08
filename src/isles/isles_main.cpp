@@ -33,6 +33,19 @@
 #undef near
 #undef far
 
+#include "core.h"
+#include "mesh.h"
+#include "audio.h"
+#include "entity.h"
+#include "ui/ui_core.h"
+#include "editor.h"
+#include "isles.h"
+#include "draw.h"
+#include "input.h"
+#include "undo.h"
+#include "render_target.h"
+
+
 #define STB_SPRINTF_IMPLEMENTATION
 // #define STB_SPRINTF_DECORATE(name) base_##name
 #include <stb_sprintf.h>
@@ -47,18 +60,6 @@
 #include "font/font.cpp"
 
 #include "log.cpp"
-
-#include "core.h"
-#include "mesh.h"
-#include "audio.h"
-#include "entity.h"
-#include "ui/ui_core.h"
-#include "editor.h"
-#include "isles.h"
-#include "draw.h"
-#include "input.h"
-#include "undo.h"
-#include "render_target.h"
 
 #include "core.cpp"
 #include "audio.cpp"
