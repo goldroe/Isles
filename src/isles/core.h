@@ -3,6 +3,11 @@
 
 typedef u32 Pid;
 
+struct AABB {
+  Vector3 min;
+  Vector3 max;
+};
+
 enum Axis {
   AXIS_X,
   AXIS_Y,
@@ -56,7 +61,15 @@ struct Byte_Buffer {
 struct Vertex_3D {
   Vector3 position;
   Vector4 color;
+};
+
+struct Vertex_XCUU {
+  Vector3 position;
+  Vector4 color;
   Vector2 uv;
+
+  Vertex_XCUU() {}
+  Vertex_XCUU(Vector3 p, Vector4 c, Vector2 uv) : position(p), color(c), uv(uv) {}
 };
 
 struct Vertex_XNCUU {

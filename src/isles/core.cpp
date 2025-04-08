@@ -221,3 +221,20 @@ internal Vector3 get_mouse_ray(Camera camera, Vector2Int mouse_position, Vector2
   ray = normalize(forward + up + right);
   return ray;
 }
+
+internal inline Vector3 get_aabb_center(AABB box) {
+  Vector3 result = Vector3(
+    box.min.x + 0.5f * (box.max.x - box.min.x),
+    box.min.y + 0.5f * (box.max.y - box.min.y),
+    box.min.z + 0.5f * (box.max.z - box.min.z));
+  return result;
+}
+
+internal inline Vector3 get_aabb_dimension(AABB box) {
+  Vector3 result = Vector3(
+    box.max.x - box.min.x,
+    box.max.y - box.min.y,
+    box.max.z - box.min.z);
+  return result;
+}
+
