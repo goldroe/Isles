@@ -418,6 +418,29 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.MultisampleEnable = true;
     desc.AntialiasedLineEnable = false;
     d3d11_state->device->CreateRasterizerState(&desc, &d3d11_state->rasterizer_states[RASTERIZER_STATE_DEFAULT]);
+    rasterizer_cull_back = d3d11_state->rasterizer_states[RASTERIZER_STATE_DEFAULT];
+
+    desc = {};
+    desc.FillMode = D3D11_FILL_SOLID;
+    desc.CullMode = D3D11_CULL_NONE;
+    desc.FrontCounterClockwise = true;
+    desc.DepthBias = 0;
+    desc.DepthClipEnable = false;
+    desc.ScissorEnable = false;
+    desc.MultisampleEnable = false;
+    desc.AntialiasedLineEnable = false;
+    d3d11_state->device->CreateRasterizerState(&desc, &d3d11_state->rasterizer_states[RASTERIZER_STATE_NO_CULL]);
+
+    desc = {};
+    desc.FillMode = D3D11_FILL_SOLID;
+    desc.CullMode = D3D11_CULL_FRONT;
+    desc.FrontCounterClockwise = true;
+    desc.DepthBias = 0;
+    desc.DepthClipEnable = false;
+    desc.ScissorEnable = false;
+    desc.MultisampleEnable = false;
+    desc.AntialiasedLineEnable = false;
+    d3d11_state->device->CreateRasterizerState(&desc, &rasterizer_cull_front);
 
     desc = {};
     desc.FillMode = D3D11_FILL_SOLID;
@@ -438,6 +461,8 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.FrontCounterClockwise = true;
     desc.MultisampleEnable = true;
     d3d11_state->device->CreateRasterizerState(&desc, &d3d11_state->rasterizer_states[RASTERIZER_STATE_TEXT]);
+
+    
   }
 
   {
@@ -520,12 +545,19 @@ internal void r_d3d11_initialize(HWND window_handle) {
   shader_basic = r_d3d11_make_shader(str8_lit("data/shaders/basic_3d.hlsl"), str8_lit("Basic"), basic_ilay, ArrayCount(basic_ilay));
 
   D3D11_INPUT_ELEMENT_DESC mesh_ilay[] = {
-    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-    { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT,      0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-    { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-    { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Vertex_XCUU, position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(Vertex_XCUU, color),    D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex_XCUU, uv),       D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
   shader_mesh = r_d3d11_make_shader(str8_lit("data/shaders/mesh.hlsl"), str8_lit("Mesh"), mesh_ilay, ArrayCount(mesh_ilay));
+
+  D3D11_INPUT_ELEMENT_DESC entity_ilay[] = {
+    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Vertex_XNCUU, position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Vertex_XNCUU, normal), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(Vertex_XNCUU, color), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex_XNCUU, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+  };
+  shader_entity = r_d3d11_make_shader(str8_lit("data/shaders/entity.hlsl"), str8_lit("Entity"), entity_ilay, ArrayCount(entity_ilay));
 
   D3D11_INPUT_ELEMENT_DESC argb_texture_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -552,7 +584,10 @@ internal void r_d3d11_initialize(HWND window_handle) {
   };
   shader_shadow_map = r_d3d11_make_shader(str8_lit("data/shaders/shadow_map.hlsl"), str8_lit("ShadowMap"), shadowmap_ilay, ArrayCount(shadowmap_ilay));
 
-  sample_texture = r_create_texture_from_file(str8_lit("data/textures/debug.png"), 0);
+  sun_icon_texture = r_create_texture_from_file(str8_lit("data/textures/sun_icon.bmp"), 0);
+  eye_of_horus_texture = r_create_texture_from_file(str8_lit("data/textures/eye_of_horus.png"), 0);
+
+  water_plane_mesh = generate_plane_mesh(Vector2(100.0f, 100.0f));
 }
 
 internal void r_d3d11_begin(OS_Handle window_handle) {
