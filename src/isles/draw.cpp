@@ -1,5 +1,6 @@
 global Shader *shader_basic;
 global Shader *shader_mesh;
+global Shader *shader_entity;
 global Shader *shader_rect;
 global Shader *shader_picker;
 global Shader *shader_shadow_map;
@@ -8,13 +9,15 @@ global Shader *shader_argb_texture;
 global Shader *current_shader;
 global Vertex_List immediate_vertices;
 
-global Vector3 light_position = Vector3(40, 0, 0);
-global Vector3 light_direction = normalize(Vector3(-1.0f, 0.0f, 0.0f));
-global Matrix4 light_projection = ortho_rh_zo(-10.f, 10.f, -10.f, 10.f, -100.0f, 100.0f);
-
 global Shadow_Map *shadow_map;
 
-global Texture *sample_texture;
+global Texture *sun_icon_texture;
+global Texture *eye_of_horus_texture;
+
+global Triangle_Mesh *water_plane_mesh;
+
+ID3D11RasterizerState *rasterizer_cull_back;
+ID3D11RasterizerState *rasterizer_cull_front;
 
 internal Shadow_Map *make_shadow_map(int width, int height) {
   R_D3D11_State *d3d = r_d3d11_state();
@@ -251,6 +254,11 @@ internal void set_rasterizer_state(Rasterizer_State_Kind rasterizer_kind) {
   d3d->device_context->RSSetState(rasterizer_state);
 }
 
+internal void set_rasterizer(ID3D11RasterizerState *rasterizer) {
+  R_D3D11_State *d3d = r_d3d11_state();
+  d3d->device_context->RSSetState(rasterizer);
+}
+
 internal void set_blend_state(Blend_State_Kind blend_state_kind) {
   R_D3D11_State *d3d = r_d3d11_state();
   ID3D11BlendState *blend_state = d3d->blend_states[blend_state_kind];
@@ -311,11 +319,10 @@ internal inline void put_immediate_vertex(void *v, size_t size) {
   immediate_vertices.byte_count += size;
 }
 
-internal inline void immediate_vertex(Vector3 v, Vector4 c, Vector2 uv) {
+internal inline void immediate_vertex(Vector3 v, Vector4 c) {
   Vertex_3D vertex;
   vertex.position = v;
   vertex.color = c;
-  vertex.uv = uv;
   put_immediate_vertex(&vertex, sizeof(Vertex_3D));
 }
 
@@ -384,11 +391,12 @@ internal void draw_mesh(Triangle_Mesh *mesh, bool use_override_color, Vector4 ov
   vertex_buffer->Release();
 }
 
+
 internal void draw_scene() {
   local_persist bool first_call = true;
   if (first_call) {
     first_call = false;
-    shadow_map = make_shadow_map(1024, 1024);
+    shadow_map = make_shadow_map(2048, 2048);
   }
 
   R_D3D11_State *d3d = r_d3d11_state();
@@ -404,14 +412,12 @@ internal void draw_scene() {
     camera = game_state->camera;
   }
 
-  Matrix4 light_view = look_at_rh(light_position, Vector3(), Vector3(0, 1, 0));
-  Matrix4 light_view_projection = light_projection * light_view;
-
   // @Note Shadow mapping
-  {
+  Sun *sun = get_sun(world);
+  if (sun) {
     set_viewport(0, 0, (f32)shadow_map->texture->width, (f32)shadow_map->texture->height);
     set_depth_state(DEPTH_STATE_DEFAULT);
-    set_rasterizer_state(RASTERIZER_STATE_DEFAULT);
+    set_rasterizer(rasterizer_cull_front);
     d3d->device_context->OMSetRenderTargets(0, nullptr, shadow_map->depth_stencil_view);
     d3d->device_context->ClearDepthStencilView(shadow_map->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
@@ -423,13 +429,14 @@ internal void draw_scene() {
     for (int i = 0; i < world->entities.count; i++) {
       Entity *entity = world->entities[i];
       Triangle_Mesh *mesh = entity->mesh;
+      if (!mesh) continue;
 
       //@Todo Set Transform
       Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
       Matrix4 world_matrix = translate(entity->visual_position) * rotation_matrix;
 
       set_constant(str8_lit("world"), world_matrix);
-      set_constant(str8_lit("light_view_projection"), light_view_projection);
+      set_constant(str8_lit("light_view_projection"), sun->light_space_matrix);
       apply_constants();
 
       ID3D11Buffer *vertex_buffer = make_vertex_buffer(mesh->vertices.data, mesh->vertices.count, sizeof(Vector3));
@@ -457,12 +464,12 @@ internal void draw_scene() {
         Guy *guy = world->guy;
 
         Matrix4 rotation_matrix = rotate_rh(guy->theta, camera.up);
-        Matrix4 world_matrix = translate(to_vector3(guy->reflect_position)) * rotation_matrix;
+        Matrix4 world_matrix = translate(to_vec3(guy->reflect_position)) * rotation_matrix;
         Matrix4 xform = camera.projection_matrix * camera.view_matrix * world_matrix;
 
-        set_shader(shader_mesh);
+        set_shader(shader_entity);
 
-        bind_uniform(shader_mesh, str8_lit("Constants"));
+        bind_uniform(shader_entity, str8_lit("Constants"));
 
         set_constant(str8_lit("xform"), xform);
         set_constant(str8_lit("world"), world_matrix);
@@ -481,13 +488,13 @@ internal void draw_scene() {
       //   d3d->device_context->OMSetBlendState(d3d->blend_states[R_BLEND_STATE_ALPHA], NULL, 0xffffffff);
       //   d3d->device_context->OMSetDepthStencilState(d3d->depth_stencil_states[R_DEPTH_STENCIL_STATE_DEFAULT], 0);
 
-      //   Vector3 mirror_forward = to_vector3(rotate_rh(-mirror->theta,  Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1));
-      //   Vector3 direction = to_vector3(world->guy->position - mirror->position);
+      //   Vector3 mirror_forward = to_vec3(rotate_rh(-mirror->theta,  Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1));
+      //   Vector3 direction = to_vec3(world->guy->position - mirror->position);
       //   int distance = (int)Abs(magnitude(direction));
 
       //   Vector3 beam_size = Vector3(1, 1, 1);
       //   Vector4 beam_color = Vector4(1, 1, 1, 0.5f);
-      //   Vector3 beam_start = to_vector3(mirror->position);
+      //   Vector3 beam_start = to_vec3(mirror->position);
       //   f32 dx = mirror_forward.x > 0 ? 1.0f : -1.0f;
       //   f32 dz = mirror_forward.z > 0 ? 1.0f : -1.0f;
       //   f32 beam_start_x = (f32)mirror->position.x + dx;
@@ -495,7 +502,7 @@ internal void draw_scene() {
 
       //   Vector3 beam_position;
       //   // x
-      //   beam_start = to_vector3(mirror->position);
+      //   beam_start = to_vec3(mirror->position);
       //   beam_start.x = beam_start_x;
 
       //   Matrix4 world_matrix = translate(beam_start);
@@ -509,7 +516,7 @@ internal void draw_scene() {
 
       //   // z
       //   batch = push_immediate_batch(bucket);
-      //   beam_start = to_vector3(mirror->position);
+      //   beam_start = to_vec3(mirror->position);
       //   beam_start.z = beam_start_z;
 
       //   batch = push_immediate_batch(bucket);
@@ -536,31 +543,35 @@ internal void draw_scene() {
 
   bind_uniform(shader_argb_texture, str8_lit("Constants"));
 
-  draw_imm_quad(shadow_map->texture,
+  immediate_quad(shadow_map->texture,
     Vector2(0.0f, 0.0f), Vector2(200.0f, 0.0f), Vector2(200.0f, 200.0f), Vector2(0.0f, 200.0f),
-    Vector2(0.0f, 0.0f), Vector2(1.0f, 0.0f), Vector2(1.0f, 1.0f), Vector2(0.0f, 1.0f),
+    Vector2(0.0f, 1.0f), Vector2(1.0f, 1.0f), Vector2(1.0f, 0.0f), Vector2(0.0f, 0.0f),
     Vector4(1.0f, 1.0f, 1.0f, 0.4f));
+  reset_texture(str8_lit("diffuse_texture"));
 }
 
 internal void draw_world(World *world, Camera camera) {
   R_D3D11_State *d3d = r_d3d11_state();
 
-  set_shader(shader_mesh);
+  Sun *sun = get_sun(world);
+  Matrix4 light_space = sun ? sun->light_space_matrix : make_matrix4(1.0f);
+  Vector3 light_direction = sun ? sun->light_direction : Vector3(0, 0, 0);
 
-  Shader_Uniform *uniform = shader_mesh->bindings->lookup_uniform(str8_lit("Constants"));
-  bind_uniform(shader_mesh, str8_lit("Constants"));
+  set_shader(shader_entity);
 
-  // Matrix4 depth_bias_xform = translate(0.5f, 0.5f, 0.5f) * scale(0.5f, 0.5f, 0.5f);
-  Matrix4 light_view = look_at_rh(light_position, Vector3(), Vector3(0, 1, 0));
-  Matrix4 light_xform = light_projection * light_view;
+  Shader_Uniform *uniform = shader_entity->bindings->lookup_uniform(str8_lit("Constants"));
+  bind_uniform(shader_entity, str8_lit("Constants"));
 
   set_texture(str8_lit("shadow_map"), shadow_map->texture);
   set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
   set_sampler(str8_lit("point_sampler"), SAMPLER_STATE_POINT);
-
+  set_constant(str8_lit("light_direction"), light_direction);
+  set_constant(str8_lit("light_view_projection"), light_space);
+    
   for (int i = 0; i < world->entities.count; i++) {
     Entity *entity = world->entities[i];
     Triangle_Mesh *mesh = entity->mesh;
+    if (!mesh) continue;
 
     Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
     Matrix4 world_matrix = translate(entity->visual_position) * rotation_matrix;
@@ -568,7 +579,6 @@ internal void draw_world(World *world, Camera camera) {
 
     set_constant(str8_lit("xform"), xform);
     set_constant(str8_lit("world"), world_matrix);
-    set_constant(str8_lit("light_xform"), light_xform);
     apply_constants();
 
     draw_mesh(mesh, entity->use_override_color, entity->override_color);
@@ -594,7 +604,7 @@ internal void imm_quad_vertex(Vector2 p, Vector2 uv, ARGB argb) {
   put_immediate_vertex(&v, sizeof(Vertex_ARGB));
 }
 
-internal void draw_imm_quad(Texture *texture, Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector2 uv3, Vector4 color) {
+internal void immediate_quad(Texture *texture, Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector2 uv3, Vector4 color) {
   set_texture(str8_lit("diffuse_texture"), texture);
 
   ARGB argb = argb_from_vector(color);
@@ -608,9 +618,18 @@ internal void draw_imm_quad(Texture *texture, Vector2 p0, Vector2 p1, Vector2 p2
   immediate_flush();
 }
 
-internal void draw_imm_rectangle(Vector3 position, Vector3 size, Vector4 color) {
+internal void immediate_plane(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Vector4 color) {
+  immediate_vertex(p0, color);
+  immediate_vertex(p1, color);
+  immediate_vertex(p2, color);
+
+  immediate_vertex(p0, color);
+  immediate_vertex(p2, color);
+  immediate_vertex(p3, color);
+}
+
+internal void immediate_rectangle(Vector3 position, Vector3 size, Vector4 color) {
     Vector3 half = 0.5f * size;
-    Vector2 uv = Vector2();
     Vector3 p0 = Vector3(position.x,          position.y,          position.z + size.z);
     Vector3 p1 = Vector3(position.x + size.x, position.y,          position.z + size.z);
     Vector3 p2 = Vector3(position.x + size.x, position.y + size.y, position.z + size.z);
@@ -621,49 +640,49 @@ internal void draw_imm_rectangle(Vector3 position, Vector3 size, Vector4 color) 
     Vector3 p7 = Vector3(position.x + size.x, position.y + size.y, position.z);
 
     // front
-    immediate_vertex(p0, color, uv);
-    immediate_vertex(p1, color, uv);
-    immediate_vertex(p2, color, uv);
-    immediate_vertex(p0, color, uv);
-    immediate_vertex(p2, color, uv);
-    immediate_vertex(p3, color, uv);
+    immediate_vertex(p0, color);
+    immediate_vertex(p1, color);
+    immediate_vertex(p2, color);
+    immediate_vertex(p0, color);
+    immediate_vertex(p2, color);
+    immediate_vertex(p3, color);
     // back
-    immediate_vertex(p4, color, uv);
-    immediate_vertex(p5, color, uv);
-    immediate_vertex(p6, color, uv);
-    immediate_vertex(p4, color, uv);
-    immediate_vertex(p6, color, uv);
-    immediate_vertex(p7, color, uv);
+    immediate_vertex(p4, color);
+    immediate_vertex(p5, color);
+    immediate_vertex(p6, color);
+    immediate_vertex(p4, color);
+    immediate_vertex(p6, color);
+    immediate_vertex(p7, color);
     // left
-    immediate_vertex(p5, color, uv);
-    immediate_vertex(p0, color, uv);
-    immediate_vertex(p3, color, uv);
-    immediate_vertex(p5, color, uv);
-    immediate_vertex(p3, color, uv);
-    immediate_vertex(p6, color, uv);
+    immediate_vertex(p5, color);
+    immediate_vertex(p0, color);
+    immediate_vertex(p3, color);
+    immediate_vertex(p5, color);
+    immediate_vertex(p3, color);
+    immediate_vertex(p6, color);
     // right
-    immediate_vertex(p1, color, uv);
-    immediate_vertex(p4, color, uv);
-    immediate_vertex(p7, color, uv);
-    immediate_vertex(p1, color, uv);
-    immediate_vertex(p7, color, uv);
-    immediate_vertex(p2, color, uv);
+    immediate_vertex(p1, color);
+    immediate_vertex(p4, color);
+    immediate_vertex(p7, color);
+    immediate_vertex(p1, color);
+    immediate_vertex(p7, color);
+    immediate_vertex(p2, color);
     // top
-    immediate_vertex(p3, color, uv);
-    immediate_vertex(p2, color, uv);
-    immediate_vertex(p7, color, uv);
-    immediate_vertex(p3, color, uv);
-    immediate_vertex(p7, color, uv);
-    immediate_vertex(p6, color, uv);
+    immediate_vertex(p3, color);
+    immediate_vertex(p2, color);
+    immediate_vertex(p7, color);
+    immediate_vertex(p3, color);
+    immediate_vertex(p7, color);
+    immediate_vertex(p6, color);
     // bottom
-    immediate_vertex(p1, color, uv);
-    immediate_vertex(p0, color, uv);
-    immediate_vertex(p5, color, uv);
-    immediate_vertex(p1, color, uv);
-    immediate_vertex(p5, color, uv);
-    immediate_vertex(p4, color, uv);
+    immediate_vertex(p1, color);
+    immediate_vertex(p0, color);
+    immediate_vertex(p5, color);
+    immediate_vertex(p1, color);
+    immediate_vertex(p5, color);
+    immediate_vertex(p4, color);
 }
 
-internal void draw_imm_cube(Vector3 center, f32 size, Vector4 color) {
-  draw_imm_rectangle(center, Vector3(size, size, size), color);
+internal void immediate_cube(Vector3 center, f32 size, Vector4 color) {
+  immediate_rectangle(center, Vector3(size, size, size), color);
 }
