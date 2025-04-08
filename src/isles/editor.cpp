@@ -87,15 +87,13 @@ internal void r_picker_render_gizmo(Picker *picker) {
   d3d->device_context->ClearRenderTargetView((ID3D11RenderTargetView*)picker->render_target->render_target_view, clear_color);
   d3d->device_context->ClearDepthStencilView((ID3D11DepthStencilView *)d3d->default_render_target->depth_stencil_view, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
 
-  d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
   set_shader(shader_picker);
 
   bind_uniform(shader_picker, str8_lit("Constants"));
 
   Entity *e = editor->selected_entity;
 
-  f32 gizmo_scale_factor = Abs(magnitude(editor->camera.origin - editor->selected_entity->visual_position) * 0.5f);
+  f32 gizmo_scale_factor = Abs(length(editor->camera.origin - editor->selected_entity->visual_position) * 0.5f);
   gizmo_scale_factor = ClampBot(gizmo_scale_factor, 1.0f);
 
   for (u32 axis = AXIS_X; axis <= AXIS_Z; axis++) {
@@ -145,7 +143,6 @@ internal void picker_render(Picker *picker) {
 
   bind_uniform(shader_picker, str8_lit("Constants"));
 
-  d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
   Game_State *game_state = get_game_state();
   World *world = get_world();
@@ -153,6 +150,7 @@ internal void picker_render(Picker *picker) {
   for (int i = 0; i < world->entities.count; i++) {
     Entity *e = world->entities[i];
     Triangle_Mesh *mesh = e->mesh;
+    if (!mesh) continue;
 
     Matrix4 rotation_matrix = rotate_rh(e->visual_rotation.y, editor->camera.up);
     Matrix4 world_matrix = translate(e->visual_position) * rotation_matrix;
@@ -179,6 +177,53 @@ internal void picker_render(Picker *picker) {
     }
 
     vertex_buffer->Release();
+  }
+
+  // Draw billboards
+  for (int i = 0; i < world->entities.count; i++) {
+    Entity *e = world->entities[i];
+    if (e->kind == ENTITY_SUN) {
+      Matrix4 rotation_matrix = rotate_rh(e->visual_rotation.y, editor->camera.up);
+      Matrix4 world_matrix = translate(e->visual_position) * rotation_matrix;
+      Matrix4 view = editor->camera.view_matrix;
+      Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * world_matrix;
+
+      Vector4 pick_color;
+      pick_color.x = ((e->id & 0x000000FF) >> 0 ) / 255.0f;
+      pick_color.y = ((e->id & 0x0000FF00) >> 8 ) / 255.0f;
+      pick_color.z = ((e->id & 0x00FF00FF) >> 16) / 255.0f;
+      pick_color.w = ((e->id & 0xFF0000FF) >> 24) / 255.0f;
+
+      set_constant(str8_lit("xform"), xform);
+      set_constant(str8_lit("pick_color"), pick_color);
+      apply_constants();
+
+      Vector3 plane_normal = e->visual_position - editor->camera.origin;
+      plane_normal.y = 0.0f;
+      plane_normal = normalize(plane_normal);
+      
+      Vector3 up = Vector3(0, 1, 0);
+      Vector3 right = normalize(cross(plane_normal, up));
+      f32 size = 0.5f;
+      Vector3 p0 = -size * right - size * up;
+      Vector3 p1 =  size * right - size * up;
+      Vector3 p2 =  size * right + size * up;
+      Vector3 p3 = -size * right + size * up;
+
+      Vector3 vertices[6];
+      vertices[0] = p0;
+      vertices[1] = p1;
+      vertices[2] = p2;
+      vertices[3] = p0;
+      vertices[4] = p2;
+      vertices[5] = p3;
+
+      ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices, ArrayCount(vertices), sizeof(Vector3));
+      UINT stride = sizeof(Vector3), offset = 0;
+      d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+      d3d->device_context->Draw((UINT)ArrayCount(vertices), 0);
+      vertex_buffer->Release();
+    }
   }
 
   set_render_target(d3d->default_render_target);
@@ -240,6 +285,10 @@ internal Pid picker_get_id(Picker *picker, Vector2Int mouse) {
 }
 
 internal void update_editor() {
+  R_D3D11_State *d3d = r_d3d11_state();
+
+  World *world = get_world();
+
   update_camera_position(&editor->camera);
 
   Vector2Int mouse_position = g_input.mouse_position;
@@ -266,10 +315,10 @@ internal void update_editor() {
       Vector3 distance = 15.0f * (ray - ray_start);
 
       Axis gizmo_axis = editor->gizmo_axis_active;
-      Vector3 gizmo_vector = vector_from_axis(gizmo_axis);
-      Vector3 travel = projection(distance, gizmo_vector);
+      Vector3 axis_vector = unit_vector(gizmo_axis);
+      Vector3 travel = projection(distance, axis_vector);
 
-      Vector3Int meters = truncate(travel);
+      Vector3Int meters = to_vec3i(travel);
       editor->selected_entity->set_position(editor->selected_entity->position + meters);
       editor->update_entity_panel();
 
@@ -308,7 +357,6 @@ internal void update_editor() {
     }
   }
 
-
   Vector2 camera_delta = get_mouse_right_drag_delta();
   camera_delta = 0.2f * camera_delta;
   update_camera_orientation(&editor->camera, camera_delta);
@@ -316,6 +364,50 @@ internal void update_editor() {
   Entity *selected_entity = editor->selected_entity;
 
   draw_scene();
+
+  set_shader(shader_mesh);
+  bind_uniform(shader_mesh, str8_lit("Constants"));
+
+  set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
+  set_texture(str8_lit("diffuse_texture"), sun_icon_texture);
+  set_blend_state(BLEND_STATE_ALPHA);
+
+  for (int i = 0; i < world->entities.count; i++) {
+    Entity *e = world->entities[i];
+    if (e->kind == ENTITY_SUN) {
+      Matrix4 rotation_matrix = rotate_rh(e->theta, editor->camera.up);
+      Matrix4 world_matrix = translate(e->visual_position) * rotation_matrix;
+      Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * world_matrix;
+
+      set_constant(str8_lit("xform"), xform);
+      apply_constants();
+     
+      Vector3 right = editor->camera.right;
+      Vector3 up = cross(right, editor->camera.forward);
+      f32 size = 0.5f;
+      Vertex_XCUU p0 = Vertex_XCUU(-size * right - size * up, make_vec4(1.0f), Vector2(0, 1));
+      Vertex_XCUU p1 = Vertex_XCUU( size * right - size * up, make_vec4(1.0f), Vector2(1, 1));
+      Vertex_XCUU p2 = Vertex_XCUU( size * right + size * up, make_vec4(1.0f), Vector2(1, 0));
+      Vertex_XCUU p3 = Vertex_XCUU(-size * right + size * up, make_vec4(1.0f), Vector2(0, 0));
+
+      Vertex_XCUU vertices[6];
+      vertices[0] = p0;
+      vertices[1] = p1;
+      vertices[2] = p2;
+      vertices[3] = p0;
+      vertices[4] = p2;
+      vertices[5] = p3;
+ 
+      ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices, ArrayCount(vertices), sizeof(Vertex_XCUU));
+      UINT stride = sizeof(Vertex_XCUU), offset = 0;
+      d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+      d3d->device_context->Draw((UINT)ArrayCount(vertices), 0);
+      vertex_buffer->Release();
+    }
+  }
+
+  set_blend_state(BLEND_STATE_DEFAULT);
+
 
   //@Note Draw Gizmos
   if (editor->selected_entity) {
@@ -326,7 +418,9 @@ internal void update_editor() {
 
     set_rasterizer_state(RASTERIZER_STATE_NO_CULL);
 
-    f32 gizmo_scale_factor = Abs(magnitude(editor->camera.origin - editor->selected_entity->visual_position) * 0.5f);
+    set_shader(shader_entity);
+
+    f32 gizmo_scale_factor = Abs(length(editor->camera.origin - editor->selected_entity->visual_position) * 0.5f);
     gizmo_scale_factor = ClampBot(gizmo_scale_factor, 1.0f);
 
     Matrix4 world_matrix = make_matrix4(1.0f);
@@ -335,21 +429,17 @@ internal void update_editor() {
 
     for (int axis = AXIS_X; axis <= AXIS_Z; axis++) {
       Triangle_Mesh *mesh = editor->gizmo_meshes[editor->active_gizmo][axis];
+      if (!mesh) continue;
 
       Matrix4 world_matrix = translate(selected_entity->visual_position.x, selected_entity->visual_position.y, selected_entity->visual_position.z) * scale(Vector3(gizmo_scale_factor, gizmo_scale_factor, gizmo_scale_factor));
       Matrix4 view_matrix = editor->camera.view_matrix;
       Matrix4 xform = editor->camera.projection_matrix * view_matrix * world_matrix;
       set_constant(str8_lit("xform"), xform);
       set_constant(str8_lit("world"), world_matrix);
+      bind_uniform(shader_entity, str8_lit("Constants"));
       apply_constants();
 
-      Vector4 color;
-      switch (axis) {
-      case AXIS_X: color = Vector4(1, 0, 0, 1); break;
-      case AXIS_Y: color = Vector4(0, 1, 0, 1); break;
-      case AXIS_Z: color = Vector4(0, 0, 1, 1); break;
-      }
-
+      Vector4 color = Vector4(unit_vector(axis), 1.0f);
       if (editor->gizmo_axis_hover == axis && editor->gizmo_axis_active == (Axis)-1) {
         color = mix(color, Vector4(1.0f, 1.0f, 1.0f, 1.0f), 0.4f);
       }
@@ -497,9 +587,9 @@ internal void editor_present_ui() {
 
     if (ui_clicked(ui_button(str8_lit("Instantiate")))) {
       Entity *instance = entity_from_prototype(prototype);
-      instance->set_position(truncate(editor->camera.origin + editor->camera.forward));
+      instance->set_position(to_vec3i(editor->camera.origin + editor->camera.forward));
       if (editor->selected_entity) {
-        Vector3Int unit = truncate(get_nearest_axis(editor->camera.origin - to_vector3(editor->selected_entity->position)));
+        Vector3Int unit = to_vec3i(get_nearest_axis(editor->camera.origin - to_vec3(editor->selected_entity->position)));
         instance->set_position(editor->selected_entity->position + unit);
       }
       editor->select_entity(instance);
@@ -767,5 +857,15 @@ internal void editor_present_ui() {
       editor->selected_entity->to_be_destroyed = true;
       editor->select_entity(nullptr);
     }
+
+    if (editor->selected_entity->kind == ENTITY_SUN) {
+      if (key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_L)) {
+        Sun *sun = static_cast<Sun*>(editor->selected_entity);
+        sun->light_direction = editor->camera.forward;
+      }
+    }
+    
   }
+
+  // How do you deal with entity types in how you initialize default values? I have thought of writing small text files per entity type and I believe you did that with the Witness, however I assume in this game it is different since your language allows for much more extensive metaprogramming.
 }
