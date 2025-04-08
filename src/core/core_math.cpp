@@ -1,10 +1,25 @@
 
-internal inline Vector3 to_vector3(Vector4 v) {
+internal inline Vector2 make_vec2(f32 f) {
+  Vector2 result = Vector2(f, f); 
+  return result;
+}
+
+internal inline Vector3 make_vec3(f32 f) {
+  Vector3 result = Vector3(f, f, f); 
+  return result;
+}
+
+internal inline Vector4 make_vec4(f32 f) {
+  Vector4 result = Vector4(f, f, f, f); 
+  return result;
+}
+
+internal inline Vector3 to_vec3(Vector4 v) {
   Vector3 result = {v.x, v.y, v.z};
   return result;
 }
 
-internal inline Vector3 to_vector3(Vector3Int v) {
+internal inline Vector3 to_vec3(Vector3Int v) {
   Vector3 result = {
     (f32)v.x,
     (f32)v.y,
@@ -13,68 +28,18 @@ internal inline Vector3 to_vector3(Vector3Int v) {
   return result;
 }
 
-internal inline Vector2Int truncate(Vector2 v) {
+internal inline Vector2Int to_vec2i(Vector2 v) {
   Vector2Int result = {
     (int)v.x,
     (int)v.y,
   };
   return result;
 }
-internal inline Vector3Int truncate(Vector3 v) {
+internal inline Vector3Int to_vec3i(Vector3 v) {
   Vector3Int result = {
     (int)v.x,
     (int)v.y,
     (int)v.z
-  };
-  return result;
-}
-
-internal inline Vector2 operator-(Vector2 v) {
-  Vector2 result = {
-    -v.x,
-    -v.y
-  };
-  return result;
-}
-internal inline Vector3 operator-(Vector3 v) {
-  Vector3 result = {
-    -v.x,
-    -v.y,
-    -v.z
-  };
-  return result;
-}
-internal inline Vector4 operator-(Vector4 v) {
-  Vector4 result = {
-    -v.x,
-    -v.y,
-    -v.z,
-    -v.w
-  };
-  return result;
-}
-
-internal inline Vector2Int operator-(Vector2Int v) {
-  Vector2Int result = {
-    -v.x,
-    -v.y
-  };
-  return result;
-}
-internal inline Vector3Int operator-(Vector3Int v) {
-  Vector3Int result = {
-    -v.x,
-    -v.y,
-    -v.z
-  };
-  return result;
-}
-internal inline Vector4Int operator-(Vector4Int v) {
-  Vector4Int result = {
-    -v.x,
-    -v.y,
-    -v.z,
-    -v.w
   };
   return result;
 }
@@ -131,6 +96,31 @@ internal inline bool operator!=(Vector4Int a, Vector4Int b) {
   return !(a==b);
 }
 
+internal inline Vector2 operator-(Vector2 v) {
+  Vector2 result = {
+    -v.x,
+    -v.y
+  };
+  return result;
+}
+internal inline Vector3 operator-(Vector3 v) {
+  Vector3 result = {
+    -v.x,
+    -v.y,
+    -v.z
+  };
+  return result;
+}
+internal inline Vector4 operator-(Vector4 v) {
+  Vector4 result = {
+    -v.x,
+    -v.y,
+    -v.z,
+    -v.w
+  };
+  return result;
+}
+
 internal inline Vector2 operator+(Vector2 a, Vector2 b) {
   Vector2 result = {
     a.x + b.x,
@@ -165,7 +155,6 @@ internal inline Vector2Int operator+(Vector2Int a, Vector2Int b) {
   };
   return result;
 }
-
 internal inline Vector3Int operator+(Vector3Int a, const Vector3Int b) {
   Vector3Int result = {
     a.x + b.x,
@@ -174,7 +163,6 @@ internal inline Vector3Int operator+(Vector3Int a, const Vector3Int b) {
   };
   return result;
 }
-
 internal inline Vector4Int operator+(Vector4Int a, Vector4Int b) {
   Vector4Int result = {
     a.x + b.x,
@@ -185,7 +173,30 @@ internal inline Vector4Int operator+(Vector4Int a, Vector4Int b) {
   return result;
 }
 
-
+internal inline Vector2Int operator-(Vector2Int v) {
+  Vector2Int result = {
+    -v.x,
+    -v.y
+  };
+  return result;
+}
+internal inline Vector3Int operator-(Vector3Int v) {
+  Vector3Int result = {
+    -v.x,
+    -v.y,
+    -v.z
+  };
+  return result;
+}
+internal inline Vector4Int operator-(Vector4Int v) {
+  Vector4Int result = {
+    -v.x,
+    -v.y,
+    -v.z,
+    -v.w
+  };
+  return result;
+}
 
 internal inline Vector2 operator-(Vector2 a, Vector2 b) {
   Vector2 result = {
@@ -366,55 +377,113 @@ internal inline f32 dot(Vector4 a, Vector4 b) {
   return result;
 }
 
-internal inline f32 magnitude(Vector2 v) {
+internal inline f32 length(Vector2 v) {
   f32 result = sqrtf(v.x * v.x + v.y * v.y);
   return result;
 }
-internal inline f32 magnitude(Vector3 v) {
+internal inline f32 length(Vector3 v) {
   f32 result = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
   return result;
 }
-internal inline f32 magnitude(Vector4 v) {
+internal inline f32 length(Vector4 v) {
   f32 result = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
   return result;
 }
 
-internal inline f32 magnitude(Vector2Int v) {
+internal inline f32 length(Vector2Int v) {
   f32 result = sqrtf((f32)(v.x * v.x + v.y * v.y));
   return result;
 }
-internal inline f32 magnitude(Vector3Int v) {
+internal inline f32 length(Vector3Int v) {
   f32 result = sqrtf((f32)(v.x * v.x + v.y * v.y + v.z * v.z));
   return result;
 }
-internal inline f32 magnitude(Vector4Int v) {
+internal inline f32 length(Vector4Int v) {
   f32 result = sqrtf((f32)(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w));
   return result;
 }
 
-internal inline f32 magnitude2(Vector2 v) {
+internal inline f32 length2(Vector2 v) {
   f32 result = v.x * v.x + v.y * v.y;
   return result;
 }
-internal inline f32 magnitude2(Vector3 v) {
+internal inline f32 length2(Vector3 v) {
   f32 result = v.x * v.x + v.y * v.y + v.z * v.z;
   return result;
 }
-internal inline f32 magnitude2(Vector4 v) {
+internal inline f32 length2(Vector4 v) {
   f32 result = v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w;
   return result;
 }
 
-internal inline f32 magnitude2(Vector2Int v) {
+internal inline f32 length2(Vector2Int v) {
   f32 result = (f32)(v.x * v.x + v.y * v.y);
   return result;
 }
-internal inline f32 magnitude2(Vector3Int v) {
+internal inline f32 length2(Vector3Int v) {
   f32 result = (f32)(v.x * v.x + v.y * v.y + v.z * v.z);
   return result;
 }
-internal inline f32 magnitude2(Vector4Int v) {
+internal inline f32 length2(Vector4Int v) {
   f32 result = (f32)(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
+  return result;
+}
+
+
+internal inline Vector3 get_nearest_axis(Vector3 v) {
+  Vector3 result = Vector3(0, 0, 0);
+  f32 x = Abs(v.x);
+  f32 y = Abs(v.y);
+  f32 z = Abs(v.z);
+  if (x > y) {
+    if (x > z) {
+      result.x = v.x < 0 ? -1.0f : 1.0f;
+    } else {
+      result.z = v.z < 0 ? -1.0f : 1.0f;
+    }
+  } else {
+    if (y > z) {
+      result.y = v.y < 0 ? -1.0f : 1.0f;
+    } else {
+      result.z = v.z < 0 ? -1.0f : 1.0f;
+    }
+  }
+  return result;
+}
+
+internal inline Vector3 forward_from_theta(f32 theta) {
+  Vector4 forward = rotate_rh(theta, Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1);
+  Vector3 result = to_vec3(forward);
+  return result;
+}
+
+internal inline Vector3 unit_vector(int axis) {
+  Vector3 result = Vector3();
+  switch (axis) {
+  case AXIS_X: result = Vector3(1, 0, 0); break;
+  case AXIS_Y: result = Vector3(0, 1, 0); break;
+  case AXIS_Z: result = Vector3(0, 0, 1); break;
+  }
+  return result;
+}
+
+internal inline f32 get_max_elem(Vector3 v) {
+  f32 result = Abs(v.x);
+  if (Abs(v.y) > result) result = Abs(v.y);
+  if (Abs(v.z) > result) result = Abs(v.z);
+  return result;
+}
+
+internal inline f32 get_min_elem(Vector3 v) {
+  f32 result = Abs(v.x);
+  if (Abs(v.y) < result) result = Abs(v.y);
+  if (Abs(v.z) < result) result = Abs(v.z);
+  return result;
+}
+
+internal inline f32 distance(Vector3 p0, Vector3 p1) {
+  Vector3 v = p0 - p1;
+  f32 result = length(v);
   return result;
 }
 
@@ -429,7 +498,7 @@ internal inline Vector3 cross(Vector3 a, Vector3 b) {
 
 internal inline Vector3 normalize(Vector3 v) {
   Vector3 result = {0, 0, 0};
-  f32 mag = magnitude(v);
+  f32 mag = length(v);
   if (mag != 0) {
     result.x = v.x / mag;
     result.y = v.y / mag;
@@ -439,7 +508,7 @@ internal inline Vector3 normalize(Vector3 v) {
 } 
 internal inline Vector4 normalize(Vector4 v) {
   Vector4 result = {0, 0, 0, 0};
-  f32 mag = magnitude(v);
+  f32 mag = length(v);
   if (mag != 0) {
     result.x = v.x / mag;
     result.y = v.y / mag;
@@ -452,7 +521,7 @@ internal inline Vector4 normalize(Vector4 v) {
 internal inline Vector3 projection(Vector3 a, Vector3 b) {
   Vector3 result;
   f32 d = dot(a, b);
-  f32 m = magnitude(b);
+  f32 m = length(b);
   result = d / (m * m) * b;
   return result;
 }
@@ -482,9 +551,6 @@ internal inline Matrix4 transpose(Matrix4 m) {
   result._31 = m._13;
   result._32 = m._23;
   return result;
-}
-
-internal inline Matrix3 inverse(Matrix3 m) {
 }
 
 internal inline Matrix3 transpose(Matrix3 m) {
@@ -754,7 +820,7 @@ internal inline Matrix4 ortho_rh_zo(f32 left, f32 right, f32 bottom, f32 top, f3
   result._30 = -(right + left) / (right - left);
   result._31 = -(top + bottom) / (top - bottom);
 // #if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
-#if 0
+#if 1
   result._22 = -1.0f / (far - near);
   result._32 = -near / (far - near);
 #else
@@ -800,32 +866,5 @@ internal inline Vector4 operator*(Matrix4 m, Vector4 v) {
   result.elements[1] = v.elements[0] * m._10 + v.elements[1] * m._11 + v.elements[2] * m._12 + v.elements[3] * m._13;
   result.elements[2] = v.elements[0] * m._20 + v.elements[1] * m._21 + v.elements[2] * m._22 + v.elements[3] * m._23;
   result.elements[3] = v.elements[0] * m._30 + v.elements[1] * m._31 + v.elements[2] * m._32 + v.elements[3] * m._33;
-  return result;
-}
-
-internal inline Vector3 get_nearest_axis(Vector3 v) {
-  Vector3 result = Vector3(0, 0, 0);
-  f32 x = Abs(v.x);
-  f32 y = Abs(v.y);
-  f32 z = Abs(v.z);
-  if (x > y) {
-    if (x > z) {
-      result.x = v.x < 0 ? -1.0f : 1.0f;
-    } else {
-      result.z = v.z < 0 ? -1.0f : 1.0f;
-    }
-  } else {
-    if (y > z) {
-      result.y = v.y < 0 ? -1.0f : 1.0f;
-    } else {
-      result.z = v.z < 0 ? -1.0f : 1.0f;
-    }
-  }
-  return result;
-}
-
-internal inline Vector3 forward_from_theta(f32 theta) {
-  Vector4 forward = rotate_rh(theta, Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1);
-  Vector3 result = to_vector3(forward);
   return result;
 }

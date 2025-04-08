@@ -55,6 +55,7 @@ union Vector4 {
 
   Vector4() { x = y = z = w = 0; }
   Vector4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
+  Vector4(Vector3 v, float w) : x(v.x), y(v.y), z(v.z), w(w) {}
   float &operator[](int idx) {
     assert(idx < 4);
     return elements[idx];
@@ -146,5 +147,10 @@ union Matrix4 {
     return columns[idx];
   }
 };
+
+internal inline Matrix4 operator*(Matrix4 a, Matrix4 b);
+
+internal inline Vector4 operator*(Matrix4 m, Vector4 v);
+internal inline Matrix4 rotate_rh(f32 angle, Vector3 axis);
 
 #endif // CORE_MATH_H
