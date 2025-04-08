@@ -59,10 +59,10 @@ internal char *string_from_entity_kind(Entity_Kind kind) {
     return "Guy";
   case ENTITY_BLOCK:
     return "Block";
-  case ENTITY_ARROW:
-    return "Arrow";
   case ENTITY_MIRROR:
     return "Mirror";
+  case ENTITY_SUN:
+    return "Sun";
   } 
 }
 
@@ -84,6 +84,18 @@ internal void remove_grid_entity(World *world, Entity *entity) {
       break;
     }
   }
+}
+
+internal Sun *get_sun(World *world) {
+  Sun *sun = nullptr;
+  for (int i = 0; i < world->entities.count; i++) {
+    Entity *e = world->entities[i];
+    if (e->kind == ENTITY_SUN) {
+      sun = static_cast<Sun*>(e);
+      break;
+    }
+  }
+  return sun;
 }
 
 internal World *load_world(String8 name) {
@@ -126,11 +138,10 @@ internal World *load_world(String8 name) {
   camera->origin = Vector3(x, y, z);
   camera->update_euler_angles(yaw, pitch);
 
-  Pid max_id = 0;
-  u32 entity_count = buffer->get_le32();
+  Pid id = 1;
 
+  u32 entity_count = buffer->get_le32();
   for (u32 i = 0; i < entity_count; i++) {
-    u64 id = buffer->get_le64();
     Entity_Kind kind = (Entity_Kind)buffer->get_le16();
     u64 flags = buffer->get_le64();
     u64 prototype_id = buffer->get_le64();
@@ -141,21 +152,33 @@ internal World *load_world(String8 name) {
 
     Entity_Prototype *prototype = entity_prototype_lookup(prototype_id);
     Entity *entity = entity_from_prototype(prototype);
-    entity->id = (Pid)id;
+    entity->id = id;
     entity->flags = flags;
     entity->set_position(Vector3Int(x, y, z));
     entity->set_theta(theta);
 
-    if (entity->kind == ENTITY_GUY) {
+    switch (entity->kind) {
+    case ENTITY_GUY:
+    {
       world->guy = static_cast<Guy*>(entity);
+      break;
+    }
+
+    case ENTITY_SUN:
+    {
+      Sun *sun = static_cast<Sun*>(entity);
+      sun->light_direction.x = buffer->get_f32();
+      sun->light_direction.y = buffer->get_f32();
+      sun->light_direction.z = buffer->get_f32();
+      break;
+    }
     }
 
     world->entities.push(entity);
-
-    if (id > max_id) max_id = (Pid)id;
+    id++;
   }
 
-  world->next_pid = max_id + 1;
+  world->next_pid = id + 1;
 
   if (!world->guy) {
     Entity_Prototype *prototype = entity_prototype_lookup("Guy");
@@ -171,6 +194,29 @@ internal World *load_world(String8 name) {
 
 internal void save_world(World *world) {
   save_world(world, world->name);
+}
+
+internal void serialize_entity(Byte_Buffer *buffer, Entity *e) {
+  buffer->put_le16(e->kind);
+  buffer->put_le64(e->flags);
+  buffer->put_le64(e->prototype_id);
+
+  buffer->put_le32(e->position.x);
+  buffer->put_le32(e->position.y);
+  buffer->put_le32(e->position.z);
+
+  buffer->put_f32(e->theta);
+
+  switch (e->kind) {
+  case ENTITY_SUN:
+  {
+    Sun *sun = static_cast<Sun*>(e);
+    buffer->put_f32(sun->light_direction.x);
+    buffer->put_f32(sun->light_direction.y);
+    buffer->put_f32(sun->light_direction.z);
+    break;
+  }
+  }
 }
 
 internal void save_world(World *world, String8 file_name) {
@@ -194,16 +240,7 @@ internal void save_world(World *world, String8 file_name) {
 
   for (int i = 0; i < world->entities.count; i++) {
     Entity *e = world->entities[i];
-    buffer->put_le64(e->id);
-    buffer->put_le16(e->kind);
-    buffer->put_le64(e->flags);
-    buffer->put_le64(e->prototype_id);
-
-    buffer->put_le32(e->position.x);
-    buffer->put_le32(e->position.y);
-    buffer->put_le32(e->position.z);
-
-    buffer->put_f32(e->theta);
+    serialize_entity(buffer, e);
   }
 
   OS_Handle file = os_open_file(file_path, OS_AccessFlag_Write);
@@ -227,7 +264,10 @@ internal Entity *entity_make(Entity_Kind kind) {
     e = (Entity *)entity_alloc(sizeof(Entity));
     break;
   case ENTITY_GUY:
-    e = (Guy *)entity_alloc(sizeof(Guy));
+    e = (Entity *)entity_alloc(sizeof(Guy));
+    break;
+  case ENTITY_SUN:
+    e = (Entity *)entity_alloc(sizeof(Sun));
     break;
   }
   e->kind = kind;
@@ -268,7 +308,7 @@ internal void update_guy_mirror(Guy *guy) {
   for (int i = 0; i < mirrors.count; i++) {
     Entity *mirror = mirrors[i];
 
-    Vector3 forward = to_vector3(rotate_rh(-mirror->theta, Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1));
+    Vector3 forward = to_vec3(rotate_rh(-mirror->theta, Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1));
     Vector3Int dist = guy->position - mirror->position;
     if (dist.y != 0) break;
     int dx = forward.x > 0 ? 1 : -1;
@@ -307,8 +347,8 @@ internal void update_guy_mirror(Guy *guy) {
   Entity *mirror = lookup_entity(guy->mirror_id);
   if (mirror) {
     Vector3 mirror_forward = forward_from_theta(-mirror->theta);
-    Vector3 direction = to_vector3(guy->position - mirror->position);
-    int distance = (int)Abs(magnitude(direction));
+    Vector3 direction = to_vec3(guy->position - mirror->position);
+    int distance = (int)Abs(length(direction));
 
     if (direction.x) {
       int dz = (int)roundf(mirror_forward.z);
@@ -449,40 +489,57 @@ void update_guy(Guy *guy) {
   }
 }
 
-void Entity::update() {
-  switch (kind) {
+internal void update_sun(Sun *sun) {
+  World *world = get_world();
+  AABB bounds = world->bounding_box;
+  Vector3 center = get_aabb_center(bounds);
+  Vector3 bound_dim = get_aabb_dimension(bounds);
+  f32 radius = get_max_elem(bound_dim);
+
+  Vector3 light_position = center;
+  Vector3 light_target = light_position + sun->light_direction;
+
+  sun->light_projection = ortho_rh_zo(center.x - radius, center.x + radius, center.y - radius, center.y + radius, center.z - radius, center.z + radius);
+  // sun->light_projection = ortho_rh_zo(center.x - bound_dim.x, center.x + bound_dim.x, center.y - bound_dim.y, center.y + bound_dim.y, center.z - bound_dim.z, center.z + bound_dim.z);
+  sun->light_view = look_at_rh(light_position, light_target, Vector3(0, 1, 0));
+  sun->light_space_matrix = sun->light_projection * sun->light_view;
+}
+
+internal void update_entity(Entity *e, f32 dt) {
+  switch (e->kind) {
+
   case ENTITY_GUY:
   {
-    Guy *guy = static_cast<Guy*>(this);
+    Guy *guy = static_cast<Guy*>(e);
     update_guy(guy);
     break;
   }
   }
 
-  if (!(flags & ENTITY_FLAG_STATIC)) {
+  if (!(e->flags & ENTITY_FLAG_STATIC)) {
     f32 move_speed = 8.0f;
-    if (Abs(visual_position.x - position.x) > 0.001f) {
-      visual_position.x += (position.x - visual_position.x) * move_speed * game_state->dt;
+    if (Abs(e->visual_position.x - e->position.x) > 0.001f) {
+      e->visual_position.x += (e->position.x - e->visual_position.x) * move_speed * dt;
     } else {
-      visual_position.x = (f32)position.x;
+      e->visual_position.x = (f32)e->position.x;
     }
-    if (Abs(visual_position.y - position.y) > 0.001f) {
-      visual_position.y += (position.y - visual_position.y) * move_speed * game_state->dt;
+    if (Abs(e->visual_position.y - e->position.y) > 0.001f) {
+      e->visual_position.y += (e->position.y - e->visual_position.y) * move_speed * dt;
     } else {
-      visual_position.y = (f32)position.y;
+      e->visual_position.y = (f32)e->position.y;
     }
-    if (Abs(visual_position.z - position.z) > 0.001f) {
-      visual_position.z += (position.z - visual_position.z) * move_speed * game_state->dt;
+    if (Abs(e->visual_position.z - e->position.z) > 0.001f) {
+      e->visual_position.z += (e->position.z - e->visual_position.z) * move_speed * dt;
     } else {
-      visual_position.z = (f32)position.z;
+      e->visual_position.z = (f32)e->position.z;
     }
 
     f32 rot_speed = 8.0f;
-    f32 theta_dt = theta_target - theta;
+    f32 theta_dt = e->theta_target - e->theta;
     if (Abs(theta_dt) > 0.001f) {
-      theta += theta_dt * rot_speed * game_state->dt;
+      e->theta += theta_dt * rot_speed * dt;
     } else {
-      theta = (f32)theta_target;
+      e->theta = (f32)e->theta_target;
     }
   }
 }
@@ -589,17 +646,44 @@ internal void update_camera_position(Camera *camera) {
   }
 }
 
-internal void update_world_state() {
-  World *world = get_world();
-  Vector2 mouse_delta = get_mouse_delta();
-  update_camera_orientation(&game_state->camera, mouse_delta);
-  update_camera_position(&game_state->camera);
+internal AABB get_world_bounds(World *world) {
+  AABB bounds = {};
 
-  //@Note Update entities
   for (int i = 0; i < world->entities.count; i++) {
     Entity *e = world->entities[i];
-    e->update();
+    if (e->position.x < bounds.min.x) bounds.min.x = (f32)e->position.x;
+    if (e->position.y < bounds.min.y) bounds.min.y = (f32)e->position.y;
+    if (e->position.z < bounds.min.z) bounds.min.z = (f32)e->position.z;
+    if (e->position.x > bounds.max.x) bounds.max.x = (f32)e->position.x;
+    if (e->position.y > bounds.max.y) bounds.max.y = (f32)e->position.y;
+    if (e->position.z > bounds.max.z) bounds.max.z = (f32)e->position.z;
   }
+
+  return bounds;
+}
+
+internal void update_world_state() {
+  World *world = get_world();
+  if (!game_state->editing && !game_state->paused) {
+    Vector2 mouse_delta = get_mouse_delta();
+    update_camera_orientation(&game_state->camera, mouse_delta);
+    update_camera_position(&game_state->camera);
+  }
+
+  if (!game_state->editing && !game_state->paused) {
+    //@Note Update entities
+    for (int i = 0; i < world->entities.count; i++) {
+      Entity *e = world->entities[i];
+      update_entity(e, game_state->dt);
+    }
+  }
+
+  {
+    Sun *sun = get_sun(world);
+    if (sun) update_sun(sun);
+  }
+
+  world->bounding_box = get_world_bounds(world);
 }
 
 internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, f32 dt) {
@@ -618,7 +702,7 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     game_state->editing = false;
 
     Arena *temp = make_arena(get_malloc_allocator());
-    default_font = load_font(temp, str8_lit("data/fonts/seguisb.ttf"), 15);
+    default_font = load_font(temp, str8_lit("data/fonts/seguisb.ttf"), 16);
 
     Triangle_Mesh *guy_mesh      = load_mesh("data/meshes/Character/character.obj");
     Triangle_Mesh *block_mesh    = load_mesh("data/meshes/tile.obj");
@@ -665,6 +749,12 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     sand_prototype->entity.mesh = sand_mesh;
     sand_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
+    Entity_Prototype *sun_prototype = entity_prototype_create("Sun");
+    sun_prototype->entity.kind = ENTITY_SUN;
+    sun_prototype->entity.flags = ENTITY_FLAG_STATIC;
+    sun_prototype->entity.mesh = nullptr;
+    sun_prototype->entity.override_color = Vector4(0.9f, 0.84f, 0.1f, 1.0f);
+
     game_state->camera.origin = Vector3(0, 0, 0);
     game_state->camera.up = Vector3(0, 1, 0);
     game_state->camera.forward = Vector3(0, 0, -1);
@@ -707,7 +797,7 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
   Vector2 window_dim = os_get_window_dim(window_handle);
 
   game_state->dt = dt / 1000.0f;
-  game_state->window_dim = truncate(window_dim);
+  game_state->window_dim = to_vec2i(window_dim);
 
   g_viewport->window_handle = window_handle;
   if (g_viewport->dimension != window_dim) {
@@ -749,7 +839,10 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
 
   if (!game_state->paused && !game_state->editing) {
     input_set_mouse_capture(true);
-    update_world_state();
+  }
+
+  update_world_state();
+  if (!game_state->editing) {
     draw_scene();
   }
 
