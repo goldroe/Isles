@@ -661,6 +661,7 @@ internal AABB get_world_bounds(World *world) {
 
   for (int i = 0; i < world->entities.count; i++) {
     Entity *e = world->entities[i];
+    if (e->kind == ENTITY_SUN) continue;
     if (e->position.x < bounds.min.x) bounds.min.x = (f32)e->position.x;
     if (e->position.y < bounds.min.y) bounds.min.y = (f32)e->position.y;
     if (e->position.z < bounds.min.z) bounds.min.z = (f32)e->position.z;
@@ -797,6 +798,8 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     // play_music("439015_somepin_cavernous.mp3");
   }
 
+  Editor *editor = get_editor();
+
   audio_engine->origin = game_state->camera.origin;
   audio_engine->update();
 
@@ -810,9 +813,7 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
   game_state->window_dim = to_vec2i(window_dim);
 
   g_viewport->window_handle = window_handle;
-  if (g_viewport->dimension != window_dim) {
-    g_viewport->dimension = window_dim;
-  }
+  g_viewport->dimension = window_dim;
 
   os_set_cursor(OS_Cursor_Arrow);
 
@@ -861,7 +862,7 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     if (!game_state->editing) {
       game_state->editing = true; 
       editor->camera = game_state->camera;
-      editor->update_entity_panel();
+      update_entity_panel(editor);
     } else {
       game_state->editing = false; 
     }
