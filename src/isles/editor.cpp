@@ -1,23 +1,32 @@
 //@Todo UI item expansion
 
-global Editor *editor;
+global Editor *g_editor;
 global Picker *g_picker;
 
+internal char *string_from_field_kind(Field_Kind kind) {
+  switch (kind) {
+  case FIELD_INT:
+    return "int";
+  case FIELD_FLOAT:
+    return "float";
+  case FIELD_VEC2:
+    return "Vector2";
+  case FIELD_VEC3:
+    return "Vector3";
+  case FIELD_VEC4:
+    return "Vector4";
+  }
+  return nullptr;
+}
+
 internal inline Editor *get_editor() {
-  return editor;
+  return g_editor;
 }
 
 internal void init_editor() {
-  editor = new Editor();
+  g_editor = new Editor();
 
-  editor->entity_panel = new Entity_Panel();
-  editor->entity_panel->position_x = ui_line_edit_create(str8_lit("X"));
-  editor->entity_panel->position_y = ui_line_edit_create(str8_lit("Y"));
-  editor->entity_panel->position_z = ui_line_edit_create(str8_lit("Z"));
-  editor->entity_panel->theta      = ui_line_edit_create(str8_lit("Theta"));
-  editor->entity_panel->color_r = ui_line_edit_create(str8_lit("R"));
-  editor->entity_panel->color_g = ui_line_edit_create(str8_lit("G"));
-  editor->entity_panel->color_b = ui_line_edit_create(str8_lit("B"));
+  Editor *editor = g_editor;
 
   editor->gizmo_meshes[GIZMO_TRANSLATE][AXIS_X] = load_mesh("data/meshes/gizmo/translate_x.obj");
   editor->gizmo_meshes[GIZMO_TRANSLATE][AXIS_Y] = load_mesh("data/meshes/gizmo/translate_y.obj");
@@ -31,51 +40,98 @@ internal void init_editor() {
   editor->panel->expand_saveas = false;
   editor->panel->edit_saveas = ui_line_edit_create(str8_lit("Save As"));
   editor->panel->edit_load_world = ui_line_edit_create(str8_lit("Load"));
+
+  editor->entity_panel = new Entity_Panel();
+
+  Entity_Field *position_field = new Entity_Field();
+  position_field->name = str8_lit("position");
+  position_field->expand = 0;
+  position_field->kind = FIELD_VEC3;
+  {
+    position_field->fields.push(ui_line_edit_create(str8_lit("x")));
+    position_field->fields.push(ui_line_edit_create(str8_lit("y")));
+    position_field->fields.push(ui_line_edit_create(str8_lit("z")));
+  }
+  editor->entity_panel->position_field = position_field;
+
+  Entity_Field *color_field = new Entity_Field();
+  color_field->name = str8_lit("override_color");
+  color_field->expand = 0;
+  color_field->kind = FIELD_VEC4;
+  {
+    color_field->fields.push(ui_line_edit_create(str8_lit("r")));
+    color_field->fields.push(ui_line_edit_create(str8_lit("g")));
+    color_field->fields.push(ui_line_edit_create(str8_lit("b")));
+    color_field->fields.push(ui_line_edit_create(str8_lit("a")));
+  }
+  editor->entity_panel->color_field = color_field;
+
+  Entity_Field *theta_field = new Entity_Field();
+  theta_field->name = str8_lit("theta");
+  theta_field->expand = 0;
+  theta_field->kind = FIELD_FLOAT;
+  theta_field->fields.push(ui_line_edit_create(str8_lit("Theta")));
+  editor->entity_panel->theta_field = theta_field;
+
+  editor->entity_panel->fields.push(position_field);
+  editor->entity_panel->fields.push(color_field);
+  editor->entity_panel->fields.push(theta_field);
 }
 
-void Editor::update_entity_panel() {
+internal void update_entity_panel(Editor *editor) {
+  Entity_Panel *panel = editor->entity_panel;
   Entity *entity = editor->selected_entity;
+
+  panel->dirty = false;
+
   if (entity) {
-    int n;
-    n = snprintf((char *)entity_panel->position_x->buffer, entity_panel->position_x->buffer_capacity, "%.2f", entity->position.x);
-    entity_panel->position_x->buffer_len = n;
-    entity_panel->position_x->buffer_pos = n;
+    int n = 0;
 
-    n = snprintf((char *)entity_panel->position_y->buffer, entity_panel->position_y->buffer_capacity, "%.2f", entity->position.y);
-    entity_panel->position_y->buffer_len = n;
-    entity_panel->position_y->buffer_pos = n;
+    n = snprintf((char *)panel->position_field->fields[0]->buffer, panel->position_field->fields[0]->buffer_capacity, "%g", entity->position.x);
+    panel->position_field->fields[0]->buffer_len = n;
+    panel->position_field->fields[0]->buffer_pos = n;
 
-    n = snprintf((char *)entity_panel->position_z->buffer, entity_panel->position_z->buffer_capacity, "%.2f", entity->position.z);
-    entity_panel->position_z->buffer_len = n;
-    entity_panel->position_z->buffer_pos = n;
+    n = snprintf((char *)panel->position_field->fields[1]->buffer, panel->position_field->fields[1]->buffer_capacity, "%g", entity->position.y);
+    panel->position_field->fields[1]->buffer_len = n;
+    panel->position_field->fields[1]->buffer_pos = n;
 
-    n = snprintf((char *)entity_panel->theta->buffer, entity_panel->theta->buffer_capacity, "%.2f", RadToDeg(entity->theta_target));
-    entity_panel->theta->buffer_len = n;
-    entity_panel->theta->buffer_pos = n;
+    n = snprintf((char *)panel->position_field->fields[2]->buffer, panel->position_field->fields[2]->buffer_capacity, "%g", entity->position.z);
+    panel->position_field->fields[2]->buffer_len = n;
+    panel->position_field->fields[2]->buffer_pos = n;
 
-    n = snprintf((char *)entity_panel->color_r->buffer, entity_panel->color_r->buffer_capacity, "%.2f", entity->override_color.x);
-    entity_panel->color_r->buffer_len = n;
-    entity_panel->color_r->buffer_pos = n;
+    n = snprintf((char *)panel->color_field->fields[0]->buffer, panel->color_field->fields[0]->buffer_capacity, "%g", entity->override_color.x);
+    panel->color_field->fields[0]->buffer_len = n;
+    panel->color_field->fields[0]->buffer_pos = n;
 
-    n = snprintf((char *)entity_panel->color_g->buffer, entity_panel->color_g->buffer_capacity, "%.2f", entity->override_color.y);
-    entity_panel->color_g->buffer_len = n;
-    entity_panel->color_g->buffer_pos = n;
+    n = snprintf((char *)panel->color_field->fields[1]->buffer, panel->color_field->fields[1]->buffer_capacity, "%g", entity->override_color.y);
+    panel->color_field->fields[1]->buffer_len = n;
+    panel->color_field->fields[1]->buffer_pos = n;
 
-    n = snprintf((char *)entity_panel->color_b->buffer, entity_panel->color_b->buffer_capacity, "%.2f", entity->override_color.z);
-    entity_panel->color_b->buffer_len = n;
-    entity_panel->color_b->buffer_pos = n;
+    n = snprintf((char *)panel->color_field->fields[2]->buffer, panel->color_field->fields[2]->buffer_capacity, "%g", entity->override_color.z);
+    panel->color_field->fields[2]->buffer_len = n;
+    panel->color_field->fields[2]->buffer_pos = n;
+
+    n = snprintf((char *)panel->color_field->fields[3]->buffer, panel->color_field->fields[3]->buffer_capacity, "%g", entity->override_color.w);
+    panel->color_field->fields[3]->buffer_len = n;
+    panel->color_field->fields[3]->buffer_pos = n;
+
+    n = snprintf((char *)panel->theta_field->fields[0]->buffer, panel->theta_field->fields[0]->buffer_capacity, "%g", RadToDeg(entity->theta));
+    panel->theta_field->fields[0]->buffer_len = n;
+    panel->theta_field->fields[0]->buffer_pos = n;
  }
 }
 
-void Editor::select_entity(Entity *e) {
-  selected_entity = e;
-  update_entity_panel();
+internal void select_entity(Editor *editor, Entity *e) {
+  editor->selected_entity = e;
+  update_entity_panel(editor);
 }
 
 internal void r_picker_render_gizmo(Picker *picker) {
   Render_Target *render_target = picker->render_target;
   
   R_D3D11_State *d3d = r_d3d11_state();
+
+  Editor *editor = g_editor;
 
   set_blend_state(BLEND_STATE_DEFAULT);
   set_depth_state(DEPTH_STATE_DISABLE);
@@ -93,13 +149,13 @@ internal void r_picker_render_gizmo(Picker *picker) {
 
   Entity *e = editor->selected_entity;
 
-  f32 gizmo_scale_factor = Abs(length(editor->camera.origin - editor->selected_entity->visual_position) * 0.5f);
+  f32 gizmo_scale_factor = Abs(length(editor->camera.origin - editor->selected_entity->position) * 0.5f);
   gizmo_scale_factor = ClampBot(gizmo_scale_factor, 1.0f);
 
   for (u32 axis = AXIS_X; axis <= AXIS_Z; axis++) {
     Triangle_Mesh *mesh = editor->gizmo_meshes[editor->active_gizmo][axis];
 
-    Matrix4 world_matrix = translate(e->visual_position.x, e->visual_position.y, e->visual_position.z) * scale(Vector3(gizmo_scale_factor, gizmo_scale_factor, gizmo_scale_factor));
+    Matrix4 world_matrix = translate(e->position) * scale(make_vec3(gizmo_scale_factor));
     Matrix4 view_matrix = editor->camera.view_matrix;
     Matrix4 xform = editor->camera.projection_matrix * view_matrix * world_matrix;
 
@@ -129,6 +185,8 @@ internal void r_picker_render_gizmo(Picker *picker) {
 internal void picker_render(Picker *picker) {
   R_D3D11_State *d3d = r_d3d11_state();
 
+  Editor *editor = g_editor;
+
   set_blend_state(BLEND_STATE_DEFAULT);
   set_depth_state(DEPTH_STATE_DEFAULT);
 
@@ -153,7 +211,7 @@ internal void picker_render(Picker *picker) {
     if (!mesh) continue;
 
     Matrix4 rotation_matrix = rotate_rh(e->visual_rotation.y, editor->camera.up);
-    Matrix4 world_matrix = translate(e->visual_position) * rotation_matrix;
+    Matrix4 world_matrix = translate(e->position) * rotation_matrix;
     Matrix4 view = editor->camera.view_matrix;
     Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * world_matrix;
 
@@ -184,7 +242,7 @@ internal void picker_render(Picker *picker) {
     Entity *e = world->entities[i];
     if (e->kind == ENTITY_SUN) {
       Matrix4 rotation_matrix = rotate_rh(e->visual_rotation.y, editor->camera.up);
-      Matrix4 world_matrix = translate(e->visual_position) * rotation_matrix;
+      Matrix4 world_matrix = translate(e->position) * rotation_matrix;
       Matrix4 view = editor->camera.view_matrix;
       Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * world_matrix;
 
@@ -198,7 +256,7 @@ internal void picker_render(Picker *picker) {
       set_constant(str8_lit("pick_color"), pick_color);
       apply_constants();
 
-      Vector3 plane_normal = e->visual_position - editor->camera.origin;
+      Vector3 plane_normal = e->position - editor->camera.origin;
       plane_normal.y = 0.0f;
       plane_normal = normalize(plane_normal);
       
@@ -285,6 +343,8 @@ internal Pid picker_get_id(Picker *picker, Vector2Int mouse) {
 }
 
 internal void update_editor() {
+  Editor *editor = g_editor;
+
   R_D3D11_State *d3d = r_d3d11_state();
 
   World *world = get_world();
@@ -320,7 +380,7 @@ internal void update_editor() {
       Vector3 meters = floor(travel);
 
       editor->selected_entity->set_position(editor->selected_entity->position + meters);
-      editor->update_entity_panel();
+      update_entity_panel(editor);
 
       if (meters.x || meters.y || meters.z) {
         editor->gizmo_mouse_start = mouse_position;
@@ -350,9 +410,9 @@ internal void update_editor() {
       Pid id = picker_get_id(g_picker, g_input.mouse_position);
       if (id != 0xFFFFFFFF) {
         Entity *e = lookup_entity(id);
-        editor->select_entity(e);
+        select_entity(editor, e);
       } else {
-        editor->select_entity(nullptr);
+        select_entity(editor, nullptr);
       }
     }
   }
@@ -376,7 +436,7 @@ internal void update_editor() {
     Entity *e = world->entities[i];
     if (e->kind == ENTITY_SUN) {
       Matrix4 rotation_matrix = rotate_rh(e->theta, editor->camera.up);
-      Matrix4 world_matrix = translate(e->visual_position) * rotation_matrix;
+      Matrix4 world_matrix = translate(e->position) * rotation_matrix;
       Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * world_matrix;
 
       set_constant(str8_lit("xform"), xform);
@@ -420,7 +480,7 @@ internal void update_editor() {
 
     set_shader(shader_entity);
 
-    f32 gizmo_scale_factor = Abs(length(editor->camera.origin - editor->selected_entity->visual_position) * 0.5f);
+    f32 gizmo_scale_factor = Abs(length(editor->camera.origin - editor->selected_entity->position) * 0.5f);
     gizmo_scale_factor = ClampBot(gizmo_scale_factor, 1.0f);
 
     Matrix4 world_matrix = make_matrix4(1.0f);
@@ -431,7 +491,7 @@ internal void update_editor() {
       Triangle_Mesh *mesh = editor->gizmo_meshes[editor->active_gizmo][axis];
       if (!mesh) continue;
 
-      Matrix4 world_matrix = translate(selected_entity->visual_position.x, selected_entity->visual_position.y, selected_entity->visual_position.z) * scale(Vector3(gizmo_scale_factor, gizmo_scale_factor, gizmo_scale_factor));
+      Matrix4 world_matrix = translate(selected_entity->position) * scale(make_vec3(gizmo_scale_factor));
       Matrix4 view_matrix = editor->camera.view_matrix;
       Matrix4 xform = editor->camera.projection_matrix * view_matrix * world_matrix;
       set_constant(str8_lit("xform"), xform);
@@ -453,6 +513,7 @@ internal void update_editor() {
 }
 
 internal Entity_Prototype *entity_prototype_lookup(u64 prototype_id) {
+  Editor *editor = g_editor;
   Entity_Prototype *result = nullptr;
   auto it = editor->prototype_table.find(prototype_id);
   if (it != editor->prototype_table.end()) {
@@ -468,6 +529,7 @@ internal Entity_Prototype *entity_prototype_lookup(const char *name) {
 }
 
 internal Entity_Prototype *entity_prototype_create(char *name) {
+  Editor *editor = g_editor;
   Entity_Prototype *result = (Entity_Prototype*)calloc(sizeof(Entity_Prototype), 1);
   result->name = name;
   result->id = djb2_hash(name);
@@ -493,7 +555,13 @@ internal void entity_from_prototype(Entity *entity, Entity_Prototype *prototype)
 }
 
 internal void editor_present_ui() {
+  Editor *editor = g_editor;
   Editor_Panel *panel = editor->panel;
+  Entity_Panel *entity_panel = editor->entity_panel;
+
+  if (entity_panel->dirty) {
+    update_entity_panel(editor); 
+  }
   
   ui_set_next_pref_width(ui_pixels(110.f));
   ui_set_next_pref_height(ui_pixels(300.f));
@@ -519,7 +587,7 @@ internal void editor_present_ui() {
     ui_set_next_pref_width(ui_pixels(80.0f));
     ui_set_next_pref_height(ui_pixels(20.0f));
     ui_set_next_text_padding(2.0f);
-    UI_Signal sig = ui_line_edit(str8_lit("##saveas_edit"), panel->edit_saveas);
+    UI_Signal sig = ui_line_edit(panel->edit_saveas, str8_lit("##saveas_edit"));
     if ((sig.flags & UI_SIGNAL_FLAG_PRESSED) && sig.key == OS_KEY_ENTER) {
       String8 name = str8(panel->edit_saveas->buffer, panel->edit_saveas->buffer_len);
       save_world(get_world(), name);
@@ -535,7 +603,7 @@ internal void editor_present_ui() {
     ui_set_next_pref_width(ui_pixels(80.0f));
     ui_set_next_pref_height(ui_pixels(20.0f));
     ui_set_next_text_padding(2.0f);
-    UI_Signal sig = ui_line_edit(str8_lit("##load_edit"), panel->edit_load_world);
+    UI_Signal sig = ui_line_edit(panel->edit_load_world, str8_lit("##load_edit"));
     if ((sig.flags & UI_SIGNAL_FLAG_PRESSED) && sig.key == OS_KEY_ENTER) {
       String8 name = str8(panel->edit_load_world->buffer, panel->edit_load_world->buffer_len);
       load_world(name);
@@ -592,7 +660,7 @@ internal void editor_present_ui() {
         Vector3 unit = get_nearest_axis(editor->camera.origin - editor->selected_entity->position);
         instance->set_position(editor->selected_entity->position + unit);
       }
-      editor->select_entity(instance);
+      select_entity(editor, instance);
 
       World *world = get_world();
       world->entities.push(instance);
@@ -607,205 +675,117 @@ internal void editor_present_ui() {
   ui_pop_parent();
   ui_pop_background_color();
 
-  Entity *entity = editor->selected_entity;
-  Entity_Panel *entity_panel = editor->entity_panel;
-  UI_Line_Edit *edit_x = entity_panel->position_x;
-  UI_Line_Edit *edit_y = entity_panel->position_y;
-  UI_Line_Edit *edit_z = entity_panel->position_z;
-  if (entity) {
-    f32 start = g_viewport->dimension.x - 160.0f;
-    ui_set_next_fixed_x(start);
-    ui_set_next_fixed_y(0.0f);
-    ui_set_next_fixed_width(160.0f);
-    ui_set_next_fixed_height(300.0f);
-    // ui_set_next_background_color(Vector4(1.f, 1.f, 1.f, 1.f));
-    UI_Box *entity_panel_box = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, str8_lit("##ent_panel"));
-    ui_push_parent(entity_panel_box);
+  if (editor->selected_entity) {
+    Entity *e = editor->selected_entity;
+    Entity_Panel *panel = editor->entity_panel;
+
+    f32 field_height = 26.0f;
+    f32 panel_width = 280.0f;
+    f32 panel_height = 560.0f;
+    f32 panel_x = g_viewport->dimension.x - panel_width;
+    f32 panel_y = 0;
+    ui_set_next_fixed_x(panel_x);
+    ui_set_next_fixed_y(panel_y);
+    ui_set_next_fixed_width(panel_width);
+    ui_set_next_fixed_height(panel_height);
+    ui_set_next_child_layout_axis(AXIS_Y);
+    UI_Box *panel_box = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, str8_lit("##entity_panel"));
+
+    ui_push_parent(panel_box);
     {
-      ui_box_create_format(UI_BOX_FLAG_TEXT_ELEMENT, "Entity: %s #%llu", string_from_entity_kind(entity->kind), entity->id);
+      ui_textf("Entity: %s #%llu", string_from_entity_kind(e->kind), e->id);
 
-      ui_set_next_pref_width(ui_children_sum());
-      ui_set_next_pref_height(ui_children_sum());
-      ui_set_next_child_layout_axis(AXIS_X);
-      ui_set_next_background_color(Vector4(0.f, 0.f, 0.f, 0.f));
-      UI_Box *panel_x = ui_box_create(0, str8_lit("##panel_x"));
-      ui_push_parent(panel_x);
-      {
-        ui_set_next_text_padding(2.0f);
-        ui_box_create(UI_BOX_FLAG_TEXT_ELEMENT, edit_x->name);
+      for (int i = 0; i < panel->fields.count; i++) {
+        Entity_Field *field = panel->fields[i];
+        bool is_compound = field->fields.count > 1;
 
-        ui_set_next_pref_width(ui_pixels(80.f));
-        ui_set_next_pref_height(ui_pixels(20.f));
-        ui_set_next_text_padding(4.0f);
-        UI_Signal sig = ui_text_edit(str8_lit("##field_x"), edit_x->buffer, edit_x->buffer_capacity, &edit_x->buffer_pos, &edit_x->buffer_len);
-
-        if (sig.flags & UI_SIGNAL_FLAG_PRESSED) {
-          f32 x = strtof((char *)edit_x->buffer, NULL);
-          entity->set_position(AXIS_X, x);
-        }
-      }
-      ui_pop_parent();
-
-      ui_set_next_pref_width(ui_children_sum());
-      ui_set_next_pref_height(ui_children_sum());
-      ui_set_next_child_layout_axis(AXIS_X);
-      ui_set_next_background_color(Vector4(0.f, 0.f, 0.f, 0.f));
-      UI_Box *panel_y = ui_box_create(0, str8_lit("##panel_y"));
-      ui_push_parent(panel_y);
-      {
-        ui_set_next_text_padding(2.0f);
-        ui_box_create(UI_BOX_FLAG_TEXT_ELEMENT, edit_y->name);
-
-        ui_set_next_text_padding(4.0f);
-        ui_set_next_pref_width(ui_pixels(80.f));
-        ui_set_next_pref_height(ui_pixels(20.f));
-        UI_Signal sig = ui_text_edit(str8_lit("##field_y"), edit_y->buffer, edit_y->buffer_capacity, &edit_y->buffer_pos, &edit_y->buffer_len);
-
-        if (sig.flags & UI_SIGNAL_FLAG_PRESSED) {
-          f32 y = strtof((char *)edit_y->buffer, NULL);
-          entity->set_position(AXIS_Y, y);
-        }
-      }
-      ui_pop_parent();
-
-      ui_set_next_pref_width(ui_children_sum());
-      ui_set_next_pref_height(ui_children_sum());
-      ui_set_next_child_layout_axis(AXIS_X);
-      ui_set_next_background_color(Vector4(0.f, 0.f, 0.f, 0.f));
-      UI_Box *panel_z = ui_box_create(0, str8_lit("##panel_z"));
-      ui_push_parent(panel_z);
-      {
-        ui_set_next_text_padding(2.0f);
-        ui_box_create(UI_BOX_FLAG_TEXT_ELEMENT, edit_z->name);
-
-        ui_set_next_pref_width(ui_pixels(80.f));
-        ui_set_next_pref_height(ui_pixels(20.f));
-        ui_set_next_text_padding(4.0f);
-        UI_Signal sig = ui_text_edit(str8_lit("##field_z"), edit_z->buffer, edit_z->buffer_capacity, &edit_z->buffer_pos, &edit_z->buffer_len);
-
-        if (sig.flags & UI_SIGNAL_FLAG_PRESSED) {
-          f32 z = (f32)strtof((char *)edit_z->buffer, NULL);
-          entity->set_position(AXIS_Z, z);
-        }
-      }
-      ui_pop_parent();
-
-      //@Note Theta
-      {
-        ui_set_next_pref_width(ui_children_sum());
-        ui_set_next_pref_height(ui_children_sum());
+        ui_set_next_pref_width(ui_pct(1.0f));
+        ui_set_next_pref_height(ui_pixels(field_height));
         ui_set_next_child_layout_axis(AXIS_X);
-        UI_Box *cont = ui_box_create(0, str8_lit("##theta"));
-        ui_push_parent(cont);
+        int flags = UI_BOX_FLAG_CLICKABLE | UI_BOX_FLAG_DRAW_BORDER;
+        if (is_compound) flags |= UI_BOX_FLAG_CLICKABLE;
+        UI_Box *field_container = ui_box_create_format(flags, "##field_%d", i);
+        UI_Signal field_cont_sig = ui_signal_from_box(field_container);
+
+        ui_push_parent(field_container);
         {
-          ui_set_next_text_padding(2.0f);
-          ui_box_create(UI_BOX_FLAG_TEXT_ELEMENT, entity_panel->theta->name);
+          ui_push_pref_width(ui_pct(0.5f));
+          ui_push_pref_height(ui_pct(1.0f));
+          {
+            ui_text(field->name);
 
-          ui_set_next_pref_width(ui_pixels(80.f));
-          ui_set_next_pref_height(ui_pixels(20.f));
-          ui_set_next_text_padding(4.0f);
-          UI_Signal sig = ui_text_edit(str8_lit("##field"), entity_panel->theta->buffer, entity_panel->theta->buffer_capacity, &entity_panel->theta->buffer_pos, &entity_panel->theta->buffer_len);
-
-          if (sig.flags & UI_SIGNAL_FLAG_PRESSED) {
-            f32 f = strtof((char *)entity_panel->theta->buffer, NULL);
-            f = DegToRad(f);
-            entity->set_theta(f);
+            if (is_compound) {
+              ui_textf("(%s)", string_from_field_kind(field->kind));
+              
+              if (ui_clicked(field_cont_sig)) {
+                field->expand = !field->expand;
+              }
+            } else {
+              UI_Line_Edit *line_edit = field->fields[0];
+              // ui_set_next_text_padding(4.0f);
+              UI_Signal sig = ui_line_edit(line_edit, str8_lit("##edit"));
+              if (ui_pressed(sig) && sig.key == OS_KEY_ENTER) {
+                printf("ENTER\n");
+                field->dirty = true;
+                editor->entity_panel->dirty = true;
+              }
+            }
           }
+          ui_pop_pref_width();
+          ui_pop_pref_height();
         }
         ui_pop_parent();
-      }
 
-      UI_Line_Edit *color_r = entity_panel->color_r;
-      UI_Line_Edit *color_g = entity_panel->color_g;
-      UI_Line_Edit *color_b = entity_panel->color_b;
+        if (is_compound && field->expand) {
+          for (int j = 0; j < field->fields.count; j++) {
+            ui_set_next_pref_width(ui_pct(1.0f));
+            ui_set_next_pref_height(ui_pixels(field_height));
+            ui_set_next_child_layout_axis(AXIS_X);
+            UI_Box *cont = ui_box_create(UI_BOX_FLAG_DRAW_BORDER, 0);
 
-      //@Note Override color
-      ui_set_next_pref_width(ui_children_sum());
-      ui_set_next_pref_height(ui_children_sum());
-      ui_set_next_child_layout_axis(AXIS_X);
-      ui_set_next_background_color(Vector4(0.f, 0.f, 0.f, 0.f));
-      UI_Box *color_box_r = ui_box_create(0, str8_lit("##color_r"));
-      ui_push_parent(color_box_r);
-      {
-        ui_set_next_text_padding(2.0f);
-        ui_box_create(UI_BOX_FLAG_TEXT_ELEMENT, color_r->name);
+            ui_push_parent(cont);
+            ui_push_pref_width(ui_pct(0.5f));
+            ui_push_pref_height(ui_pixels(field_height));
+            {
+              UI_Line_Edit *line_edit = field->fields[j];
+              ui_text(line_edit->name);
+              
+              // ui_set_next_text_padding(4.0f);
+              UI_Signal sig = ui_line_editf(line_edit, "##edit_%d%d", i, j);
+              if (ui_pressed(sig) && sig.key == OS_KEY_ENTER) {
+                field->dirty = true;
+                editor->entity_panel->dirty = true;
+              }
+            }
+            ui_pop_parent();
+            ui_pop_pref_width();
+            ui_pop_pref_height();
 
-        ui_set_next_pref_width(ui_pixels(80.f));
-        ui_set_next_pref_height(ui_pixels(20.f));
-        ui_set_next_text_padding(4.0f);
-        UI_Signal sig = ui_text_edit(str8_lit("##field_r"), color_r->buffer, color_r->buffer_capacity, &color_r->buffer_pos, &color_r->buffer_len);
-
-        if (sig.flags & UI_SIGNAL_FLAG_PRESSED) {
-          f32 r = (f32)strtof((char *)color_r->buffer, NULL);
-          entity->override_color.x = r;
+          }
         }
+
       }
-      ui_pop_parent();
-
-      ui_set_next_pref_width(ui_children_sum());
-      ui_set_next_pref_height(ui_children_sum());
-      ui_set_next_child_layout_axis(AXIS_X);
-      ui_set_next_background_color(Vector4(0.f, 0.f, 0.f, 0.f));
-      UI_Box *color_g_box = ui_box_create(0, str8_lit("##color_g"));
-      ui_push_parent(color_g_box);
-      {
-        ui_set_next_text_padding(2.0f);
-        ui_box_create(UI_BOX_FLAG_TEXT_ELEMENT, color_g->name);
-
-        ui_set_next_text_padding(4.0f);
-        ui_set_next_pref_width(ui_pixels(80.f));
-        ui_set_next_pref_height(ui_pixels(20.f));
-        UI_Signal sig = ui_text_edit(str8_lit("##field_g"), color_g->buffer, color_g->buffer_capacity, &color_g->buffer_pos, &color_g->buffer_len);
-
-        if (sig.flags & UI_SIGNAL_FLAG_PRESSED) {
-          f32 g = strtof((char *)color_g->buffer, NULL);
-          entity->override_color.y = g;
-        }
-      }
-      ui_pop_parent();
-
-      ui_set_next_pref_width(ui_children_sum());
-      ui_set_next_pref_height(ui_children_sum());
-      ui_set_next_child_layout_axis(AXIS_X);
-      ui_set_next_background_color(Vector4(0.f, 0.f, 0.f, 0.f));
-      UI_Box *color_b_box = ui_box_create(0, str8_lit("##color_b"));
-      ui_push_parent(color_b_box);
-      {
-        ui_set_next_text_padding(2.0f);
-        ui_box_create(UI_BOX_FLAG_TEXT_ELEMENT, color_b->name);
-
-        ui_set_next_pref_width(ui_pixels(80.f));
-        ui_set_next_pref_height(ui_pixels(20.f));
-        ui_set_next_text_padding(4.0f);
-        UI_Signal sig = ui_text_edit(str8_lit("##field_b"), color_b->buffer, color_b->buffer_capacity, &color_b->buffer_pos, &color_b->buffer_len);
-
-        if (sig.flags & UI_SIGNAL_FLAG_PRESSED) {
-          f32 b = strtof((char *)color_b->buffer, NULL);
-          entity->override_color.z = b;
-        }
-      }
-      ui_pop_parent();
-
 
       if (ui_clicked(ui_button(str8_lit("Clone")))) {
         Entity_Prototype *prototype = entity_prototype_lookup(editor->selected_entity->prototype_id);
         if (prototype) {
           Entity *new_entity = entity_from_prototype(prototype);
-          new_entity->set_position(entity->position);
+          new_entity->set_position(e->position);
           new_entity->override_color = editor->selected_entity->override_color;
 
-          editor->select_entity(new_entity);
+          select_entity(editor, new_entity);
           get_world()->entities.push(new_entity);
         }
       }
 
       if (ui_clicked(ui_button(str8_lit("Delete")))) {
         remove_grid_entity(get_world(), editor->selected_entity);
-        entity->to_be_destroyed = true;
-        editor->select_entity(nullptr);
+        e->to_be_destroyed = true;
+        select_entity(editor, nullptr);
       }
+
+      ui_pop_parent();
     }
-    ui_pop_parent();
 
     //@Note Entity Flag Panel
     {
@@ -822,15 +802,15 @@ internal void editor_present_ui() {
         Entity_Flags flag = entity_flag_array[i];
 
         ui_set_next_text_padding(2.0f);
-        if (entity->flags & flag) {
+        if (e->flags & flag) {
           ui_set_next_background_color(Vector4(0.54f, 0.21f, 0.61f, 1.0f)); 
         }
 
         if (ui_clicked(ui_button(str8_cstring(string_from_entity_flag(flag))))) {
-          if (entity->flags & flag) {
-            entity->flags = entity->flags & ~flag;
+          if (e->flags & flag) {
+            e->flags = e->flags & ~flag;
           } else {
-            entity->flags |= flag;
+            e->flags |= flag;
           }
         }
       }
@@ -839,23 +819,54 @@ internal void editor_present_ui() {
     }
   }
 
+  //@Note Update enttiy on field edit
+  if (editor->selected_entity) {
+    Entity_Panel *panel = editor->entity_panel;
+    Entity *e = editor->selected_entity;
+
+    if (panel->position_field->dirty) {
+      panel->position_field->dirty = false;
+      Vector3 p;
+      p.x = strtof((char *)panel->position_field->fields[0]->buffer, nullptr); 
+      p.y = strtof((char *)panel->position_field->fields[1]->buffer, nullptr); 
+      p.z = strtof((char *)panel->position_field->fields[2]->buffer, nullptr); 
+      e->set_position(p);
+    }
+
+    if (panel->color_field->dirty) {
+      panel->color_field->dirty = false;
+      e->override_color.x = strtof((char *)panel->color_field->fields[0]->buffer, nullptr); 
+      e->override_color.y = strtof((char *)panel->color_field->fields[1]->buffer, nullptr); 
+      e->override_color.z = strtof((char *)panel->color_field->fields[2]->buffer, nullptr); 
+      e->override_color.w = strtof((char *)panel->color_field->fields[3]->buffer, nullptr); 
+    }
+
+    if (panel->theta_field->dirty) {
+      panel->theta_field->dirty = false;
+      f32 theta = strtof((char *)panel->theta_field->fields[0]->buffer, nullptr);
+      theta = DegToRad(theta);
+      e->set_theta(theta);
+    }
+  }
+
   //@Note Editor shortcuts
   if (editor->selected_entity) {
+    Entity *e = editor->selected_entity;
     if (key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_C)) {
-      Entity_Prototype *prototype = entity_prototype_lookup(editor->selected_entity->prototype_id);
+      Entity_Prototype *prototype = entity_prototype_lookup(e->prototype_id);
       if (prototype) {
         Entity *new_entity = entity_from_prototype(prototype);
-        new_entity->set_position(editor->selected_entity->position);
-        new_entity->override_color = editor->selected_entity->override_color;
+        new_entity->set_position(e->position);
+        new_entity->override_color = e->override_color;
 
-        editor->select_entity(new_entity);
+        select_entity(editor, new_entity);
         get_world()->entities.push(new_entity);
       }
     }
     if (key_pressed(OS_KEY_DELETE)) {
-      remove_grid_entity(get_world(), editor->selected_entity);
-      editor->selected_entity->to_be_destroyed = true;
-      editor->select_entity(nullptr);
+      remove_grid_entity(get_world(), e);
+      e->to_be_destroyed = true;
+      select_entity(editor, nullptr);
     }
 
     Vector3 up = Vector3(0, 1, 0);
@@ -865,45 +876,49 @@ internal void editor_present_ui() {
     Vector3 right = normalize(cross(forward, up));
 
     if (key_down(OS_KEY_CONTROL) && !key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_UP)) {
-      Vector3 position = editor->selected_entity->position;
+      editor->entity_panel->dirty = true;
+      Vector3 position = e->position;
       position += forward;
-      editor->selected_entity->set_position(position);
+      e->set_position(position);
     }
     if (key_down(OS_KEY_CONTROL) && !key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_DOWN)) {
-      Vector3 position = editor->selected_entity->position;
+      editor->entity_panel->dirty = true;
+      Vector3 position = e->position;
       position -= forward;
-      editor->selected_entity->set_position(position);
+      e->set_position(position);
     }
 
     if (key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_RIGHT)) {
-      Vector3 position = editor->selected_entity->position;
+      editor->entity_panel->dirty = true;
+      Vector3 position = e->position;
       position += right;
-      editor->selected_entity->set_position(position);
+      e->set_position(position);
     }
     if (key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_LEFT)) {
-      Vector3 position = editor->selected_entity->position;
+      editor->entity_panel->dirty = true;
+      Vector3 position = e->position;
       position -= right;
-      editor->selected_entity->set_position(position);
+      e->set_position(position);
     }
 
     if (key_down(OS_KEY_CONTROL) && key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_UP)) {
-      Vector3 position = editor->selected_entity->position;
+      editor->entity_panel->dirty = true;
+      Vector3 position = e->position;
       position += up;
-      editor->selected_entity->set_position(position);
+      e->set_position(position);
     }
     if (key_down(OS_KEY_CONTROL) && key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_DOWN)) {
-      Vector3 position = editor->selected_entity->position;
+      editor->entity_panel->dirty = true;
+      Vector3 position = e->position;
       position -= up;
-      editor->selected_entity->set_position(position);
+      e->set_position(position);
     }
 
-    if (editor->selected_entity->kind == ENTITY_SUN) {
+    if (e->kind == ENTITY_SUN) {
       if (key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_L)) {
-        Sun *sun = static_cast<Sun*>(editor->selected_entity);
+        Sun *sun = static_cast<Sun*>(e);
         sun->light_direction = editor->camera.forward;
       }
     }
   }
-
-  // How do you deal with entity types in how you initialize default values? I have thought of writing small text files per entity type and I believe you did that with the Witness, however I assume in this game it is different since your language allows for much more extensive metaprogramming.
 }

@@ -48,14 +48,29 @@ struct Editor_Panel {
   UI_Line_Edit *edit_saveas = nullptr;
 };
 
+enum Field_Kind {
+  FIELD_INT,
+  FIELD_FLOAT,
+  FIELD_VEC2,
+  FIELD_VEC3,
+  FIELD_VEC4,
+};
+
+struct Entity_Field {
+  String8 name;
+  b32 expand;
+  Field_Kind kind;
+  Auto_Array<UI_Line_Edit*> fields;
+  b32 dirty;
+};
+
 struct Entity_Panel {
-  UI_Line_Edit *position_x = nullptr;
-  UI_Line_Edit *position_y = nullptr;
-  UI_Line_Edit *position_z = nullptr;
-  UI_Line_Edit *theta = nullptr;
-  UI_Line_Edit *color_r = nullptr;
-  UI_Line_Edit *color_g = nullptr;
-  UI_Line_Edit *color_b = nullptr;
+  b32 dirty;
+  Auto_Array<Entity_Field*> fields;
+  Entity_Field *position_field = nullptr;
+  Entity_Field *color_field = nullptr;
+  Entity_Field *theta_field = nullptr;
+
 };
 
 struct Editor {
@@ -76,8 +91,8 @@ struct Editor {
 
   Triangle_Mesh *gizmo_meshes[GIZMO_COUNT][3];
 
-  void update_entity_panel();
-  void select_entity(Entity *e);
+  // void update_entity_panel();
+  // void select_entity(Entity *e);
 };
 
 internal Picker *make_picker(int width, int height);
