@@ -16,8 +16,8 @@ global Texture *eye_of_horus_texture;
 
 global Triangle_Mesh *water_plane_mesh;
 
-ID3D11RasterizerState *rasterizer_cull_back;
-ID3D11RasterizerState *rasterizer_cull_front;
+global ID3D11RasterizerState *rasterizer_cull_back;
+global ID3D11RasterizerState *rasterizer_cull_front;
 
 internal Shadow_Map *make_shadow_map(int width, int height) {
   R_D3D11_State *d3d = r_d3d11_state();
@@ -433,7 +433,7 @@ internal void draw_scene() {
 
       //@Todo Set Transform
       Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
-      Matrix4 world_matrix = translate(entity->visual_position) * rotation_matrix;
+      Matrix4 world_matrix = translate(entity->position) * rotation_matrix;
 
       set_constant(str8_lit("world"), world_matrix);
       set_constant(str8_lit("light_view_projection"), sun->light_space_matrix);
@@ -574,7 +574,7 @@ internal void draw_world(World *world, Camera camera) {
     if (!mesh) continue;
 
     Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
-    Matrix4 world_matrix = translate(entity->visual_position) * rotation_matrix;
+    Matrix4 world_matrix = translate(entity->position) * rotation_matrix;
     Matrix4 xform = camera.projection_matrix * camera.view_matrix * world_matrix;
 
     set_constant(str8_lit("xform"), xform);
