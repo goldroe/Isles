@@ -99,7 +99,7 @@ int main() {
 
   HWND hWnd;
   {
-    RECT client_rect = {0, 0, 1280, 720};
+    RECT client_rect = {0, 0, 1600, 900};
     AdjustWindowRect(&client_rect, WS_OVERLAPPEDWINDOW, FALSE);
     hWnd = CreateWindowA(class_name, "Isles", WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, client_rect.right - client_rect.left, client_rect.bottom - client_rect.top, NULL, NULL, hinstance, NULL);
   }
