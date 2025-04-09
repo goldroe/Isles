@@ -1,9 +1,22 @@
+internal void ui_text(String8 text) {
+  UI_Box *box = ui_box_create(UI_BOX_FLAG_TEXT_ELEMENT, 0);
+  box->text = text;
+}
+
+internal void ui_textf(const char *fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  String8 text = str8_pushfv(ui_build_arena(), fmt, args); 
+  va_end(args);
+  ui_text(text);
+}
 
 internal UI_Signal ui_button(String8 string) {
-  UI_Box *box = ui_box_create(UI_BOX_FLAG_TEXT_ELEMENT |
+  UI_Box *box = ui_box_create(
     UI_BOX_FLAG_CLICKABLE |
-    UI_BOX_FLAG_DRAW_HOT_EFFECTS |
-    UI_BOX_FLAG_DRAW_BORDER,
+    UI_BOX_FLAG_TEXT_ELEMENT |
+    UI_BOX_FLAG_DRAW_BORDER |
+    UI_BOX_FLAG_DRAW_HOT_EFFECTS,
     string);
 
   UI_Signal sig = ui_signal_from_box(box);
@@ -148,7 +161,16 @@ internal UI_Line_Edit *ui_line_edit_create(String8 name) {
   return result;
 }
 
-internal UI_Signal ui_line_edit(String8 string, UI_Line_Edit *edit) {
+internal UI_Signal ui_line_edit(UI_Line_Edit *edit, String8 string) {
   UI_Signal signal = ui_text_edit(string, edit->buffer, edit->buffer_capacity, &edit->buffer_pos, &edit->buffer_len);
+  return signal;
+}
+
+internal UI_Signal ui_line_editf(UI_Line_Edit *edit, const char *fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  String8 string = str8_pushfv(ui_build_arena(), fmt, args); 
+  va_end(args);
+  UI_Signal signal = ui_line_edit(edit, string);
   return signal;
 }
