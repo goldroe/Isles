@@ -476,6 +476,12 @@ internal UI_Signal ui_signal_from_box(UI_Box *box) {
     event_in_bounds = true;
   }
 
+  if (event_in_bounds && (box->flags & UI_BOX_FLAG_CLICKABLE)) {
+    signal.flags |= UI_SIGNAL_FLAG_HOVER;
+    ui_set_hot_key(box->key);
+    ui_set_mouse_captured();
+  }
+
   for (int i = 0; i < ui_state->events.count; i++) {
     UI_Event event = ui_state->events[i];
 
@@ -515,12 +521,6 @@ internal UI_Signal ui_signal_from_box(UI_Box *box) {
       break;
     }
     }
-  }
-
-  if (event_in_bounds) {
-    signal.flags |= UI_SIGNAL_FLAG_HOVER;
-    ui_set_hot_key(box->key);
-    ui_set_mouse_captured();
   }
 
   return signal;
@@ -574,12 +574,14 @@ internal void ui_layout_calc_upward_dependent(UI_Box *root, Axis axis) {
   if (root->size[axis].kind == UI_SIZE_PARENT_PCT) {
     for (UI_Box *parent = root->parent; parent; parent = parent->parent) {
       bool found = false;
+      if (parent->flags & (UI_BOX_FLAG_FIXED_WIDTH<<axis)) {
+        found = true;
+      }
+
       switch (parent->size[axis].kind) {
-      default:
-        found = false;
-        break;
       case UI_SIZE_PIXELS:
       case UI_SIZE_TEXT:
+      case UI_SIZE_PARENT_PCT:
         found = true;
         break;
       }
