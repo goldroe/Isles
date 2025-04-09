@@ -50,14 +50,13 @@ union UI_Rect {
 typedef u32 UI_Box_Flags;
 enum {
   UI_BOX_FLAG_NIL = 0,
-  UI_BOX_FLAG_HOVERABLE          = (1<<0),
-  UI_BOX_FLAG_CLICKABLE          = (1<<1),
-  UI_BOX_FLAG_KEYBOARD_CONTROL   = (1<<2),
-  UI_BOX_FLAG_TEXT_ELEMENT       = (1<<3),
-  UI_BOX_FLAG_FIXED_X            = (1<<4),
-  UI_BOX_FLAG_FIXED_Y            = (1<<5),
-  UI_BOX_FLAG_FIXED_WIDTH        = (1<<6),
-  UI_BOX_FLAG_FIXED_HEIGHT       = (1<<7),
+  UI_BOX_FLAG_CLICKABLE          = (1<<0),
+  UI_BOX_FLAG_KEYBOARD_CONTROL   = (1<<1),
+  UI_BOX_FLAG_TEXT_ELEMENT       = (1<<2),
+  UI_BOX_FLAG_FIXED_X            = (1<<3),
+  UI_BOX_FLAG_FIXED_Y            = (1<<4),
+  UI_BOX_FLAG_FIXED_WIDTH        = (1<<5),
+  UI_BOX_FLAG_FIXED_HEIGHT       = (1<<6),
   UI_BOX_FLAG_DRAW_BACKGROUND    = (1<<10),
   UI_BOX_FLAG_DRAW_HOT_EFFECTS   = (1<<11),
   UI_BOX_FLAG_DRAW_BORDER        = (1<<12),
@@ -204,5 +203,6 @@ internal bool ui_input_captured();
 
 #define ui_hover(sig) (sig.flags & UI_SIGNAL_FLAG_HOVER)
 #define ui_clicked(sig) (sig.flags & UI_SIGNAL_FLAG_CLICKED)
+#define ui_pressed(sig) (sig.flags & UI_SIGNAL_FLAG_PRESSED)
 
 #endif // UI_CORE_H
