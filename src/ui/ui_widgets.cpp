@@ -12,12 +12,7 @@ internal void ui_textf(const char *fmt, ...) {
 }
 
 internal UI_Signal ui_button(String8 string) {
-  UI_Box *box = ui_box_create(
-    UI_BOX_FLAG_CLICKABLE |
-    UI_BOX_FLAG_TEXT_ELEMENT |
-    UI_BOX_FLAG_DRAW_BORDER |
-    UI_BOX_FLAG_DRAW_HOT_EFFECTS,
-    string);
+  UI_Box *box = ui_box_create(UI_BOX_FLAG_CLICKABLE | UI_BOX_FLAG_TEXT_ELEMENT, string);
 
   UI_Signal sig = ui_signal_from_box(box);
   if (sig.flags & UI_SIGNAL_FLAG_RELEASED) {
@@ -56,7 +51,7 @@ internal UI_BOX_DRAW(ui_draw_text_edit) {
   cursor_rect.tl = cursor;
   cursor_rect.br = cursor_rect.tl + Vector2(cursor_width, box->font->glyph_height);
 
-  Vector4 cursor_color = Vector4(0.9f, 0.9f, 0.9f, 1.0f);
+  Vector4 cursor_color = box->text_color;
 
   if (ui_active_key_match(box->key)) {
     draw_ui_rect(batch, cursor_rect, cursor_color);
@@ -64,6 +59,7 @@ internal UI_BOX_DRAW(ui_draw_text_edit) {
 }
 
 internal UI_Signal ui_text_edit(String8 name, void *buffer, int max_buffer_capacity, int *buffer_pos, int *buffer_count) {
+  // ui_set_next_text_align(UI_TEXT_ALIGN_LEFT);
   UI_Box *box = ui_box_create(UI_BOX_FLAG_TEXT_ELEMENT |
     UI_BOX_FLAG_CLICKABLE |
     UI_BOX_FLAG_KEYBOARD_CONTROL |

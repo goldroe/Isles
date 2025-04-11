@@ -1,6 +1,27 @@
 #ifndef UI_CORE_H
 #define UI_CORE_H
 
+enum UI_Icon_Kind {
+    UI_ICON_WARNING,
+    UI_ICON_CANCEL,
+    UI_ICON_CHECK_EMPTY,
+    UI_ICON_CHECK,
+    UI_ICON_ARROW_UP,
+    UI_ICON_ARROW_DOWN,
+    UI_ICON_ARROW_LEFT,
+    UI_ICON_ARROW_RIGHT,
+    UI_ICON_TRIANGLE_UP,
+    UI_ICON_TRIANGLE_DOWN,
+    UI_ICON_TRIANGLE_LEFT,
+    UI_ICON_TRIANGLE_RIGHT,
+    UI_ICON_ZOOM_PLUS,
+    UI_ICON_ZOOM_MINUS,
+    UI_ICON_FOLDER,
+    UI_ICON_DOCUMENT,
+    UI_ICON_TRASH,
+    UI_ICON_COUNT
+};
+
 template<class T>
 struct UI_Param {
   Auto_Array<T> elems;
@@ -81,6 +102,12 @@ struct UI_Box;
 #define UI_BOX_DRAW(name) void name(UI_Box *box, void *user_data)
 typedef UI_BOX_DRAW(UI_Box_Draw_Proc);
 
+enum UI_Text_Align {
+  UI_TEXT_ALIGN_CENTER,
+  UI_TEXT_ALIGN_LEFT,
+  UI_TEXT_ALIGN_RIGHT,
+};
+
 struct UI_Box {
   UI_Box *parent;
   UI_Box *next;
@@ -99,9 +126,11 @@ struct UI_Box {
   UI_Size size[2];
   Vector2 padding;
   f32 text_padding;
+  UI_Text_Align text_align;
   Axis child_layout_axis;
   Font *font;
   Vector4 background_color;
+  Vector4 border_color;
   Vector4 text_color;
   Vector4 hot_color;
   f32 hot_t;
@@ -189,15 +218,26 @@ struct UI_State {
   UI_Param<f32>     fixed_x_stack;
   UI_Param<f32>     fixed_y_stack;
   UI_Param<f32>     text_padding_stack;
+  UI_Param<UI_Text_Align> text_align_stack;
   UI_Param<f32>     padding_x_stack;
   UI_Param<f32>     padding_y_stack;
   UI_Param<Axis>    child_layout_axis_stack;
   UI_Param<Vector4> background_color_stack;
   UI_Param<Vector4> text_color_stack;
   UI_Param<Vector4> hover_color_stack;
+  UI_Param<Vector4> border_color_stack;
+  UI_Param<UI_Box_Flags> box_flags_stack;
 
   UI_Draw_Bucket *draw_bucket;
 };
+
+#define UI_Parent(v)          DeferLoop(ui_push_parent(v), ui_pop_parent())
+#define UI_Font(v)            DeferLoop(ui_push_font(v), ui_pop_font())
+#define UI_PrefWidth(v)       DeferLoop(ui_push_pref_width(v), ui_pop_pref_width())
+#define UI_PrefHeight(v)      DeferLoop(ui_push_pref_height(v), ui_pop_pref_height())
+#define UI_BackgroundColor(v) DeferLoop(ui_push_background_color(v), ui_pop_background_color())
+#define UI_BorderColor(v)     DeferLoop(ui_push_border_color(v), ui_pop_border_color())
+#define UI_TextColor(v)       DeferLoop(ui_push_text_color(v), ui_pop_text_color())
 
 internal bool ui_input_captured();
 

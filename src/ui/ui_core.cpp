@@ -1,6 +1,53 @@
 
 global UI_State *ui_g_state;
 
+internal void *ui_alloc(u64 bytes) {
+  void *memory = calloc(1, bytes);
+  return memory;
+}
+
+internal void ui_set_state(UI_State *ui_state) {
+  ui_g_state = ui_state;
+}
+
+internal Arena *ui_build_arena() {
+  return ui_g_state->arena;
+}
+
+global char *ui_g_icon_kind_strings[] = {
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N",
+    "O",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
+    "U",
+    "V",
+    "W",
+    "X",
+    "Y",
+    "Z"
+};
+internal String8 ui_string_from_icon_kind(UI_Icon_Kind kind, const char *end) {
+    char *icon_string = ui_g_icon_kind_strings[kind];
+    String8 result = str8_pushf(ui_build_arena(), "%s%s", icon_string, end);
+    return result;
+}
+
 internal bool ui_keyboard_captured() {
   return ui_g_state->keyboard_captured;
 }
@@ -17,19 +64,6 @@ internal void ui_set_mouse_captured() {
   ui_g_state->mouse_captured = true;
 }
 
-internal void *ui_alloc(u64 bytes) {
-  void *memory = calloc(1, bytes);
-  return memory;
-}
-
-internal void ui_set_state(UI_State *ui_state) {
-  ui_g_state = ui_state;
-}
-
-internal Arena *ui_build_arena() {
-  return ui_g_state->arena;
-}
-
 internal UI_Box* ui_top_parent()            { return ui_g_state->parent_stack.top(); }
 internal UI_Size ui_top_pref_width()        { return ui_g_state->pref_width_stack.top(); }
 internal UI_Size ui_top_pref_height()       { return ui_g_state->pref_height_stack.top(); }
@@ -40,10 +74,13 @@ internal f32     ui_top_fixed_height()      { return ui_g_state->fixed_height_st
 internal f32     ui_top_padding_x()         { return ui_g_state->padding_x_stack.top(); }
 internal f32     ui_top_padding_y()         { return ui_g_state->padding_y_stack.top(); }
 internal f32     ui_top_text_padding()      { return ui_g_state->text_padding_stack.top(); }
+internal UI_Text_Align ui_top_text_align()  { return ui_g_state->text_align_stack.top(); }
+internal Vector4 ui_top_border_color()      { return ui_g_state->border_color_stack.top(); }
 internal Vector4 ui_top_background_color()  { return ui_g_state->background_color_stack.top(); }
 internal Vector4 ui_top_text_color()        { return ui_g_state->text_color_stack.top(); }
-internal Axis   ui_top_child_layout_axis()  { return ui_g_state->child_layout_axis_stack.top(); }
+internal Axis    ui_top_child_layout_axis() { return ui_g_state->child_layout_axis_stack.top(); }
 internal Font*   ui_top_font()              { return ui_g_state->font_stack.top(); }
+internal UI_Box_Flags ui_top_box_flags()    { return ui_g_state->box_flags_stack.top(); }
 
 internal void ui_push_parent(UI_Box *v)           { ui_g_state->parent_stack.push(v); }
 internal void ui_push_pref_width(UI_Size v)       { ui_g_state->pref_width_stack.push(v); }
@@ -55,10 +92,13 @@ internal void ui_push_fixed_height(f32 v)         { ui_g_state->fixed_height_sta
 internal void ui_push_padding_x(f32 v)            { ui_g_state->padding_x_stack.push(v); }
 internal void ui_push_padding_y(f32 v)            { ui_g_state->padding_y_stack.push(v); }
 internal void ui_push_text_padding(f32 v)         { ui_g_state->text_padding_stack.push(v); }
+internal void ui_push_text_align(UI_Text_Align v) { ui_g_state->text_align_stack.push(v); }
 internal void ui_push_background_color(Vector4 v) { ui_g_state->background_color_stack.push(v); }
+internal void ui_push_border_color(Vector4 v)     { ui_g_state->border_color_stack.push(v); }
 internal void ui_push_text_color(Vector4 v)       { ui_g_state->text_color_stack.push(v); }
 internal void ui_push_child_layout_axis(Axis v)   { ui_g_state->child_layout_axis_stack.push(v); }
 internal void ui_push_font(Font *v)               { ui_g_state->font_stack.push(v); }
+internal void ui_push_box_flags(UI_Box_Flags v)   { ui_g_state->box_flags_stack.push(v); }
 
 internal void ui_pop_parent()            { ui_g_state->parent_stack.pop(); }
 internal void ui_pop_pref_width()        { ui_g_state->pref_width_stack.pop(); }
@@ -70,10 +110,13 @@ internal void ui_pop_fixed_height()      { ui_g_state->fixed_height_stack.pop();
 internal void ui_pop_padding_x()         { ui_g_state->padding_x_stack.pop(); }
 internal void ui_pop_padding_y()         { ui_g_state->padding_y_stack.pop(); }
 internal void ui_pop_text_padding()      { ui_g_state->text_padding_stack.pop(); }
+internal void ui_pop_text_align()        { ui_g_state->text_align_stack.pop(); }
 internal void ui_pop_background_color()  { ui_g_state->background_color_stack.pop(); }
+internal void ui_pop_border_color()      { ui_g_state->border_color_stack.pop(); }
 internal void ui_pop_text_color()        { ui_g_state->text_color_stack.pop(); }
 internal void ui_pop_child_layout_axis() { ui_g_state->child_layout_axis_stack.pop(); }
 internal void ui_pop_font()              { ui_g_state->font_stack.pop(); }
+internal void ui_pop_box_flags()         { ui_g_state->box_flags_stack.pop(); }
 
 internal void ui_set_next_parent(UI_Box *v)           { ui_g_state->parent_stack.set_next(v); }
 internal void ui_set_next_pref_width(UI_Size v)       { ui_g_state->pref_width_stack.set_next(v); }
@@ -85,10 +128,13 @@ internal void ui_set_next_fixed_height(f32 v)         { ui_g_state->fixed_height
 internal void ui_set_next_padding_x(f32 v)            { ui_g_state->padding_x_stack.set_next(v); }
 internal void ui_set_next_padding_y(f32 v)            { ui_g_state->padding_y_stack.set_next(v); }
 internal void ui_set_next_text_padding(f32 v)         { ui_g_state->text_padding_stack.set_next(v); }
+internal void ui_set_next_text_align(UI_Text_Align v) { ui_g_state->text_align_stack.set_next(v); }
 internal void ui_set_next_background_color(Vector4 v) { ui_g_state->background_color_stack.set_next(v); }
+internal void ui_set_next_border_color(Vector4 v)     { ui_g_state->border_color_stack.set_next(v); }
 internal void ui_set_next_text_color(Vector4 v)       { ui_g_state->text_color_stack.set_next(v); }
 internal void ui_set_next_child_layout_axis(Axis v)   { ui_g_state->child_layout_axis_stack.set_next(v); }
 internal void ui_set_next_font(Font *v)               { ui_g_state->font_stack.set_next(v); }
+internal void ui_set_next_box_flags(UI_Box_Flags v)   { ui_g_state->box_flags_stack.set_next(v); }
 
 internal void ui_box_equip_draw_proc(UI_Box *box, UI_Box_Draw_Proc *proc, void *user_data) {
   box->custom_draw_proc = proc;
@@ -127,10 +173,53 @@ internal inline UI_Size ui_pct(f32 v) {
   return size;
 }
 
-internal Vector2 ui_box_text_position(UI_Box *box) {
-  Vector2 result = box->rect.tl;
-  result.x += box->text_padding;
+internal f32 measure_text_width(String8 string, Font *font) {
+  f32 result = 0.0f;
+  for (int i = 0; i < string.count; i++) {
+    Glyph g = font->glyphs[string.data[i]];
+    result += g.ax;
+  }
   return result;
+}
+
+internal f32 measure_text_height(String8 string, Font *font) {
+  f32 result = 0.0f;
+  for (int i = 0; i < string.count; i++) {
+    if (string.data[i] == '\n') {
+      result += font->glyph_height;
+    }
+  }
+  if (result < font->glyph_height) result = font->glyph_height;
+  return result;
+}
+
+internal Vector2 ui_box_text_position(UI_Box *box) {
+  Vector2 text_position = box->rect.tl + make_vec2(box->text_padding);
+
+  switch (box->text_align) {
+  case UI_TEXT_ALIGN_CENTER:
+  {
+    f32 box_width = box->rect.right - box->rect.left;
+    f32 text_width = measure_text_width(box->text, box->font) + box->text_padding;
+    f32 end = text_position.x + text_width;
+    text_position.x += 0.5f * (box_width - text_width);
+    text_position.x = ClampBot(text_position.x, box->rect.left);
+    break;
+  }
+  case UI_TEXT_ALIGN_LEFT:
+  {
+    break;
+  }
+  case UI_TEXT_ALIGN_RIGHT:
+  {
+    // f32 box_width = box->rect.right - box->rect.left;
+    f32 text_width = measure_text_width(box->text, box->font) + box->text_padding;
+    text_position.x = box->rect.right - text_width;
+    text_position.x = ClampBot(text_position.x, box->rect.left);
+  }
+  }
+
+  return text_position;
 }
 
 internal inline void ui_set_hot_key(UI_Key key) {
@@ -239,10 +328,16 @@ internal UI_Box *ui_box_create(UI_Box_Flags flags, UI_Key key) {
   box->size[AXIS_X] = ui_top_pref_width();
   box->size[AXIS_Y] = ui_top_pref_height();
   box->text_padding = ui_top_text_padding();
+  box->text_align = ui_top_text_align();
   box->padding[AXIS_X] = ui_top_padding_x();
   box->padding[AXIS_Y] = ui_top_padding_y();
   box->background_color = ui_top_background_color();
   box->text_color = ui_top_text_color();
+  box->border_color = ui_top_border_color();
+
+  if (!ui_g_state->box_flags_stack.empty()) {
+    box->flags |= ui_top_box_flags();
+  }
 
   if (!ui_g_state->fixed_x_stack.empty()) {
     box->flags |= UI_BOX_FLAG_FIXED_X;
@@ -287,10 +382,12 @@ internal UI_Box *ui_box_create(UI_Box_Flags flags, UI_Key key) {
   ui_g_state->fixed_x_stack.auto_pop();
   ui_g_state->fixed_y_stack.auto_pop();
   ui_g_state->text_padding_stack.auto_pop();
+  ui_g_state->text_align_stack.auto_pop();
   ui_g_state->padding_x_stack.auto_pop();
   ui_g_state->padding_y_stack.auto_pop();
   ui_g_state->child_layout_axis_stack.auto_pop();
   ui_g_state->background_color_stack.auto_pop();
+  ui_g_state->border_color_stack.auto_pop();
   ui_g_state->text_color_stack.auto_pop();
   ui_g_state->hover_color_stack.auto_pop();
 
@@ -382,8 +479,10 @@ internal void ui_begin(OS_Handle window_handle, OS_Event_List *events) {
   ui_push_padding_x(4.0f);
   ui_push_padding_y(4.0f);
   ui_push_text_padding(0.0f);
+  ui_push_text_align(UI_TEXT_ALIGN_CENTER);
   ui_push_child_layout_axis(AXIS_Y);
   ui_push_background_color(Vector4(1, 1, 1, 1));
+  ui_push_border_color(Vector4(0, 0, 0, 1));
   ui_push_text_color(Vector4(0, 0, 0, 1));
 
   UI_Box *root = ui_box_create(0, str8_lit("##ROOT"));
@@ -432,11 +531,19 @@ internal void ui_end() {
   ui_state->font_stack.reset();
   ui_state->pref_width_stack.reset();
   ui_state->pref_height_stack.reset();
+  ui_state->fixed_width_stack.reset();
+  ui_state->fixed_height_stack.reset();
+  ui_state->fixed_x_stack.reset();
+  ui_state->fixed_y_stack.reset();
+  ui_state->text_align_stack.reset();
   ui_state->padding_x_stack.reset();
   ui_state->padding_y_stack.reset();
   ui_state->child_layout_axis_stack.reset();
   ui_state->background_color_stack.reset();
   ui_state->text_color_stack.reset();
+  ui_state->hover_color_stack.reset();
+  ui_state->border_color_stack.reset();
+  ui_state->box_flags_stack.reset();
 
   if (ui_g_state->draw_bucket) {
     delete ui_g_state->draw_bucket;
@@ -524,26 +631,6 @@ internal UI_Signal ui_signal_from_box(UI_Box *box) {
   }
 
   return signal;
-}
-
-internal f32 measure_text_width(String8 string, Font *font) {
-  f32 result = 0.0f;
-  for (int i = 0; i < string.count; i++) {
-    Glyph g = font->glyphs[string.data[i]];
-    result += g.ax;
-  }
-  return result;
-}
-
-internal f32 measure_text_height(String8 string, Font *font) {
-  f32 result = 0.0f;
-  for (int i = 0; i < string.count; i++) {
-    if (string.data[i] == '\n') {
-      result += font->glyph_height;
-    }
-  }
-  if (result < font->glyph_height) result = font->glyph_height;
-  return result;
 }
 
 internal void ui_layout_calc_fixed(UI_Box *root, Axis axis) {
@@ -776,7 +863,7 @@ internal void draw_ui_box(UI_Box *box) {
 
 
   if (box->flags & UI_BOX_FLAG_DRAW_BORDER) {
-    draw_ui_border(batch, box->rect, Vector4(0.88f, 0.88f, 0.88f, 1.0f));
+    draw_ui_border(batch, box->rect, box->border_color);
   }
 
   Vector2 text_position = ui_box_text_position(box);
