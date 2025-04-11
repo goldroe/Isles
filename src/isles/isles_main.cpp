@@ -34,6 +34,7 @@
 #undef far
 
 #include "core.h"
+#include "settings.h"
 #include "mesh.h"
 #include "audio.h"
 #include "entity.h"
@@ -44,7 +45,6 @@
 #include "input.h"
 #include "undo.h"
 #include "render_target.h"
-
 
 #define STB_SPRINTF_IMPLEMENTATION
 // #define STB_SPRINTF_DECORATE(name) base_##name
@@ -62,6 +62,7 @@
 #include "log.cpp"
 
 #include "core.cpp"
+#include "settings.cpp"
 #include "audio.cpp"
 #include "draw.cpp"
 #include "render/render.cpp"
@@ -77,6 +78,8 @@
 global bool window_should_close;
 
 int main() {
+  init_tweak_settings();
+
   QueryPerformanceFrequency((LARGE_INTEGER *)&win32_performance_frequency);
   timeBeginPeriod(1);
 
@@ -99,7 +102,9 @@ int main() {
 
   HWND hWnd;
   {
-    RECT client_rect = {0, 0, 1600, 900};
+    RECT client_rect = {};
+    client_rect.right  = get_tweak_setting_int(str8_lit("WindowWidth"));
+    client_rect.bottom = get_tweak_setting_int(str8_lit("WindowHeight"));
     AdjustWindowRect(&client_rect, WS_OVERLAPPEDWINDOW, FALSE);
     hWnd = CreateWindowA(class_name, "Isles", WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, client_rect.right - client_rect.left, client_rect.bottom - client_rect.top, NULL, NULL, hinstance, NULL);
   }
