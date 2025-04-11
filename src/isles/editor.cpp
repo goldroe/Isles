@@ -36,16 +36,17 @@ internal void init_editor() {
   // editor->gizmo_meshes[GIZMO_ROTATE][AXIS_Z]    = load_mesh("data/meshes/gizmo/rotation_z.obj");
 
   editor->panel = new Editor_Panel();
+  editor->panel->icon_font = default_fonts[FONT_ICON];
   editor->panel->expand_load_world = false;
   editor->panel->expand_saveas = false;
   editor->panel->edit_saveas = ui_line_edit_create(str8_lit("Save As"));
   editor->panel->edit_load_world = ui_line_edit_create(str8_lit("Load"));
 
   editor->entity_panel = new Entity_Panel();
+  editor->entity_panel->icon_font = default_fonts[FONT_ICON];
 
   Entity_Field *position_field = new Entity_Field();
   position_field->name = str8_lit("position");
-  position_field->expand = 0;
   position_field->kind = FIELD_VEC3;
   {
     position_field->fields.push(ui_line_edit_create(str8_lit("x")));
@@ -53,10 +54,10 @@ internal void init_editor() {
     position_field->fields.push(ui_line_edit_create(str8_lit("z")));
   }
   editor->entity_panel->position_field = position_field;
+  editor->entity_panel->common_fields.push(position_field);
 
   Entity_Field *color_field = new Entity_Field();
   color_field->name = str8_lit("override_color");
-  color_field->expand = 0;
   color_field->kind = FIELD_VEC4;
   {
     color_field->fields.push(ui_line_edit_create(str8_lit("r")));
@@ -65,60 +66,72 @@ internal void init_editor() {
     color_field->fields.push(ui_line_edit_create(str8_lit("a")));
   }
   editor->entity_panel->color_field = color_field;
+  editor->entity_panel->common_fields.push(color_field);
 
   Entity_Field *theta_field = new Entity_Field();
   theta_field->name = str8_lit("theta");
-  theta_field->expand = 0;
   theta_field->kind = FIELD_FLOAT;
   theta_field->fields.push(ui_line_edit_create(str8_lit("Theta")));
   editor->entity_panel->theta_field = theta_field;
+  editor->entity_panel->common_fields.push(theta_field);
 
-  editor->entity_panel->fields.push(position_field);
-  editor->entity_panel->fields.push(color_field);
-  editor->entity_panel->fields.push(theta_field);
+  Entity_Field *sun_dir = new Entity_Field();
+  sun_dir->name = str8_lit("direction");
+  sun_dir->expand = 0;
+  sun_dir->kind = FIELD_VEC4;
+  {
+    sun_dir->fields.push(ui_line_edit_create(str8_lit("x")));
+    sun_dir->fields.push(ui_line_edit_create(str8_lit("y")));
+    sun_dir->fields.push(ui_line_edit_create(str8_lit("z")));
+  }
+  editor->entity_panel->sun_dir_field = sun_dir;
+  editor->entity_panel->entity_fields[ENTITY_SUN].push(sun_dir);
 }
 
 internal void update_entity_panel(Editor *editor) {
   Entity_Panel *panel = editor->entity_panel;
-  Entity *entity = editor->selected_entity;
-
   panel->dirty = false;
 
+  Entity *entity = editor->selected_entity;
   if (entity) {
     int n = 0;
 
     n = snprintf((char *)panel->position_field->fields[0]->buffer, panel->position_field->fields[0]->buffer_capacity, "%g", entity->position.x);
-    panel->position_field->fields[0]->buffer_len = n;
-    panel->position_field->fields[0]->buffer_pos = n;
+    panel->position_field->fields[0]->buffer_pos = panel->position_field->fields[0]->buffer_len = n;
 
     n = snprintf((char *)panel->position_field->fields[1]->buffer, panel->position_field->fields[1]->buffer_capacity, "%g", entity->position.y);
-    panel->position_field->fields[1]->buffer_len = n;
-    panel->position_field->fields[1]->buffer_pos = n;
+    panel->position_field->fields[1]->buffer_pos = panel->position_field->fields[1]->buffer_len = n;
 
     n = snprintf((char *)panel->position_field->fields[2]->buffer, panel->position_field->fields[2]->buffer_capacity, "%g", entity->position.z);
-    panel->position_field->fields[2]->buffer_len = n;
-    panel->position_field->fields[2]->buffer_pos = n;
+    panel->position_field->fields[2]->buffer_pos = panel->position_field->fields[2]->buffer_len = n;
 
     n = snprintf((char *)panel->color_field->fields[0]->buffer, panel->color_field->fields[0]->buffer_capacity, "%g", entity->override_color.x);
-    panel->color_field->fields[0]->buffer_len = n;
-    panel->color_field->fields[0]->buffer_pos = n;
+    panel->color_field->fields[0]->buffer_pos = panel->color_field->fields[0]->buffer_len = n;
 
     n = snprintf((char *)panel->color_field->fields[1]->buffer, panel->color_field->fields[1]->buffer_capacity, "%g", entity->override_color.y);
-    panel->color_field->fields[1]->buffer_len = n;
-    panel->color_field->fields[1]->buffer_pos = n;
+    panel->color_field->fields[1]->buffer_pos = panel->color_field->fields[1]->buffer_len = n;
 
     n = snprintf((char *)panel->color_field->fields[2]->buffer, panel->color_field->fields[2]->buffer_capacity, "%g", entity->override_color.z);
-    panel->color_field->fields[2]->buffer_len = n;
-    panel->color_field->fields[2]->buffer_pos = n;
+    panel->color_field->fields[2]->buffer_pos = panel->color_field->fields[2]->buffer_len = n;
 
     n = snprintf((char *)panel->color_field->fields[3]->buffer, panel->color_field->fields[3]->buffer_capacity, "%g", entity->override_color.w);
-    panel->color_field->fields[3]->buffer_len = n;
-    panel->color_field->fields[3]->buffer_pos = n;
+    panel->color_field->fields[3]->buffer_pos = panel->color_field->fields[3]->buffer_len = n;
 
     n = snprintf((char *)panel->theta_field->fields[0]->buffer, panel->theta_field->fields[0]->buffer_capacity, "%g", RadToDeg(entity->theta));
-    panel->theta_field->fields[0]->buffer_len = n;
-    panel->theta_field->fields[0]->buffer_pos = n;
- }
+    panel->theta_field->fields[0]->buffer_pos = panel->theta_field->fields[0]->buffer_len = n;
+
+    if (entity->kind == ENTITY_SUN) {
+      Sun *sun = static_cast<Sun*>(entity);
+      n = snprintf((char *)panel->sun_dir_field->fields[0]->buffer, panel->sun_dir_field->fields[0]->buffer_capacity, "%g", sun->light_direction.x);
+      panel->sun_dir_field->fields[0]->buffer_pos = panel->sun_dir_field->fields[0]->buffer_len = n;
+
+      n = snprintf((char *)panel->sun_dir_field->fields[1]->buffer, panel->sun_dir_field->fields[1]->buffer_capacity, "%g", sun->light_direction.y);
+      panel->sun_dir_field->fields[1]->buffer_pos = panel->sun_dir_field->fields[1]->buffer_len = n;
+
+      n = snprintf((char *)panel->sun_dir_field->fields[2]->buffer, panel->sun_dir_field->fields[2]->buffer_capacity, "%g", sun->light_direction.z);
+      panel->sun_dir_field->fields[2]->buffer_pos = panel->sun_dir_field->fields[2]->buffer_len = n;
+    }
+  }
 }
 
 internal void select_entity(Editor *editor, Entity *e) {
@@ -611,8 +624,8 @@ internal void editor_present_ui() {
     }
   }
 
-  ui_push_pref_width(ui_txt(2.0f));
-  ui_push_pref_height(ui_txt(4.0f));
+  ui_set_next_pref_width(ui_txt(2.0f));
+  ui_set_next_pref_height(ui_txt(4.0f));
   if (ui_clicked(ui_button(str8_lit("New")))) {
     World *world = new World();
     set_world(world);
@@ -620,103 +633,201 @@ internal void editor_present_ui() {
 
   ui_pop_parent();
 
-  ui_push_background_color(Vector4(0.18f, 0.42f, 0.33f, 1.f));
-
-  ui_set_next_pref_width(ui_pixels(120.f));
-  ui_set_next_pref_height(ui_pixels(180.f));
-  ui_set_next_child_layout_axis(AXIS_Y);
-  ui_push_text_padding(4.0f);
-  UI_Box *prototype_panel = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, str8_lit("##prototype"));
-  ui_push_parent(prototype_panel);
+  //@Note Entity Panel
   {
-    ui_push_pref_width(ui_txt(1.0f));
-    ui_push_pref_height(ui_txt(1.0f));
-
-    UI_Box *header = ui_box_create(UI_BOX_FLAG_TEXT_ELEMENT, str8_lit("Prototype"));
-
-    Entity_Prototype *prototype = editor->prototype_array[editor->prototype_idx];
-
-    UI_Box *text = ui_box_create_format(UI_BOX_FLAG_TEXT_ELEMENT, "%s##name", prototype->name);
-
-    ui_set_next_pref_width(ui_children_sum());
-    ui_set_next_pref_height(ui_children_sum());
-    ui_set_next_child_layout_axis(AXIS_X);
-    UI_Box *cont = ui_box_create(0, str8_lit("##cont"));
-
-    ui_push_parent(cont);
-    if (ui_clicked(ui_button(str8_lit("Prev")))) {
-      editor->prototype_idx--;
-    }
-    if (ui_clicked(ui_button(str8_lit("Next")))) {
-      editor->prototype_idx++;
-    }
-    ui_pop_parent();
-    editor->prototype_idx = range_clamp(editor->prototype_idx, 0, (int)editor->prototype_array.count - 1);
-
-    if (ui_clicked(ui_button(str8_lit("Instantiate")))) {
-      Entity *instance = entity_from_prototype(prototype);
-      instance->set_position(floor(editor->camera.origin + editor->camera.forward));
-      if (editor->selected_entity) {
-        Vector3 unit = get_nearest_axis(editor->camera.origin - editor->selected_entity->position);
-        instance->set_position(editor->selected_entity->position + unit);
-      }
-      select_entity(editor, instance);
-
-      World *world = get_world();
-      world->entities.push(instance);
-      if (instance->kind == ENTITY_GUY) {
-        world->guy = static_cast<Guy*>(instance);
-      }
-    }
-
-    ui_pop_pref_width();
-    ui_pop_pref_height();
-  }
-  ui_pop_parent();
-  ui_pop_background_color();
-
-  if (editor->selected_entity) {
     Entity *e = editor->selected_entity;
     Entity_Panel *panel = editor->entity_panel;
 
     f32 field_height = 26.0f;
     f32 panel_width = 280.0f;
-    f32 panel_height = 560.0f;
     f32 panel_x = g_viewport->dimension.x - panel_width;
     f32 panel_y = 0;
+    Vector4 panel_color = Vector4(0.24f, 0.86f, 0.59f, 1.0f);
+    // Vector4 panel_color = Vector4(0.16f, 0.89f, 0.76f, 1.0f);
+
     ui_set_next_fixed_x(panel_x);
     ui_set_next_fixed_y(panel_y);
     ui_set_next_fixed_width(panel_width);
-    ui_set_next_fixed_height(panel_height);
+    ui_set_next_pref_height(ui_children_sum());
     ui_set_next_child_layout_axis(AXIS_Y);
+    ui_set_next_background_color(panel_color);
     UI_Box *panel_box = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, str8_lit("##entity_panel"));
-
-    ui_push_parent(panel_box);
+    UI_Parent(panel_box)
+      UI_BackgroundColor(panel_color)
+      UI_BorderColor(Vector4(0.01f, 0.49f, 0.36f, 1.0f))
+      UI_TextColor(Vector4(0.19f, 0.15f, 0.33f, 1.0f))
     {
-      ui_textf("Entity: %s #%llu", string_from_entity_kind(e->kind), e->id);
+      // Header
+      ui_set_next_pref_width(ui_pct(1.0f));
+      if (e) {
+        ui_textf("Entity: %s #%llu", string_from_entity_kind(e->kind), e->id);
+      } else {
+        ui_textf("Entity: (none)");
+      }
 
-      for (int i = 0; i < panel->fields.count; i++) {
-        Entity_Field *field = panel->fields[i];
-        bool is_compound = field->fields.count > 1;
+      if (e) {
+        ui_set_next_child_layout_axis(AXIS_X);
+        ui_set_next_pref_width(ui_pct(1.0f));
+        ui_set_next_pref_height(ui_pixels(field_height * 1.5f));
+        UI_Box *tab_header = ui_box_create(0, str8_lit("##tab_header"));
 
+        UI_Parent(tab_header)
+          UI_PrefWidth(ui_pixels(panel_width*0.33f))
+          UI_PrefHeight(ui_pct(1.0f))
+        {
+          UI_Box *tab_one = ui_box_create(UI_BOX_FLAG_CLICKABLE | UI_BOX_FLAG_TEXT_ELEMENT | UI_BOX_FLAG_DRAW_BORDER, str8_lit("1##One"));
+          UI_Box *tab_common = ui_box_create(UI_BOX_FLAG_CLICKABLE | UI_BOX_FLAG_TEXT_ELEMENT | UI_BOX_FLAG_DRAW_BORDER, str8_lit("Common"));
+          UI_Box *tab_flags = ui_box_create(UI_BOX_FLAG_CLICKABLE | UI_BOX_FLAG_TEXT_ELEMENT | UI_BOX_FLAG_DRAW_BORDER, str8_lit("Flags"));
+
+          if (ui_clicked(ui_signal_from_box(tab_one))) {
+            panel->active_tab = ENTITY_TAB_FIRST;
+          }
+
+          if (ui_clicked(ui_signal_from_box(tab_common))) {
+            panel->active_tab = ENTITY_TAB_COMMON;
+          }
+
+          if (ui_clicked(ui_signal_from_box(tab_flags))) {
+            panel->active_tab = ENTITY_TAB_FLAGS;
+          }
+        }
+      }
+
+      // New Entity
+      if (!e) {
         ui_set_next_pref_width(ui_pct(1.0f));
         ui_set_next_pref_height(ui_pixels(field_height));
+        // ui_set_next_background_color(Vector4(1.f, 0.f, 0.f, 1.f));
         ui_set_next_child_layout_axis(AXIS_X);
-        int flags = UI_BOX_FLAG_CLICKABLE | UI_BOX_FLAG_DRAW_BORDER;
-        if (is_compound) flags |= UI_BOX_FLAG_CLICKABLE;
-        UI_Box *field_container = ui_box_create_format(flags, "##field_%d", i);
-        UI_Signal field_cont_sig = ui_signal_from_box(field_container);
-
-        ui_push_parent(field_container);
+        UI_Box *etype_panel = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, str8_lit("##etype"));
+        UI_Parent(etype_panel)
         {
-          ui_push_pref_width(ui_pct(0.5f));
-          ui_push_pref_height(ui_pct(1.0f));
+          ui_set_next_font(panel->icon_font);
+          UI_Box *left_arrow = ui_box_create(UI_BOX_FLAG_CLICKABLE | UI_BOX_FLAG_TEXT_ELEMENT | UI_BOX_FLAG_DRAW_BACKGROUND, ui_string_from_icon_kind(UI_ICON_TRIANGLE_LEFT, "##arrow_left"));
+          UI_Signal left_sig = ui_signal_from_box(left_arrow);
+          if (ui_clicked(left_sig)) {
+            editor->prototype_idx--;
+            editor->prototype_idx = range_clamp(editor->prototype_idx, 0, (int)editor->prototype_array.count - 1);
+          }
+
+          ui_set_next_pref_width(ui_pixels(panel_width*0.8f));
+          Entity_Prototype *prototype = editor->prototype_array[editor->prototype_idx];
+          ui_textf("%s", prototype->name);
+
+          ui_set_next_font(panel->icon_font);
+          UI_Box *right_arrow = ui_box_create(UI_BOX_FLAG_CLICKABLE | UI_BOX_FLAG_TEXT_ELEMENT | UI_BOX_FLAG_DRAW_BACKGROUND, ui_string_from_icon_kind(UI_ICON_TRIANGLE_RIGHT, "##arrow_right"));
+          UI_Signal right_sig = ui_signal_from_box(right_arrow);
+          if (ui_clicked(right_sig)) {
+            editor->prototype_idx++;
+            editor->prototype_idx = range_clamp(editor->prototype_idx, 0, (int)editor->prototype_array.count - 1);
+          }
+        }
+
+        ui_set_next_pref_width(ui_pct(1.0f));
+        if (ui_clicked(ui_button(str8_lit("Instantiate")))) {
+          Entity_Prototype *prototype = editor->prototype_array[editor->prototype_idx];
+          Entity *instance = entity_from_prototype(prototype);
+          instance->set_position(floor(editor->camera.origin + editor->camera.forward));
+          if (editor->selected_entity) {
+            Vector3 unit = get_nearest_axis(editor->camera.origin - editor->selected_entity->position);
+            instance->set_position(editor->selected_entity->position + unit);
+          }
+          select_entity(editor, instance);
+          World *world = get_world();
+          world->entities.push(instance);
+          if (instance->kind == ENTITY_GUY) {
+            world->guy = static_cast<Guy*>(instance);
+          }
+        }
+      }
+
+      if (e && panel->active_tab == ENTITY_TAB_FIRST) {
+        if (e->kind == ENTITY_SUN) {
+          Sun *sun = static_cast<Sun*>(e);
+          Auto_Array<Entity_Field*> fields = panel->entity_fields[ENTITY_SUN];
+          for (int i = 0; i < fields.count; i++) {
+            Entity_Field *field = fields[i];
+            bool is_compound = field->fields.count > 1;
+
+            ui_set_next_pref_width(ui_pct(1.0f));
+            ui_set_next_pref_height(ui_pixels(field_height));
+            ui_set_next_child_layout_axis(AXIS_X);
+            int flags = UI_BOX_FLAG_CLICKABLE | UI_BOX_FLAG_DRAW_BORDER;
+            if (is_compound) flags |= UI_BOX_FLAG_CLICKABLE;
+            UI_Box *field_container = ui_box_create_format(flags, "##field_%d", i);
+            UI_Signal field_cont_sig = ui_signal_from_box(field_container);
+
+            UI_Parent(field_container)
+              UI_PrefWidth(ui_pct(0.5f))
+              UI_PrefHeight(ui_pct(1.0f))
+            {
+              ui_text(field->name);
+
+              if (is_compound) {
+                ui_textf("(%s)", string_from_field_kind(field->kind));
+                if (ui_clicked(field_cont_sig)) {
+                  field->expand = !field->expand;
+                }
+              } else {
+                UI_Line_Edit *line_edit = field->fields[0];
+                // ui_set_next_text_padding(4.0f);
+                UI_Signal sig = ui_line_edit(line_edit, str8_lit("##edit"));
+                if (ui_pressed(sig) && sig.key == OS_KEY_ENTER) {
+                  printf("ENTER\n");
+                  field->dirty = true;
+                  editor->entity_panel->dirty = true;
+                }
+              }
+            }
+            if (is_compound && field->expand) {
+              for (int j = 0; j < field->fields.count; j++) {
+                ui_set_next_pref_width(ui_pct(1.0f));
+                ui_set_next_pref_height(ui_pixels(field_height));
+                ui_set_next_child_layout_axis(AXIS_X);
+                UI_Box *cont = ui_box_create(UI_BOX_FLAG_DRAW_BORDER, 0);
+
+                UI_Parent(cont)
+                  UI_PrefWidth(ui_pct(0.5f))
+                  UI_PrefHeight(ui_pixels(field_height))
+                {
+                  UI_Line_Edit *line_edit = field->fields[j];
+                  ui_text(line_edit->name);
+              
+                  // ui_set_next_text_padding(4.0f);
+                  UI_Signal sig = ui_line_editf(line_edit, "##edit_%d%d", i, j);
+                  if (ui_pressed(sig) && sig.key == OS_KEY_ENTER) {
+                    field->dirty = true;
+                    editor->entity_panel->dirty = true;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Common Fields
+      if (e && panel->active_tab == ENTITY_TAB_COMMON) {
+        for (int i = 0; i < panel->common_fields.count; i++) {
+          Entity_Field *field = panel->common_fields[i];
+          bool is_compound = field->fields.count > 1;
+
+          ui_set_next_pref_width(ui_pct(1.0f));
+          ui_set_next_pref_height(ui_pixels(field_height));
+          ui_set_next_child_layout_axis(AXIS_X);
+          int flags = UI_BOX_FLAG_CLICKABLE | UI_BOX_FLAG_DRAW_BORDER;
+          if (is_compound) flags |= UI_BOX_FLAG_CLICKABLE;
+          UI_Box *field_container = ui_box_create_format(flags, "##field_%d", i);
+          UI_Signal field_cont_sig = ui_signal_from_box(field_container);
+
+          UI_Parent(field_container)
+            UI_PrefWidth(ui_pct(0.5f))
+            UI_PrefHeight(ui_pct(1.0f))
           {
             ui_text(field->name);
 
             if (is_compound) {
               ui_textf("(%s)", string_from_field_kind(field->kind));
-              
               if (ui_clicked(field_cont_sig)) {
                 field->expand = !field->expand;
               }
@@ -731,91 +842,81 @@ internal void editor_present_ui() {
               }
             }
           }
-          ui_pop_pref_width();
-          ui_pop_pref_height();
-        }
-        ui_pop_parent();
+          if (is_compound && field->expand) {
+            for (int j = 0; j < field->fields.count; j++) {
+              ui_set_next_pref_width(ui_pct(1.0f));
+              ui_set_next_pref_height(ui_pixels(field_height));
+              ui_set_next_child_layout_axis(AXIS_X);
+              UI_Box *cont = ui_box_create(UI_BOX_FLAG_DRAW_BORDER, 0);
 
-        if (is_compound && field->expand) {
-          for (int j = 0; j < field->fields.count; j++) {
-            ui_set_next_pref_width(ui_pct(1.0f));
-            ui_set_next_pref_height(ui_pixels(field_height));
-            ui_set_next_child_layout_axis(AXIS_X);
-            UI_Box *cont = ui_box_create(UI_BOX_FLAG_DRAW_BORDER, 0);
-
-            ui_push_parent(cont);
-            ui_push_pref_width(ui_pct(0.5f));
-            ui_push_pref_height(ui_pixels(field_height));
-            {
-              UI_Line_Edit *line_edit = field->fields[j];
-              ui_text(line_edit->name);
+              UI_Parent(cont)
+                UI_PrefWidth(ui_pct(0.5f))
+                UI_PrefHeight(ui_pixels(field_height))
+              {
+                UI_Line_Edit *line_edit = field->fields[j];
+                ui_text(line_edit->name);
               
-              // ui_set_next_text_padding(4.0f);
-              UI_Signal sig = ui_line_editf(line_edit, "##edit_%d%d", i, j);
-              if (ui_pressed(sig) && sig.key == OS_KEY_ENTER) {
-                field->dirty = true;
-                editor->entity_panel->dirty = true;
+                // ui_set_next_text_padding(4.0f);
+                UI_Signal sig = ui_line_editf(line_edit, "##edit_%d%d", i, j);
+                if (ui_pressed(sig) && sig.key == OS_KEY_ENTER) {
+                  field->dirty = true;
+                  editor->entity_panel->dirty = true;
+                }
               }
             }
-            ui_pop_parent();
-            ui_pop_pref_width();
-            ui_pop_pref_height();
-
           }
         }
 
-      }
+        // Override Color
+        {
+          UI_Icon_Kind button_icon = e->use_override_color ? UI_ICON_CHECK : UI_ICON_CHECK_EMPTY;
+          ui_set_next_font(panel->icon_font);
+          ui_set_next_pref_width(ui_pct(1.0f));
+          if (ui_clicked(ui_button(ui_string_from_icon_kind(button_icon, "##overbtn")))) {
+            e->use_override_color = !e->use_override_color;
+          }
+        }
 
-      if (ui_clicked(ui_button(str8_lit("Clone")))) {
-        Entity_Prototype *prototype = entity_prototype_lookup(editor->selected_entity->prototype_id);
-        if (prototype) {
-          Entity *new_entity = entity_from_prototype(prototype);
-          new_entity->set_position(e->position);
-          new_entity->override_color = editor->selected_entity->override_color;
+        if (ui_clicked(ui_button(str8_lit("Clone")))) {
+          Entity_Prototype *prototype = entity_prototype_lookup(editor->selected_entity->prototype_id);
+          if (prototype) {
+            Entity *new_entity = entity_from_prototype(prototype);
+            new_entity->set_position(e->position);
+            new_entity->override_color = editor->selected_entity->override_color;
+            new_entity->use_override_color = editor->selected_entity->use_override_color;
 
-          select_entity(editor, new_entity);
-          get_world()->entities.push(new_entity);
+            select_entity(editor, new_entity);
+            get_world()->entities.push(new_entity);
+          }
+        }
+
+        if (ui_clicked(ui_button(str8_lit("Destroy!")))) {
+          remove_grid_entity(get_world(), editor->selected_entity);
+          e->to_be_destroyed = true;
+          select_entity(editor, nullptr);
         }
       }
 
-      if (ui_clicked(ui_button(str8_lit("Delete")))) {
-        remove_grid_entity(get_world(), editor->selected_entity);
-        e->to_be_destroyed = true;
-        select_entity(editor, nullptr);
-      }
+      // Flags
+      if (e && panel->active_tab == ENTITY_TAB_FLAGS) {
+        for (int i = 0; i < ArrayCount(entity_flag_array); i++) {
+          Entity_Flags flag = entity_flag_array[i];
+          ui_set_next_pref_width(ui_pct(1.0f));
+          // inactive flag
+          if (~(e->flags) & flag) {
+            ui_set_next_background_color(Vector4(0.36f, 0.7f, 0.55f, 0.5f));
+            ui_set_next_box_flags(UI_BOX_FLAG_DRAW_BACKGROUND);
+          }
 
-      ui_pop_parent();
-    }
-
-    //@Note Entity Flag Panel
-    {
-      f32 start = g_viewport->dimension.x - 100.0f;
-      ui_set_next_fixed_x(start);
-      ui_set_next_fixed_y(400.0f);
-      ui_set_next_fixed_width(100.0f);
-      ui_set_next_fixed_height(200.0f);
-      ui_set_next_child_layout_axis(AXIS_Y);
-      ui_push_background_color(Vector4(0.37f, 0.12f, 0.43f, 1.0f));
-      UI_Box *flag_panel = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, str8_lit("##flag_panel"));
-      ui_push_parent(flag_panel);
-      for (int i = 0; i < ArrayCount(entity_flag_array); i++) {
-        Entity_Flags flag = entity_flag_array[i];
-
-        ui_set_next_text_padding(2.0f);
-        if (e->flags & flag) {
-          ui_set_next_background_color(Vector4(0.54f, 0.21f, 0.61f, 1.0f)); 
-        }
-
-        if (ui_clicked(ui_button(str8_cstring(string_from_entity_flag(flag))))) {
-          if (e->flags & flag) {
-            e->flags = e->flags & ~flag;
-          } else {
-            e->flags |= flag;
+          if (ui_clicked(ui_button(str8_cstring(string_from_entity_flag(flag))))) {
+            if (e->flags & flag) {
+              e->flags = e->flags & (~flag);
+            } else {
+              e->flags |= flag;
+            }
           }
         }
       }
-      ui_pop_background_color();
-      ui_pop_parent();
     }
   }
 
@@ -846,6 +947,17 @@ internal void editor_present_ui() {
       f32 theta = strtof((char *)panel->theta_field->fields[0]->buffer, nullptr);
       theta = DegToRad(theta);
       e->set_theta(theta);
+    }
+
+    if (e->kind == ENTITY_SUN) {
+      Sun *sun = static_cast<Sun*>(e);
+
+      if (panel->sun_dir_field->dirty) {
+        panel->sun_dir_field->dirty = false;
+        sun->light_direction.x = strtof((char *)panel->sun_dir_field->fields[0]->buffer, nullptr); 
+        sun->light_direction.y = strtof((char *)panel->sun_dir_field->fields[1]->buffer, nullptr); 
+        sun->light_direction.z = strtof((char *)panel->sun_dir_field->fields[2]->buffer, nullptr); 
+      }
     }
   }
 

@@ -42,6 +42,7 @@ struct UI_Line_Edit {
 // };
 
 struct Editor_Panel {
+  Font *icon_font;
   b32 expand_load_world = false;
   UI_Line_Edit *edit_load_world = nullptr;
   b32 expand_saveas = false;
@@ -49,6 +50,7 @@ struct Editor_Panel {
 };
 
 enum Field_Kind {
+  FIELD_NIL,
   FIELD_INT,
   FIELD_FLOAT,
   FIELD_VEC2,
@@ -58,19 +60,35 @@ enum Field_Kind {
 
 struct Entity_Field {
   String8 name;
-  b32 expand;
-  Field_Kind kind;
+  b32 expand = 0;
+  Field_Kind kind = FIELD_NIL;
   Auto_Array<UI_Line_Edit*> fields;
-  b32 dirty;
+  b32 dirty = 0;
+};
+
+enum Entity_Tab {
+  ENTITY_TAB_FIRST,
+  ENTITY_TAB_COMMON,
+  ENTITY_TAB_FLAGS,
+  ENTITY_TAB_COUNT
 };
 
 struct Entity_Panel {
+  Font *icon_font;
   b32 dirty;
-  Auto_Array<Entity_Field*> fields;
+
+  Entity_Tab active_tab = ENTITY_TAB_COMMON;
+
+  Auto_Array<Entity_Field*> common_fields;
+  Auto_Array<Entity_Field*> entity_fields[ENTITY_COUNT];
+
+  // common
   Entity_Field *position_field = nullptr;
   Entity_Field *color_field = nullptr;
   Entity_Field *theta_field = nullptr;
 
+  //sun
+  Entity_Field *sun_dir_field = nullptr;
 };
 
 struct Editor {
@@ -90,9 +108,6 @@ struct Editor {
   Camera camera;
 
   Triangle_Mesh *gizmo_meshes[GIZMO_COUNT][3];
-
-  // void update_entity_panel();
-  // void select_entity(Entity *e);
 };
 
 internal Picker *make_picker(int width, int height);
