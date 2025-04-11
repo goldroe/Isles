@@ -433,7 +433,7 @@ internal void draw_scene() {
 
       //@Todo Set Transform
       Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
-      Matrix4 world_matrix = translate(entity->position) * rotation_matrix;
+      Matrix4 world_matrix = translate(entity->visual_position) * rotation_matrix;
 
       set_constant(str8_lit("world"), world_matrix);
       set_constant(str8_lit("light_view_projection"), sun->light_space_matrix);
@@ -556,6 +556,7 @@ internal void draw_world(World *world, Camera camera) {
   Sun *sun = get_sun(world);
   Matrix4 light_space = sun ? sun->light_space_matrix : make_matrix4(1.0f);
   Vector3 light_direction = sun ? sun->light_direction : Vector3(0, 0, 0);
+  Vector4 light_color = sun ? sun->override_color : make_vec4(1.0f);
 
   set_shader(shader_entity);
 
@@ -567,6 +568,7 @@ internal void draw_world(World *world, Camera camera) {
   set_sampler(str8_lit("point_sampler"), SAMPLER_STATE_POINT);
   set_constant(str8_lit("light_direction"), light_direction);
   set_constant(str8_lit("light_view_projection"), light_space);
+  set_constant(str8_lit("light_color"), light_color);
     
   for (int i = 0; i < world->entities.count; i++) {
     Entity *entity = world->entities[i];
@@ -574,7 +576,7 @@ internal void draw_world(World *world, Camera camera) {
     if (!mesh) continue;
 
     Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
-    Matrix4 world_matrix = translate(entity->position) * rotation_matrix;
+    Matrix4 world_matrix = translate(entity->visual_position) * rotation_matrix;
     Matrix4 xform = camera.projection_matrix * camera.view_matrix * world_matrix;
 
     set_constant(str8_lit("xform"), xform);
