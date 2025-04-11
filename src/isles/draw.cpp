@@ -18,6 +18,7 @@ global Triangle_Mesh *water_plane_mesh;
 
 global ID3D11RasterizerState *rasterizer_cull_back;
 global ID3D11RasterizerState *rasterizer_cull_front;
+global ID3D11RasterizerState *rasterizer_wireframe;
 
 internal Shadow_Map *make_shadow_map(int width, int height) {
   R_D3D11_State *d3d = r_d3d11_state();
@@ -359,6 +360,37 @@ internal void immediate_flush() {
 internal void immediate_begin() {
   immediate_flush();
 }
+
+internal void draw_mesh(Triangle_Mesh *mesh, Vector4 color) {
+  R_D3D11_State *d3d = r_d3d11_state();
+
+  Auto_Array<Vertex_XCUU> vertices;
+  vertices.reserve(mesh->vertices.count);
+  for (int i = 0; i < mesh->vertices.count; i++) {
+    Vertex_XCUU vertex;
+    vertex.position = mesh->vertices[i];
+    vertex.color = color;
+    vertex.uv = mesh->uvs[i];
+    vertices.push(vertex);
+  }
+
+  UINT stride = sizeof(Vertex_XCUU), offset = 0;
+  ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices.data, vertices.count, sizeof(Vertex_XCUU));
+  d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+
+  for (int i = 0; i < mesh->triangle_list_info.count; i++) {
+    Triangle_List_Info triangle_list_info = mesh->triangle_list_info[i];
+
+    Material *material = mesh->materials[triangle_list_info.material_index];
+    set_texture(str8_lit("diffuse_texture"), material->texture);
+
+    d3d->device_context->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
+  }
+
+  vertices.clear();
+  vertex_buffer->Release();
+}
+
 
 internal void draw_mesh(Triangle_Mesh *mesh, bool use_override_color, Vector4 override_color) {
   R_D3D11_State *d3d = r_d3d11_state();
