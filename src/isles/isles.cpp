@@ -504,6 +504,8 @@ internal void update_sun(Sun *sun) {
   Vector3 bound_dim = get_aabb_dimension(bounds);
   f32 radius = get_max_elem(bound_dim);
 
+  sun->light_direction = normalize(sun->light_direction);
+
   Vector3 light_position = center;
   Vector3 light_target = light_position + sun->light_direction;
 
@@ -714,6 +716,12 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
 
     Arena *temp = make_arena(get_malloc_allocator());
     default_font = load_font(temp, str8_lit("data/fonts/seguisb.ttf"), 16);
+    default_fonts[FONT_DEFAULT] = default_font;
+
+    Font *icon_font;
+    u32 icon_font_glyphs[] = { 87, 120, 33, 49, 85, 68, 76, 82, 57, 48, 55, 56, 123, 125, 67, 70, 35 };
+    icon_font = load_icon_font(temp, str8_lit("data/fonts/icons.ttf"), 24, icon_font_glyphs, ArrayCount(icon_font_glyphs));
+    default_fonts[FONT_ICON] = icon_font;
 
     Triangle_Mesh *guy_mesh      = load_mesh("data/meshes/Character/character.obj");
     Triangle_Mesh *block_mesh    = load_mesh("data/meshes/tile.obj");
