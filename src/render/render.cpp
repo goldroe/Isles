@@ -506,15 +506,15 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.MipLODBias = 0;
     desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 
-    desc.Filter = D3D11_FILTER_ANISOTROPIC;
-    desc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
-    desc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
-    desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
-    desc.MaxAnisotropy = 4;
-    desc.MinLOD = 0;
-    desc.MaxLOD = D3D11_FLOAT32_MAX;
-    desc.MipLODBias = 0;
-    desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    // desc.Filter = D3D11_FILTER_ANISOTROPIC;
+    // desc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+    // desc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+    // desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+    // desc.MaxAnisotropy = 4;
+    // desc.MinLOD = 0;
+    // desc.MaxLOD = D3D11_FLOAT32_MAX;
+    // desc.MipLODBias = 0;
+    // desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 
     d3d11_state->device->CreateSamplerState(&desc, &d3d11_state->sampler_states[SAMPLER_STATE_LINEAR]);
 
