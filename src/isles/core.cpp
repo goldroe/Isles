@@ -4,6 +4,118 @@ internal inline Viewport *get_viewport() {
   return g_viewport;
 }
 
+internal Lexer *init_lexer(String8 contents) {
+  Lexer *lexer = new Lexer();
+  lexer->stream = (char *)contents.data;
+  return lexer;
+}
+
+internal Value value_int(u64 v) {
+  Value value = {};
+  value.kind = VALUE_INT;
+  value.int_val = v;
+  return value;
+}
+
+internal Value value_float(f32 v) {
+  Value value = {};
+  value.kind = VALUE_INT;
+  value.float_val = v;
+  return value;
+}
+
+internal Value value_string(String8 string) {
+  Value value = {};
+  value.kind = VALUE_STRING;
+  value.string = string;
+  return value;
+}
+
+internal Token next_token(Lexer *lexer) {
+  Token token = {};
+loop_begin:
+  token.start = lexer->stream;
+
+  switch (*lexer->stream) {
+  default:
+    logprint("Unexpected character '%c'\n", *lexer->stream);
+    lexer->stream++;
+    break;
+    
+  case 0:
+    token.kind = TOKEN_EOF;
+    break;
+
+  case ' ': case '\n': case '\r': case '\t': case '\f':
+    while (isspace(*lexer->stream)) {
+      lexer->stream++;
+    }
+    goto loop_begin;
+      
+  case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g': case 'h': case 'i': case 'j': case 'k': case 'l': case 'm': case 'n': case 'o': case 'p': case 'q': case 'r': case 's': case 't': case 'u': case 'v': case 'w': case 'x': case 'y': case 'z': case 'A': case 'B': case 'C': case 'D': case 'E': case 'F': case 'G': case 'H': case 'I': case 'J': case 'K': case 'L': case 'M': case 'N': case 'O': case 'P': case 'Q': case 'R': case 'S': case 'T': case 'U': case 'V': case 'W': case 'X': case 'Y': case 'Z': case '_':
+  {
+    char *start = lexer->stream;
+    while (isalpha(*lexer->stream) || *lexer->stream == '_') {
+      lexer->stream++;
+    }
+    char *end = lexer->stream;
+    u64 count = end - start;
+    char *str = (char *)malloc(count + 1);
+    MemoryCopy(str, start, count);
+    str[count] = 0;
+
+    token.kind = TOKEN_NAME;
+    token.name = str8((u8*)str, count);
+    break;
+  }
+
+  case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
+  {
+    u64 number = 0;
+    while (isalnum(*lexer->stream)) {
+      int digit = *lexer->stream - '0';
+      number = number * 10 + digit;
+      lexer->stream++;
+    }
+    token.kind = TOKEN_INT;
+    token.int_val = number;
+    break;
+  }
+
+  case '"':
+  {
+    lexer->stream++;
+    char *start = lexer->stream;
+    while (*lexer->stream != '"') {
+      lexer->stream++;
+    }
+    u64 count = lexer->stream - start - 1;
+    char *str = (char *)malloc(count + 1);
+    MemoryCopy(str, start, count);
+    str[count] = 0;
+    String8 string = str8((u8 *)str, count);
+    token.kind = TOKEN_STRING;
+    token.string = string;
+    break;
+  }
+
+  case '/':
+  {
+    lexer->stream++;
+    if (*lexer->stream == '/') {
+      lexer->stream++;
+      while (*lexer->stream != '\n') {
+        lexer->stream++;
+      }
+      goto loop_begin;
+    }
+    break;
+  }
+  }
+
+  return token;
+}
+
 void Byte_Buffer::advance() {
   Assert(ptr < len);
   ptr++;

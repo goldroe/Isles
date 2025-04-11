@@ -105,6 +105,46 @@ struct Arena2 {
   int align;
 };
 
+enum Token_Kind {
+  TOKEN_EOF,
+  TOKEN_NAME,
+  TOKEN_INT,
+  TOKEN_FLOAT,
+  TOKEN_STRING,
+};
+
+struct Token {
+  Token_Kind kind;
+  char *start;
+  union {
+    String8 name;
+    String8 string;
+    u64 int_val;
+    f32 float_val;
+  };
+};
+
+struct Lexer {
+  char *stream;
+  Token token;
+};
+
+enum Value_Kind {
+  VALUE_NIL,
+  VALUE_INT,
+  VALUE_FLOAT,
+  VALUE_STRING,
+};
+
+struct Value {
+  Value_Kind kind;
+  union {
+    u64 int_val;
+    f64 float_val;
+    String8 string;
+  };
+};
+
 template <typename T>
 T range_clamp(T value, T min, T max) {
   if (value < min) {
