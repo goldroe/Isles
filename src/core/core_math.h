@@ -7,6 +7,10 @@
 #define PI 3.141592653589793238f
 #endif
 
+#ifndef TAU
+#define TAU 6.283185307179586f
+#endif
+
 #define RadToDeg(R) (R*180.0f/PI)
 #define DegToRad(R) (R*PI/180.0f)
 
