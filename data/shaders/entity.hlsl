@@ -5,6 +5,7 @@ cbuffer Constants : register(b0) {
   matrix light_view_projection;
   float3 light_direction;
   float _pad0;
+  float4 light_color;
 };
 
 struct Vertex_Input {
@@ -44,7 +45,6 @@ Vertex_Output vs_main(Vertex_Input input) {
 float4 ps_main(Vertex_Output input) : SV_TARGET {
   float4 diffuse_color = diffuse_texture.Sample(diffuse_sampler, input.uv);
 
-  float4 light_color = float4(1.0, 0.6, 0.6, 1.0);
   float light_dot = max(dot(light_direction, normalize(input.normal)), 0.0);
   float4 ambient = 0.15 * light_color;
 
