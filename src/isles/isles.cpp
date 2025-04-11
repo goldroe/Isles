@@ -157,6 +157,12 @@ internal World *load_world(String8 name) {
     entity->set_position(Vector3((f32)x, (f32)y, (f32)z));
     entity->set_theta(theta);
 
+    entity->use_override_color = (b32)buffer->get_byte();
+    entity->override_color.x = buffer->get_f32();
+    entity->override_color.y = buffer->get_f32();
+    entity->override_color.z = buffer->get_f32();
+    entity->override_color.w = buffer->get_f32();
+
     switch (entity->kind) {
     case ENTITY_GUY:
     {
@@ -206,6 +212,12 @@ internal void serialize_entity(Byte_Buffer *buffer, Entity *e) {
   buffer->put_le32((u32)e->position.z);
 
   buffer->put_f32(e->theta);
+
+  buffer->put_byte((u8)e->use_override_color);
+  buffer->put_f32(e->override_color.x);
+  buffer->put_f32(e->override_color.y);
+  buffer->put_f32(e->override_color.z);
+  buffer->put_f32(e->override_color.w);
 
   switch (e->kind) {
   case ENTITY_SUN:
@@ -784,7 +796,7 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
 
     game_state->camera.update_euler_angles(-PI * 0.5f, 0.0f);
 
-    load_world(str8_lit("0.lvl"));
+    load_world(str8_lit("1.lvl"));
 
     g_viewport = new Viewport();
     g_viewport->dimension.x = 1;
