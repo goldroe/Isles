@@ -92,7 +92,7 @@ internal void update_entity_panel(Editor *editor) {
   Entity_Panel *panel = editor->entity_panel;
   panel->dirty = false;
 
-  Entity *entity = editor->selected_entity;
+  Entity *entity = editor->active_selection;
   if (entity) {
     int n = 0;
 
@@ -134,9 +134,91 @@ internal void update_entity_panel(Editor *editor) {
   }
 }
 
-internal void select_entity(Editor *editor, Entity *e) {
-  editor->selected_entity = e;
-  update_entity_panel(editor);
+internal inline bool is_selected(Editor *editor, Entity *e) {
+  for (int i = 0; i < editor->selections.count; i++) {
+    if (editor->selections[i] == e) {
+      return true;
+    }
+  }
+  return false;
+}
+
+internal inline void clear_selection(Editor *editor) {
+  editor->selections.reset_count();
+  editor->active_selection = nullptr;
+}
+
+internal inline void select_entity(Editor *editor, Entity *e) {
+  editor->selections.push(e);
+  editor->active_selection = e;
+}
+
+internal inline void single_select_entity(Editor *editor, Entity *e) {
+  editor->selections.reset_count();
+  select_entity(editor, e);
+}
+
+internal void deselect_entity(Editor *editor, Entity *e) {
+  int idx = 0;
+  for (int i = 0; i < editor->selections.count; i++) {
+    if (editor->selections[i] == e) {
+      idx = i;
+      editor->selections.remove(i);
+      break;
+    }
+  }
+
+  idx = ClampTop(idx, (int)editor->selections.count - 1);
+  if (editor->active_selection == e && editor->selections.count) {
+    editor->active_selection = editor->selections[idx];
+  }
+}
+
+internal Entity *copy_entity(Entity *e) {
+  Entity_Prototype *prototype = entity_prototype_lookup(e->prototype_id);
+  Entity *clone = entity_from_prototype(prototype);
+  clone->flags = e->flags;
+  clone->set_position(e->position);
+  clone->theta = e->theta;
+  clone->override_color = e->override_color;
+  clone->use_override_color = e->use_override_color;
+
+  switch (e->kind) {
+  case ENTITY_SUN:
+  {
+    Sun *sun = static_cast<Sun*>(e);
+    Sun *sun_clone = static_cast<Sun*>(clone);
+    sun_clone->light_direction = sun->light_direction;
+    break;
+  }
+  }
+
+  get_world()->entities.push(clone);
+  return clone;
+}
+
+internal void clone_selection(Editor *editor) {
+  if (editor->selections.count == 0) return;
+
+  Auto_Array<Entity *> selections;
+  array_copy(&selections, editor->selections);
+
+  clear_selection(editor);
+
+  for (int i = 0; i < selections.count; i++) {
+    Entity *e = selections[i];
+    Entity *clone = copy_entity(e);
+    select_entity(editor, clone);
+  }
+
+  selections.clear();
+}
+
+internal void editor_clone_entity(Editor *editor, Entity *e) {
+  if (!e) return;
+
+  Entity *clone = copy_entity(e);
+  single_select_entity(editor, clone);
 }
 
 internal void r_picker_render_gizmo(Picker *picker) {
@@ -160,9 +242,9 @@ internal void r_picker_render_gizmo(Picker *picker) {
 
   bind_uniform(shader_picker, str8_lit("Constants"));
 
-  Entity *e = editor->selected_entity;
+  Entity *e = editor->active_selection;
 
-  f32 gizmo_scale_factor = Abs(length(editor->camera.origin - editor->selected_entity->position) * 0.5f);
+  f32 gizmo_scale_factor = Abs(length(editor->camera.origin - editor->active_selection->position) * 0.5f);
   gizmo_scale_factor = ClampBot(gizmo_scale_factor, 1.0f);
 
   for (u32 axis = AXIS_X; axis <= AXIS_Z; axis++) {
@@ -367,7 +449,7 @@ internal void update_editor() {
   Vector2Int mouse_position = g_input.mouse_position;
 
   editor->gizmo_axis_hover = (Axis)-1;
-  if (editor->selected_entity) {
+  if (editor->active_selection) {
     r_picker_render_gizmo(g_picker);
     Pid gizmo_id = picker_get_id(g_picker, mouse_position);
     if (gizmo_id != 0xFFFFFFFF) {
@@ -392,7 +474,7 @@ internal void update_editor() {
       Vector3 travel = projection(distance, axis_vector);
       Vector3 meters = floor(travel);
 
-      editor->selected_entity->set_position(editor->selected_entity->position + meters);
+      editor->active_selection->set_position(editor->active_selection->position + meters);
       update_entity_panel(editor);
 
       if (meters.x || meters.y || meters.z) {
@@ -423,9 +505,17 @@ internal void update_editor() {
       Pid id = picker_get_id(g_picker, g_input.mouse_position);
       if (id != 0xFFFFFFFF) {
         Entity *e = lookup_entity(id);
-        select_entity(editor, e);
+        if (key_down(OS_KEY_CONTROL)) {
+          if (is_selected(editor, e)) {
+            deselect_entity(editor, e);
+          } else {
+            select_entity(editor, e);
+          }
+        } else {
+          single_select_entity(editor, e);
+        }
       } else {
-        select_entity(editor, nullptr);
+        clear_selection(editor);
       }
     }
   }
@@ -434,7 +524,7 @@ internal void update_editor() {
   camera_delta = 0.2f * camera_delta;
   update_camera_orientation(&editor->camera, camera_delta);
 
-  Entity *selected_entity = editor->selected_entity;
+  Entity *selected_entity = editor->active_selection;
 
   draw_scene();
 
@@ -481,36 +571,52 @@ internal void update_editor() {
 
   set_blend_state(BLEND_STATE_DEFAULT);
 
+  // Draw selection
+  set_shader(shader_mesh);
+  bind_uniform(shader_mesh, str8_lit("Constants"));
+  set_rasterizer(rasterizer_wireframe);
+  set_depth_state(DEPTH_STATE_DEFAULT);
+
+  for (int i = 0; i < editor->selections.count; i++) {
+    Entity *e = editor->selections[i];
+
+    Matrix4 rotation_matrix = rotate_rh(e->theta, Vector3(0, 1, 0));
+    Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * translate(e->position) * rotation_matrix;
+    set_constant(str8_lit("xform"), xform);
+    apply_constants();
+
+    Vector4 strobe_color = (0.5f * editor->select_strobe_t + 0.5f) * Vector4(1, 0, 1, 1);
+    if (e->mesh) draw_mesh(e->mesh, strobe_color);
+  }
+  set_rasterizer(rasterizer_cull_back);
 
   //@Note Draw Gizmos
-  if (editor->selected_entity) {
+  if (editor->active_selection) {
     R_D3D11_State *d3d = r_d3d11_state();
 
     set_depth_state(DEPTH_STATE_DEFAULT);
-    d3d->device_context->ClearDepthStencilView((ID3D11DepthStencilView *)d3d->default_render_target->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     set_rasterizer_state(RASTERIZER_STATE_NO_CULL);
 
-    set_shader(shader_entity);
+    set_shader(shader_mesh);
+    bind_uniform(shader_mesh, str8_lit("Constants"));
 
-    f32 gizmo_scale_factor = Abs(length(editor->camera.origin - editor->selected_entity->position) * 0.5f);
+    set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
+
+    f32 gizmo_scale_factor = Abs(length(editor->camera.origin - editor->active_selection->position) * 0.5f);
     gizmo_scale_factor = ClampBot(gizmo_scale_factor, 1.0f);
 
-    Matrix4 world_matrix = make_matrix4(1.0f);
-    Matrix4 view = editor->camera.view_matrix;
-    Matrix4 transform = editor->camera.projection_matrix * editor->camera.view_matrix;
+    Matrix4 world_matrix = translate(selected_entity->position) * scale(make_vec3(gizmo_scale_factor));
+    Matrix4 view_matrix = editor->camera.view_matrix;
+    Matrix4 xform = editor->camera.projection_matrix * view_matrix * world_matrix;
+    set_constant(str8_lit("xform"), xform);
+    set_texture(str8_lit("diffuse_texture"), d3d->fallback_tex);
+    apply_constants();
 
     for (int axis = AXIS_X; axis <= AXIS_Z; axis++) {
       Triangle_Mesh *mesh = editor->gizmo_meshes[editor->active_gizmo][axis];
-      if (!mesh) continue;
 
-      Matrix4 world_matrix = translate(selected_entity->position) * scale(make_vec3(gizmo_scale_factor));
-      Matrix4 view_matrix = editor->camera.view_matrix;
-      Matrix4 xform = editor->camera.projection_matrix * view_matrix * world_matrix;
-      set_constant(str8_lit("xform"), xform);
-      set_constant(str8_lit("world"), world_matrix);
-      bind_uniform(shader_entity, str8_lit("Constants"));
-      apply_constants();
+      d3d->device_context->ClearDepthStencilView((ID3D11DepthStencilView *)d3d->default_render_target->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
       Vector4 color = Vector4(unit_vector(axis), 1.0f);
       if (editor->gizmo_axis_hover == axis && editor->gizmo_axis_active == (Axis)-1) {
@@ -520,8 +626,27 @@ internal void update_editor() {
         color = mix(color, Vector4(1.0f, 1.0f, 1.0f, 1.0f), 0.4f);
       }
 
-      draw_mesh(mesh, true, color);
+      Vertex_XCUU *vertices = new Vertex_XCUU[mesh->vertices.count];
+      for (int i = 0; i < mesh->vertices.count; i++) {
+        Vertex_XCUU vertex = Vertex_XCUU(mesh->vertices[i], color, Vector2());
+        vertices[i] = vertex;
+      }
+
+      ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices, mesh->vertices.count, sizeof(Vertex_XCUU));
+      UINT stride = sizeof(Vertex_XCUU), offset = 0;
+      d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+      d3d->device_context->Draw((UINT)mesh->vertices.count, 0);
+      vertex_buffer->Release();
+
+      delete [] vertices;
     }
+  }
+
+  editor->select_strobe_t += (editor->select_strobe_target - editor->select_strobe_t) * get_frame_delta();
+  if (Abs(editor->select_strobe_target - editor->select_strobe_t) < 0.1f) {
+    editor->select_strobe_t = editor->select_strobe_target;
+    if (editor->select_strobe_target > 0.0f) editor->select_strobe_target = 0.0f;
+    else editor->select_strobe_target = 1.0f;
   }
 }
 
@@ -635,7 +760,7 @@ internal void editor_present_ui() {
 
   //@Note Entity Panel
   {
-    Entity *e = editor->selected_entity;
+    Entity *e = editor->active_selection;
     Entity_Panel *panel = editor->entity_panel;
 
     f32 field_height = 26.0f;
@@ -728,11 +853,11 @@ internal void editor_present_ui() {
           Entity_Prototype *prototype = editor->prototype_array[editor->prototype_idx];
           Entity *instance = entity_from_prototype(prototype);
           instance->set_position(floor(editor->camera.origin + editor->camera.forward));
-          if (editor->selected_entity) {
-            Vector3 unit = get_nearest_axis(editor->camera.origin - editor->selected_entity->position);
-            instance->set_position(editor->selected_entity->position + unit);
+          if (editor->active_selection) {
+            Vector3 unit = get_nearest_axis(editor->camera.origin - editor->active_selection->position);
+            instance->set_position(editor->active_selection->position + unit);
           }
-          select_entity(editor, instance);
+          single_select_entity(editor, instance);
           World *world = get_world();
           world->entities.push(instance);
           if (instance->kind == ENTITY_GUY) {
@@ -878,22 +1003,13 @@ internal void editor_present_ui() {
         }
 
         if (ui_clicked(ui_button(str8_lit("Clone")))) {
-          Entity_Prototype *prototype = entity_prototype_lookup(editor->selected_entity->prototype_id);
-          if (prototype) {
-            Entity *new_entity = entity_from_prototype(prototype);
-            new_entity->set_position(e->position);
-            new_entity->override_color = editor->selected_entity->override_color;
-            new_entity->use_override_color = editor->selected_entity->use_override_color;
-
-            select_entity(editor, new_entity);
-            get_world()->entities.push(new_entity);
-          }
+          editor_clone_entity(editor, editor->active_selection);
         }
 
         if (ui_clicked(ui_button(str8_lit("Destroy!")))) {
-          remove_grid_entity(get_world(), editor->selected_entity);
+          remove_grid_entity(get_world(), editor->active_selection);
           e->to_be_destroyed = true;
-          select_entity(editor, nullptr);
+          deselect_entity(editor, e);
         }
       }
 
@@ -921,9 +1037,9 @@ internal void editor_present_ui() {
   }
 
   //@Note Update enttiy on field edit
-  if (editor->selected_entity) {
+  if (editor->active_selection) {
     Entity_Panel *panel = editor->entity_panel;
-    Entity *e = editor->selected_entity;
+    Entity *e = editor->active_selection;
 
     if (panel->position_field->dirty) {
       panel->position_field->dirty = false;
@@ -962,23 +1078,18 @@ internal void editor_present_ui() {
   }
 
   //@Note Editor shortcuts
-  if (editor->selected_entity) {
-    Entity *e = editor->selected_entity;
+  if (editor->active_selection) {
+    Entity *e = editor->active_selection;
     if (key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_C)) {
-      Entity_Prototype *prototype = entity_prototype_lookup(e->prototype_id);
-      if (prototype) {
-        Entity *new_entity = entity_from_prototype(prototype);
-        new_entity->set_position(e->position);
-        new_entity->override_color = e->override_color;
-
-        select_entity(editor, new_entity);
-        get_world()->entities.push(new_entity);
-      }
+      clone_selection(editor);
     }
     if (key_pressed(OS_KEY_DELETE)) {
-      remove_grid_entity(get_world(), e);
-      e->to_be_destroyed = true;
-      select_entity(editor, nullptr);
+      for (int i = 0; i < editor->selections.count; i++) {
+        Entity *e = editor->selections[i];
+        e->to_be_destroyed = true;
+        remove_grid_entity(get_world(), e);
+      }
+      clear_selection(editor);
     }
 
     Vector3 up = Vector3(0, 1, 0);
@@ -987,43 +1098,38 @@ internal void editor_present_ui() {
     forward = get_nearest_axis(forward);
     Vector3 right = normalize(cross(forward, up));
 
+    Vector3 move_distance = Vector3();
+
     if (key_down(OS_KEY_CONTROL) && !key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_UP)) {
       editor->entity_panel->dirty = true;
-      Vector3 position = e->position;
-      position += forward;
-      e->set_position(position);
+      move_distance += forward;
     }
     if (key_down(OS_KEY_CONTROL) && !key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_DOWN)) {
       editor->entity_panel->dirty = true;
-      Vector3 position = e->position;
-      position -= forward;
-      e->set_position(position);
+      move_distance -= forward;
     }
-
     if (key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_RIGHT)) {
       editor->entity_panel->dirty = true;
-      Vector3 position = e->position;
-      position += right;
-      e->set_position(position);
+      move_distance += right;
     }
     if (key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_LEFT)) {
       editor->entity_panel->dirty = true;
-      Vector3 position = e->position;
-      position -= right;
-      e->set_position(position);
+      move_distance -= right;
     }
-
     if (key_down(OS_KEY_CONTROL) && key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_UP)) {
       editor->entity_panel->dirty = true;
-      Vector3 position = e->position;
-      position += up;
-      e->set_position(position);
+      move_distance += up;
     }
     if (key_down(OS_KEY_CONTROL) && key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_DOWN)) {
       editor->entity_panel->dirty = true;
-      Vector3 position = e->position;
-      position -= up;
-      e->set_position(position);
+      move_distance -= up;
+    }
+
+    if (length(move_distance) > 0.0f) {
+      for (int i = 0; i < editor->selections.count; i++) {
+        Entity *e = editor->selections[i];
+        e->set_position(e->position + move_distance);
+      }
     }
 
     if (e->kind == ENTITY_SUN) {

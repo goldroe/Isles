@@ -102,16 +102,25 @@ struct Editor {
 
   Editor_Panel *panel = nullptr;
   Entity_Panel *entity_panel = nullptr;
-  Entity *selected_entity = nullptr;
+
+  Auto_Array<Entity*> selections;
+  Entity *active_selection = nullptr;
+  
   int prototype_idx = 0;
 
   Camera camera;
 
   Triangle_Mesh *gizmo_meshes[GIZMO_COUNT][3];
+
+  f32 select_strobe_t = 0;
+  f32 select_strobe_target = 1.0f;
 };
 
 internal Picker *make_picker(int width, int height);
 internal inline Editor *get_editor();
+
+
+internal Entity *entity_from_prototype(Entity_Prototype *prototype);
 internal Entity_Prototype *entity_prototype_lookup(u64 prototype_id);
 
 #endif // EDITOR_H
