@@ -4,10 +4,58 @@ internal inline Viewport *get_viewport() {
   return g_viewport;
 }
 
-internal Lexer *init_lexer(String8 contents) {
-  Lexer *lexer = new Lexer();
-  lexer->stream = (char *)contents.data;
-  return lexer;
+std::unordered_map<u64, Key> key_names_table;
+
+internal Key get_key_name(String8 name) {
+  u64 hash = djb2_hash_string(name);
+  auto it = key_names_table.find(hash);
+  Key key = 0;
+  if (it != key_names_table.end()) {
+    key = it->second;
+  }
+  return key;
+}
+
+internal void insert_key_name(String8 name, Key key) {
+  u64 hash = djb2_hash_string(name);
+  key_names_table.insert({hash, key});
+}
+
+internal void init_key_name_table() {
+  
+  for (char ch = 'A'; ch <= 'Z'; ch++) {
+    Key key = (Key)(OS_KEY_A + ch - 'A');
+    String8 name = str8((u8 *)&ch, 1);
+    insert_key_name(name, key); 
+  }
+
+  for (char ch = 'a'; ch <= 'z'; ch++) {
+    Key key = (Key)(OS_KEY_A + ch - 'a');
+    String8 name = str8((u8 *)&ch, 1);
+    insert_key_name(name, key); 
+  }
+ 
+  for (int i = 0; i <= 9; i++) {
+    u8 ch = (u8)('0' + i);
+    String8 str = str8(&ch, 1);
+    insert_key_name(str, (Key)OS_KEY_0 + i);
+  }
+
+  insert_key_name(str8_lit("Up"),    (Key)OS_KEY_UP);
+  insert_key_name(str8_lit("Down"),  (Key)OS_KEY_DOWN);
+  insert_key_name(str8_lit("Left"),  (Key)OS_KEY_LEFT);
+  insert_key_name(str8_lit("Right"), (Key)OS_KEY_RIGHT);
+
+  insert_key_name(str8_lit("Delete"),  (Key)OS_KEY_DELETE);
+  insert_key_name(str8_lit("Escape"), (Key)OS_KEY_ESCAPE);
+  insert_key_name(str8_lit("Backspace"), (Key)OS_KEY_ESCAPE);
+  insert_key_name(str8_lit("Enter"), (Key)OS_KEY_ENTER);
+  insert_key_name(str8_lit("PageUp"), (Key)OS_KEY_PAGEUP);
+  insert_key_name(str8_lit("PageDown"), (Key)OS_KEY_PAGEDOWN);
+}
+
+internal Key key_from_name(String8 name) {
+  
 }
 
 internal Value value_int(u64 v) {
@@ -111,9 +159,53 @@ loop_begin:
     }
     break;
   }
+
+  case ',':
+  {
+    lexer->stream++;
+    token.kind = TOKEN_MINUS;
+    break;
   }
 
+  case '+':
+  {
+    lexer->stream++;
+    token.kind = TOKEN_PLUS;
+    break;
+  }
+
+  case '-':
+  {
+    lexer->stream++;
+    token.kind = TOKEN_MINUS;
+    break;
+  }
+
+  case ':':
+  {
+    lexer->stream++;
+    if (*lexer->stream == ':') {
+      lexer->stream++;
+      token.kind = TOKEN_COLON2;
+    } else {
+      token.kind = TOKEN_COLON;
+    }
+    break;
+  }
+
+
+  }
+
+  lexer->token = token;
+
   return token;
+}
+
+internal Lexer *init_lexer(String8 contents) {
+  Lexer *lexer = new Lexer();
+  lexer->stream = (char *)contents.data;
+  next_token(lexer);
+  return lexer;
 }
 
 void Byte_Buffer::advance() {
