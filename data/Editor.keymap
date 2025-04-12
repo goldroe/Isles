@@ -1,0 +1,10 @@
+
+C-Up     ::  EditorMoveForward
+C-Down   ::  EditorMoveBackward
+C-Left   ::  EditorMoveLeft
+C-Right  ::  EditorMoveRight
+C-S-Up   ::  EditorMoveUp
+C-S-Down ::  EditorMoveDown
+
+C-C     ::  EditorCopySelection
+//Delete  ::  EditorDeleteSelection
