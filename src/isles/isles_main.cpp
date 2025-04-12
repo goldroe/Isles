@@ -33,6 +33,7 @@
 #undef near
 #undef far
 
+#include "keymap.h"
 #include "core.h"
 #include "settings.h"
 #include "mesh.h"
@@ -61,6 +62,7 @@
 
 #include "log.cpp"
 
+#include "keymap.cpp"
 #include "core.cpp"
 #include "settings.cpp"
 #include "audio.cpp"
@@ -78,6 +80,7 @@
 global bool window_should_close;
 
 int main() {
+  init_key_name_table();
   init_tweak_settings();
 
   QueryPerformanceFrequency((LARGE_INTEGER *)&win32_performance_frequency);

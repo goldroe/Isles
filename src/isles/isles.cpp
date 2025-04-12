@@ -865,7 +865,7 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
 
   if (game_state->editing) {
     input_set_mouse_capture(false);
-    update_editor();
+    update_editor(events);
   }
 
   if (!game_state->paused && !game_state->editing) {
