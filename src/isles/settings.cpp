@@ -29,8 +29,8 @@ internal void insert_tweak_setting(String8 name, Value value) {
 internal void init_tweak_settings() {
   tweak_settings = new Tweak_Settings();
 
-  insert_tweak_setting(str8_lit("WindoWidth"), value_int(1600));
-  insert_tweak_setting(str8_lit("WindoWidth"), value_int(900));
+  insert_tweak_setting(str8_lit("WindowWidth"), value_int(1600));
+  insert_tweak_setting(str8_lit("WindowWidth"), value_int(900));
 
   OS_Handle file_handle = os_open_file(str8_lit("data/All.settings"), OS_AccessFlag_Read);
   String8 file_contents = str8_zero();
@@ -42,24 +42,27 @@ internal void init_tweak_settings() {
   Lexer *lexer = init_lexer(file_contents);
 
   for (;;) {
-    Token name = next_token(lexer);
-    if (name.kind == TOKEN_EOF) break;
+    if (lexer->token.kind == TOKEN_EOF) break;
 
-    if (name.kind == TOKEN_NAME) {
-      Token val_tok = next_token(lexer);
+    if (lexer->token.kind == TOKEN_NAME) {
+      Token name = lexer->token;
+      next_token(lexer);
+
+      Token value_token = lexer->token;
+      next_token(lexer);
       Value value = {};
-      switch (val_tok.kind) {
+      switch (value_token.kind) {
       case TOKEN_INT:
         value.kind = VALUE_INT;
-        value.int_val = val_tok.int_val;
+        value.int_val = value_token.int_val;
         break;
       case TOKEN_FLOAT:
         value.kind = VALUE_FLOAT;
-        value.float_val = val_tok.float_val;
+        value.float_val = value_token.float_val;
         break;
       case TOKEN_STRING: {
         value.kind = VALUE_STRING;
-        value.string = val_tok.string;
+        value.string = value_token.string;
         break;
       }
       }
