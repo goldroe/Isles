@@ -105,6 +105,7 @@ struct Editor {
 
   Auto_Array<Entity*> selections;
   Entity *active_selection = nullptr;
+  Entity *hover_entity = nullptr;
   
   int prototype_idx = 0;
 

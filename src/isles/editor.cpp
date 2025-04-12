@@ -1,7 +1,10 @@
-//@Todo UI item expansion
 
 global Editor *g_editor;
 global Picker *g_picker;
+
+global Key_Map *editor_key_map;
+
+std::unordered_map<u64,Key_Command> editor_command_table;
 
 internal char *string_from_field_kind(Field_Kind kind) {
   switch (kind) {
@@ -23,10 +26,286 @@ internal inline Editor *get_editor() {
   return g_editor;
 }
 
+internal inline bool is_selected(Editor *editor, Entity *e) {
+  for (int i = 0; i < editor->selections.count; i++) {
+    if (editor->selections[i] == e) {
+      return true;
+    }
+  }
+  return false;
+}
+
+internal inline void clear_selection(Editor *editor) {
+  editor->selections.reset_count();
+  editor->active_selection = nullptr;
+}
+
+internal inline void select_entity(Editor *editor, Entity *e) {
+  editor->selections.push(e);
+  editor->active_selection = e;
+}
+
+internal inline void single_select_entity(Editor *editor, Entity *e) {
+  editor->selections.reset_count();
+  select_entity(editor, e);
+}
+
+internal void deselect_entity(Editor *editor, Entity *e) {
+  int idx = 0;
+  for (int i = 0; i < editor->selections.count; i++) {
+    if (editor->selections[i] == e) {
+      idx = i;
+      editor->selections.remove(i);
+      break;
+    }
+  }
+
+  idx = ClampTop(idx, (int)editor->selections.count - 1);
+  if (editor->active_selection == e && editor->selections.count) {
+    editor->active_selection = editor->selections[idx];
+  }
+}
+
+internal Entity *copy_entity(Entity *e) {
+  Entity_Prototype *prototype = entity_prototype_lookup(e->prototype_id);
+  Entity *clone = entity_from_prototype(prototype);
+  clone->flags = e->flags;
+  clone->set_position(e->position);
+  clone->theta = e->theta;
+  clone->override_color = e->override_color;
+  clone->use_override_color = e->use_override_color;
+
+  switch (e->kind) {
+  case ENTITY_SUN:
+  {
+    Sun *sun = static_cast<Sun*>(e);
+    Sun *sun_clone = static_cast<Sun*>(clone);
+    sun_clone->light_direction = sun->light_direction;
+    break;
+  }
+  }
+
+  get_world()->entities.push(clone);
+  return clone;
+}
+
+internal void editor_clone_entity(Editor *editor, Entity *e) {
+  if (!e) return;
+
+  Entity *clone = copy_entity(e);
+  single_select_entity(editor, clone);
+}
+
+internal void get_move_vectors(Camera camera, Vector3 *forward, Vector3 *right) {
+  Vector3 U = Vector3(0, 1, 0);
+  Vector3 F = camera.forward;
+  F.y = 0;
+  F = get_nearest_axis(F);
+  Vector3 R = normalize(cross(F, U));
+  *forward = F;
+  *right = R;
+}
+
+COMMAND(EditorMoveLeft) {
+  Editor *editor = get_editor();
+  editor->entity_panel->dirty = true;
+
+  Vector3 forward, right;
+  get_move_vectors(editor->camera, &forward, &right);
+
+  for (int i = 0; i < editor->selections.count; i++) {
+    Entity *e = editor->selections[i];
+    e->set_position(e->position - right);
+  }
+}
+
+COMMAND(EditorMoveRight) {
+  Editor *editor = get_editor();
+  editor->entity_panel->dirty = true;
+
+  Vector3 forward, right;
+  get_move_vectors(editor->camera, &forward, &right);
+
+  for (int i = 0; i < editor->selections.count; i++) {
+    Entity *e = editor->selections[i];
+    e->set_position(e->position + right);
+  }
+}
+
+COMMAND(EditorMoveUp) {
+  Editor *editor = get_editor();
+  editor->entity_panel->dirty = true;
+
+  for (int i = 0; i < editor->selections.count; i++) {
+    Entity *e = editor->selections[i];
+    e->set_position(e->position + Vector3(0, 1, 0));
+  }
+}
+
+COMMAND(EditorMoveDown) {
+  Editor *editor = get_editor();
+  editor->entity_panel->dirty = true;
+
+  for (int i = 0; i < editor->selections.count; i++) {
+    Entity *e = editor->selections[i];
+    e->set_position(e->position - Vector3(0, 1, 0));
+  }
+}
+
+COMMAND(EditorMoveForward) {
+  Editor *editor = get_editor();
+  editor->entity_panel->dirty = true;
+
+  Vector3 forward, right;
+  get_move_vectors(editor->camera, &forward, &right);
+
+  for (int i = 0; i < editor->selections.count; i++) {
+    Entity *e = editor->selections[i];
+    e->set_position(e->position + forward);
+  }
+}
+
+COMMAND(EditorMoveBackward) {
+  Editor *editor = get_editor();
+  editor->entity_panel->dirty = true;
+
+  Vector3 forward, right;
+  get_move_vectors(editor->camera, &forward, &right);
+
+  for (int i = 0; i < editor->selections.count; i++) {
+    Entity *e = editor->selections[i];
+    e->set_position(e->position - forward);
+  }
+}
+
+COMMAND(EditorCopySelection) {
+  Editor *editor = get_editor();
+  if (editor->selections.count == 0) return;
+
+  Auto_Array<Entity *> selections;
+  array_copy(&selections, editor->selections);
+
+  clear_selection(editor);
+
+  for (int i = 0; i < selections.count; i++) {
+    Entity *e = selections[i];
+    Entity *clone = copy_entity(e);
+    select_entity(editor, clone);
+  }
+
+  selections.clear();
+}
+
+COMMAND(EditorDeleteSelection) {
+  Editor *editor = get_editor();
+  for (int i = 0; i < editor->selections.count; i++) {
+    Entity *e = editor->selections[i];
+    e->to_be_destroyed = true;
+    remove_grid_entity(get_world(), e);
+  }
+  clear_selection(editor);
+}
+
+internal void insert_key_map_command(String8 name, Key_Proc *proc) {
+  Key_Command command;
+  command.name = name;
+  command.proc = proc;
+  u64 hash = djb2_hash_string(name);
+  editor_command_table.insert({hash, command});
+}
+
+internal void init_editor_key_map() {
+  editor_key_map = create_key_map(str8_lit("Editor"));
+
+  insert_key_map_command(str8_lit("EditorMoveLeft"), EditorMoveLeft);
+  insert_key_map_command(str8_lit("EditorMoveRight"), EditorMoveRight);
+  insert_key_map_command(str8_lit("EditorMoveForward"), EditorMoveForward);
+  insert_key_map_command(str8_lit("EditorMoveBackward"), EditorMoveBackward);
+  insert_key_map_command(str8_lit("EditorMoveUp"), EditorMoveUp);
+  insert_key_map_command(str8_lit("EditorMoveDown"), EditorMoveDown);
+  insert_key_map_command(str8_lit("EditorCopySelection"), EditorCopySelection);
+  insert_key_map_command(str8_lit("EditorDeleteSelection"), EditorDeleteSelection);
+
+  OS_Handle file_handle = os_open_file(str8_lit("data/Editor.keymap"), OS_AccessFlag_Read);
+  if (!os_valid_handle(file_handle)) {
+    return;
+  }
+
+  String8 file = os_read_file_string(file_handle);
+  os_close_handle(file_handle);
+
+  Lexer *lexer = init_lexer(file);
+
+  for (;;) {
+    if (lexer->token.kind == TOKEN_EOF) break;
+
+    Key key = 0;
+    String8 command_name = str8_zero();
+
+    while (lexer->token.kind != TOKEN_COLON2 && lexer->token.kind != TOKEN_EOF) {
+      if (lexer->token.kind == TOKEN_NAME) {
+        Token name = lexer->token;
+        next_token(lexer);
+
+        bool is_prefix = false;
+        if (lexer->token.kind == TOKEN_MINUS) is_prefix = true;
+
+        if (is_prefix) {
+          if (str8_equal(name.name, str8_lit("C"))) {
+            key |= KEYMOD_CONTROL;
+          } else if (str8_equal(name.name, str8_lit("A"))) {
+            key |= KEYMOD_ALT;
+          } else if (str8_equal(name.name, str8_lit("S"))) {
+            key |= KEYMOD_SHIFT;
+          } else {
+            logprint("Invalid prefix '%S'.\n", name.name);
+          }
+        } else {
+          auto it = key_names_table.find(djb2_hash_string(name.name));
+          if (it != key_names_table.end()) {
+            Key named_key = get_key_name(name.name);
+            key |= named_key;
+          } else {
+            logprint("Invalid key '%S'.\n", name.name);
+          }
+        }
+
+        if (lexer->token.kind == TOKEN_MINUS) next_token(lexer);
+
+      } else {
+        logprint("Unexpected token.\n");
+        next_token(lexer);
+        break;
+      }
+    }
+
+    if (lexer->token.kind == TOKEN_COLON2) {
+      next_token(lexer);
+
+      if (lexer->token.kind == TOKEN_NAME) {
+        command_name = lexer->token.name;
+      } else {
+        logprint("Bad token.\n");
+      }
+      next_token(lexer);
+    }
+
+    if (key && command_name.count > 0) {
+      u64 hash = djb2_hash_string(command_name);
+      auto it = editor_command_table.find(hash);
+      if (it != editor_command_table.end()) {
+        Key_Command command = it->second;
+        key_map_bind(editor_key_map, key, command);
+      }
+    }
+  }
+}
+
 internal void init_editor() {
   g_editor = new Editor();
-
   Editor *editor = g_editor;
+
+  init_editor_key_map();
 
   editor->gizmo_meshes[GIZMO_TRANSLATE][AXIS_X] = load_mesh("data/meshes/gizmo/translate_x.obj");
   editor->gizmo_meshes[GIZMO_TRANSLATE][AXIS_Y] = load_mesh("data/meshes/gizmo/translate_y.obj");
@@ -132,93 +411,6 @@ internal void update_entity_panel(Editor *editor) {
       panel->sun_dir_field->fields[2]->buffer_pos = panel->sun_dir_field->fields[2]->buffer_len = n;
     }
   }
-}
-
-internal inline bool is_selected(Editor *editor, Entity *e) {
-  for (int i = 0; i < editor->selections.count; i++) {
-    if (editor->selections[i] == e) {
-      return true;
-    }
-  }
-  return false;
-}
-
-internal inline void clear_selection(Editor *editor) {
-  editor->selections.reset_count();
-  editor->active_selection = nullptr;
-}
-
-internal inline void select_entity(Editor *editor, Entity *e) {
-  editor->selections.push(e);
-  editor->active_selection = e;
-}
-
-internal inline void single_select_entity(Editor *editor, Entity *e) {
-  editor->selections.reset_count();
-  select_entity(editor, e);
-}
-
-internal void deselect_entity(Editor *editor, Entity *e) {
-  int idx = 0;
-  for (int i = 0; i < editor->selections.count; i++) {
-    if (editor->selections[i] == e) {
-      idx = i;
-      editor->selections.remove(i);
-      break;
-    }
-  }
-
-  idx = ClampTop(idx, (int)editor->selections.count - 1);
-  if (editor->active_selection == e && editor->selections.count) {
-    editor->active_selection = editor->selections[idx];
-  }
-}
-
-internal Entity *copy_entity(Entity *e) {
-  Entity_Prototype *prototype = entity_prototype_lookup(e->prototype_id);
-  Entity *clone = entity_from_prototype(prototype);
-  clone->flags = e->flags;
-  clone->set_position(e->position);
-  clone->theta = e->theta;
-  clone->override_color = e->override_color;
-  clone->use_override_color = e->use_override_color;
-
-  switch (e->kind) {
-  case ENTITY_SUN:
-  {
-    Sun *sun = static_cast<Sun*>(e);
-    Sun *sun_clone = static_cast<Sun*>(clone);
-    sun_clone->light_direction = sun->light_direction;
-    break;
-  }
-  }
-
-  get_world()->entities.push(clone);
-  return clone;
-}
-
-internal void clone_selection(Editor *editor) {
-  if (editor->selections.count == 0) return;
-
-  Auto_Array<Entity *> selections;
-  array_copy(&selections, editor->selections);
-
-  clear_selection(editor);
-
-  for (int i = 0; i < selections.count; i++) {
-    Entity *e = selections[i];
-    Entity *clone = copy_entity(e);
-    select_entity(editor, clone);
-  }
-
-  selections.clear();
-}
-
-internal void editor_clone_entity(Editor *editor, Entity *e) {
-  if (!e) return;
-
-  Entity *clone = copy_entity(e);
-  single_select_entity(editor, clone);
 }
 
 internal void r_picker_render_gizmo(Picker *picker) {
@@ -437,8 +629,36 @@ internal Pid picker_get_id(Picker *picker, Vector2Int mouse) {
   return result;
 }
 
-internal void update_editor() {
+internal void update_editor(OS_Event_List *events) {
   Editor *editor = g_editor;
+
+  for (OS_Event *evt = events->first; evt; evt = evt->next) {
+    bool pressed = false;
+    Key_Mod mods = 0;
+    if (evt->flags & OS_EventFlag_Control) mods |= KEYMOD_CONTROL;
+    if (evt->flags & OS_EventFlag_Alt)     mods |= KEYMOD_ALT;
+    if (evt->flags & OS_EventFlag_Shift)   mods |= KEYMOD_SHIFT;
+
+    switch (evt->kind) {
+    case OS_EventKind_MouseDown:
+      break;
+    case OS_EventKind_Press:
+      pressed = true;
+      // case OS_EventKind_Release:
+      // case OS_EventKind_MouseUp:
+    {
+      Key key = make_key((u16)evt->key, mods);
+      Key_Command *command = key_map_lookup(editor_key_map, key);
+      if (command->proc) {
+        command->proc();
+      }
+      break;
+    }
+    case OS_EventKind_Scroll:
+      break;
+    }
+  }
+
 
   R_D3D11_State *d3d = r_d3d11_state();
 
@@ -494,6 +714,8 @@ internal void update_editor() {
     }
   }
 
+  editor->hover_entity = nullptr;
+
   if (editor->gizmo_axis_hover != -1) {
     if (mouse_clicked(0)) {
       editor->gizmo_axis_active = editor->gizmo_axis_hover;
@@ -505,18 +727,21 @@ internal void update_editor() {
       Pid id = picker_get_id(g_picker, g_input.mouse_position);
       if (id != 0xFFFFFFFF) {
         Entity *e = lookup_entity(id);
-        if (key_down(OS_KEY_CONTROL)) {
-          if (is_selected(editor, e)) {
-            deselect_entity(editor, e);
-          } else {
-            select_entity(editor, e);
-          }
-        } else {
-          single_select_entity(editor, e);
-        }
-      } else {
-        clear_selection(editor);
+        editor->hover_entity = e;
       }
+    }
+  }
+
+  if (key_pressed(OS_KEY_LEFTMOUSE)) {
+    Entity *hover = editor->hover_entity;
+    if (hover) {
+      if (is_selected(editor, hover)) {
+        deselect_entity(editor, hover);
+      } else {
+        select_entity(editor, hover);
+      }
+    } else {
+      clear_selection(editor);
     }
   }
 
@@ -1073,69 +1298,6 @@ internal void editor_present_ui() {
         sun->light_direction.x = strtof((char *)panel->sun_dir_field->fields[0]->buffer, nullptr); 
         sun->light_direction.y = strtof((char *)panel->sun_dir_field->fields[1]->buffer, nullptr); 
         sun->light_direction.z = strtof((char *)panel->sun_dir_field->fields[2]->buffer, nullptr); 
-      }
-    }
-  }
-
-  //@Note Editor shortcuts
-  if (editor->active_selection) {
-    Entity *e = editor->active_selection;
-    if (key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_C)) {
-      clone_selection(editor);
-    }
-    if (key_pressed(OS_KEY_DELETE)) {
-      for (int i = 0; i < editor->selections.count; i++) {
-        Entity *e = editor->selections[i];
-        e->to_be_destroyed = true;
-        remove_grid_entity(get_world(), e);
-      }
-      clear_selection(editor);
-    }
-
-    Vector3 up = Vector3(0, 1, 0);
-    Vector3 forward = editor->camera.forward;
-    forward.y = 0;
-    forward = get_nearest_axis(forward);
-    Vector3 right = normalize(cross(forward, up));
-
-    Vector3 move_distance = Vector3();
-
-    if (key_down(OS_KEY_CONTROL) && !key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_UP)) {
-      editor->entity_panel->dirty = true;
-      move_distance += forward;
-    }
-    if (key_down(OS_KEY_CONTROL) && !key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_DOWN)) {
-      editor->entity_panel->dirty = true;
-      move_distance -= forward;
-    }
-    if (key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_RIGHT)) {
-      editor->entity_panel->dirty = true;
-      move_distance += right;
-    }
-    if (key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_LEFT)) {
-      editor->entity_panel->dirty = true;
-      move_distance -= right;
-    }
-    if (key_down(OS_KEY_CONTROL) && key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_UP)) {
-      editor->entity_panel->dirty = true;
-      move_distance += up;
-    }
-    if (key_down(OS_KEY_CONTROL) && key_down(OS_KEY_SHIFT) && key_pressed(OS_KEY_DOWN)) {
-      editor->entity_panel->dirty = true;
-      move_distance -= up;
-    }
-
-    if (length(move_distance) > 0.0f) {
-      for (int i = 0; i < editor->selections.count; i++) {
-        Entity *e = editor->selections[i];
-        e->set_position(e->position + move_distance);
-      }
-    }
-
-    if (e->kind == ENTITY_SUN) {
-      if (key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_L)) {
-        Sun *sun = static_cast<Sun*>(e);
-        sun->light_direction = editor->camera.forward;
       }
     }
   }
