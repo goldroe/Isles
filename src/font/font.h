@@ -2,13 +2,14 @@
 #define FONT_H
 
 struct Glyph {
-    f32 ax;
-    f32 ay;
-    f32 bx;
-    f32 by;
-    f32 bt;
-    f32 bl;
-    f32 to;
+  f32 ax;
+  f32 ay;
+  f32 bx;
+  f32 by;
+  f32 bt;
+  f32 bl;
+  f32 tx;
+  f32 ty;
 };
 
 struct Font {
