@@ -562,10 +562,12 @@ internal void ui_end() {
   }
 
   UI_Box *active_box = ui_find_box(ui_g_state->active_box_key);
-  if (active_box && !rect_contains(active_box->rect, ui_mouse())) {
-    if (ui_mouse_press() || ui_mouse_release()) {
+  if (active_box) {
+    if (!rect_contains(active_box->rect, ui_mouse()) && (ui_mouse_release() || ui_mouse_press())) {
       ui_set_active_key(0);
     }
+  } else {
+    ui_set_active_key(0);
   }
 }
 
@@ -598,6 +600,7 @@ internal UI_Signal ui_signal_from_box(UI_Box *box) {
       if ((box->flags & UI_BOX_FLAG_CLICKABLE) && ui_active_key_match(box->key) &&
         event.key == OS_KEY_LEFTMOUSE) {
         signal.flags |= UI_SIGNAL_FLAG_RELEASED;
+        ui_set_active_key(0);
       }
       break;
     }
@@ -799,8 +802,8 @@ internal void draw_ui_glyph(UI_Draw_Batch *batch, Glyph g, Font *font, Vector2 p
   dst.bottom = dst.top + g.by;
 
   UI_Rect src = {};
-  src.left = g.to;
-  src.top = 0.f;
+  src.left = g.tx;
+  src.top = g.ty;
   src.right = src.left + (g.bx / (f32)font->width);
   src.bottom = src.top + (g.by / (f32)font->height);
 
