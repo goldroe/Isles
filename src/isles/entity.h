@@ -34,6 +34,8 @@ struct Entity {
   Vector3 rotation;
   Vector3 visual_rotation;
 
+  Vector3 offset;
+
   f32 theta;
   f32 theta_target;
 
