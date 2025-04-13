@@ -361,6 +361,28 @@ internal void immediate_begin() {
   immediate_flush();
 }
 
+internal void draw_wireframe_mesh(Triangle_Mesh *mesh, Vector4 color) {
+  R_D3D11_State *d3d = r_d3d11_state();
+
+  Auto_Array<Vertex_XCUU> vertices;
+  vertices.reserve(mesh->vertices.count);
+  for (int i = 0; i < mesh->vertices.count; i++) {
+    Vertex_XCUU vertex;
+    vertex.position = mesh->vertices[i];
+    vertex.color = color;
+    vertex.uv = mesh->uvs[i];
+    vertices.push(vertex);
+  }
+
+  UINT stride = sizeof(Vertex_XCUU), offset = 0;
+  ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices.data, vertices.count, sizeof(Vertex_XCUU));
+  d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+  d3d->device_context->Draw((UINT)vertices.count, 0);
+
+  vertices.clear();
+  vertex_buffer->Release();
+}
+
 internal void draw_mesh(Triangle_Mesh *mesh, Vector4 color) {
   R_D3D11_State *d3d = r_d3d11_state();
 
@@ -465,7 +487,7 @@ internal void draw_scene() {
 
       //@Todo Set Transform
       Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
-      Matrix4 world_matrix = translate(entity->visual_position) * rotation_matrix;
+      Matrix4 world_matrix = translate(entity->visual_position) * translate(entity->offset) *rotation_matrix;
 
       set_constant(str8_lit("world"), world_matrix);
       set_constant(str8_lit("light_view_projection"), sun->light_space_matrix);
@@ -496,7 +518,7 @@ internal void draw_scene() {
         Guy *guy = world->guy;
 
         Matrix4 rotation_matrix = rotate_rh(guy->theta, camera.up);
-        Matrix4 world_matrix = translate(guy->reflect_position) * rotation_matrix;
+        Matrix4 world_matrix = translate(guy->reflect_position) * translate(guy->offset) * rotation_matrix;
         Matrix4 xform = camera.projection_matrix * camera.view_matrix * world_matrix;
 
         set_shader(shader_entity);
@@ -566,20 +588,23 @@ internal void draw_scene() {
     }
   }
 
-  immediate_begin();
-  set_shader(shader_argb_texture);
-  set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_POINT);
-  set_depth_state(DEPTH_STATE_DISABLE);
-  set_blend_state(BLEND_STATE_ALPHA);
-  set_rasterizer_state(RASTERIZER_STATE_TEXT);
+  // Shadow map
+  if (0) {
+    Vector2 dim = get_viewport()->dimension;
+    immediate_begin();
+    set_shader(shader_argb_texture);
+    set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_POINT);
+    set_depth_state(DEPTH_STATE_DISABLE);
+    set_blend_state(BLEND_STATE_ALPHA);
+    set_rasterizer_state(RASTERIZER_STATE_TEXT);
 
-  bind_uniform(shader_argb_texture, str8_lit("Constants"));
-
-  immediate_quad(shadow_map->texture,
-    Vector2(0.0f, 0.0f), Vector2(200.0f, 0.0f), Vector2(200.0f, 200.0f), Vector2(0.0f, 200.0f),
-    Vector2(0.0f, 1.0f), Vector2(1.0f, 1.0f), Vector2(1.0f, 0.0f), Vector2(0.0f, 0.0f),
-    Vector4(1.0f, 1.0f, 1.0f, 0.4f));
-  reset_texture(str8_lit("diffuse_texture"));
+    bind_uniform(shader_argb_texture, str8_lit("Constants"));
+    immediate_quad(shadow_map->texture,
+      Vector2(0.0f, 0.0f), Vector2(dim.x, 0.0f), Vector2(dim.x, dim.y), Vector2(0.0f, dim.y),
+      Vector2(0.0f, 1.0f), Vector2(1.0f, 1.0f), Vector2(1.0f, 0.0f), Vector2(0.0f, 0.0f),
+      Vector4(1.0f, 1.0f, 1.0f, 0.4f));
+    reset_texture(str8_lit("diffuse_texture"));
+  }
 }
 
 internal void draw_world(World *world, Camera camera) {
@@ -608,7 +633,7 @@ internal void draw_world(World *world, Camera camera) {
     if (!mesh) continue;
 
     Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
-    Matrix4 world_matrix = translate(entity->visual_position) * rotation_matrix;
+    Matrix4 world_matrix = translate(entity->visual_position) * translate(entity->offset) *rotation_matrix;
     Matrix4 xform = camera.projection_matrix * camera.view_matrix * world_matrix;
 
     set_constant(str8_lit("xform"), xform);
