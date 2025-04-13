@@ -455,7 +455,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
 
     desc = {};
     desc.FillMode = D3D11_FILL_SOLID;
-    desc.CullMode = D3D11_CULL_NONE;
+    desc.CullMode = D3D11_CULL_BACK;
     desc.ScissorEnable = false;
     desc.DepthClipEnable = false;
     desc.FrontCounterClockwise = true;
@@ -467,10 +467,10 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.CullMode = D3D11_CULL_NONE;
     desc.ScissorEnable = false;
     desc.DepthClipEnable = false;
-    desc.DepthBias = 1000;
+    desc.DepthBias = -100000000;
     desc.FrontCounterClockwise = true;
-    desc.MultisampleEnable = false;
-    desc.AntialiasedLineEnable = true;
+    desc.MultisampleEnable = true;
+    desc.AntialiasedLineEnable = false;
     d3d11_state->device->CreateRasterizerState(&desc, &rasterizer_wireframe);
   }
 
