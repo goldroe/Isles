@@ -52,6 +52,12 @@ internal void init_key_name_table() {
   insert_key_name(str8_lit("Enter"), (Key)OS_KEY_ENTER);
   insert_key_name(str8_lit("PageUp"), (Key)OS_KEY_PAGEUP);
   insert_key_name(str8_lit("PageDown"), (Key)OS_KEY_PAGEDOWN);
+
+  insert_key_name(str8_lit("PageUp"), (Key)OS_KEY_PAGEUP);
+  insert_key_name(str8_lit("PageDown"), (Key)OS_KEY_PAGEDOWN);
+
+  insert_key_name(str8_lit("LeftMouse"),  (Key)OS_KEY_LEFTMOUSE);
+  insert_key_name(str8_lit("RightMouse"), (Key)OS_KEY_RIGHTMOUSE);
 }
 
 internal Key key_from_name(String8 name) {
@@ -406,7 +412,6 @@ internal Vector3 get_mouse_ray(Camera camera, Vector2Int mouse_position, Vector2
 
   float mouse_x = mouse_position.x / (window_dim.x  * 0.5f) - 1.0f;
   float mouse_y = mouse_position.y / (window_dim.y * 0.5f) - 1.0f;
-  // mouse_y *= -1;
 
   Vector3 forward = camera.forward;
   Vector3 right = camera.right;
