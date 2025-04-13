@@ -344,12 +344,14 @@ internal void init_game() {
   game_state->editing = false;
 
   Arena *temp = make_arena(get_malloc_allocator());
-  default_font = load_font(temp, str8_lit("data/fonts/seguisb.ttf"), 16);
+  default_font = load_font(temp, str8_lit("data/fonts/seguisb.ttf"), 20);
   default_fonts[FONT_DEFAULT] = default_font;
 
   Font *icon_font;
   u32 icon_font_glyphs[] = { 87, 120, 33, 49, 85, 68, 76, 82, 57, 48, 55, 56, 123, 125, 67, 70, 35 };
-  icon_font = load_icon_font(temp, str8_lit("data/fonts/icons.ttf"), 24, icon_font_glyphs, ArrayCount(icon_font_glyphs));
+
+  temp = make_arena(get_malloc_allocator());
+  icon_font = load_icon_font(temp, str8_lit("data/fonts/icons.ttf"), 30, icon_font_glyphs, ArrayCount(icon_font_glyphs));
   default_fonts[FONT_ICON] = icon_font;
 
   Triangle_Mesh *guy_mesh      = load_mesh("data/meshes/Character/character.obj");
@@ -391,12 +393,14 @@ internal void init_game() {
   crate_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
   crate_prototype->entity.mesh = crate_mesh;
   crate_prototype->entity.override_color = Vector4(1, 1, 1, 1);
+  crate_prototype->entity.offset = Vector3(0.5f, 0.0f, 0.5f);
 
   Entity_Prototype *sand_prototype = entity_prototype_create("Sand");
   sand_prototype->entity.kind = ENTITY_BLOCK;
   sand_prototype->entity.flags = ENTITY_FLAG_STATIC;
   sand_prototype->entity.mesh = sand_mesh;
   sand_prototype->entity.override_color = Vector4(1, 1, 1, 1);
+  sand_prototype->entity.offset = Vector3(0.5f, 0.0f, 0.5f);
 
   Entity_Prototype *sun_prototype = entity_prototype_create("Sun");
   sun_prototype->entity.kind = ENTITY_SUN;
