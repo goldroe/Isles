@@ -6,6 +6,93 @@ global Key_Map *editor_key_map;
 
 std::unordered_map<u64,Key_Command> editor_command_table;
 
+#define SIGN(x) (x > 0 ? 1 : (x < 0 ? -1 : 0))
+#define FRAC0(x) (x - floor(x))
+#define FRAC1(x) (1 - x + floor(x))
+
+internal bool raycast(Vector3 origin, Vector3 direction, f32 max_d, Raycast *raycast) {
+  // raycast->ray = make_ray(origin, direction);
+  // raycast->block = block_id_zero();
+  raycast->hit = NULL;
+  raycast->hit_position = {0, 0, 0};
+  raycast->face = FACE_TOP;
+
+  f64 tMaxX, tMaxY, tMaxZ, tDeltaX, tDeltaY, tDeltaZ;
+  Vector3Int block;
+
+  f64 x1, y1, z1; // start point   
+  f64 x2, y2, z2; // end point   
+
+  x1 = origin.x;
+  y1 = origin.y;
+  z1 = origin.z;
+  x2 = x1 + (f64)(direction.x * max_d);
+  y2 = y1 + (f64)(direction.y * max_d);
+  z2 = z1 + (f64)(direction.z * max_d);
+
+  int dx = SIGN(x2 - x1);
+  if (dx != 0) tDeltaX = fmin(dx / (x2 - x1), 10000000.0); else tDeltaX = 10000000.0;
+  if (dx > 0) tMaxX = tDeltaX * FRAC1(x1); else tMaxX = tDeltaX * FRAC0(x1);
+  block.x = (int)floor(x1);
+
+  int dy = SIGN(y2 - y1);
+  if (dy != 0) tDeltaY = fmin(dy / (y2 - y1), 10000000.0); else tDeltaY = 10000000.0;
+  if (dy > 0) tMaxY = tDeltaY * FRAC1(y1); else tMaxY = tDeltaY * FRAC0(y1);
+  block.y = (int)floor(y1);
+
+  int dz = SIGN(z2 - z1);
+  if (dz != 0) tDeltaZ = fmin(dz / (z2 - z1), 10000000.0); else tDeltaZ = 10000000.0;
+  if (dz > 0) tMaxZ = tDeltaZ * FRAC1(z1); else tMaxZ = tDeltaZ * FRAC0(z1);
+  block.z = (int)floor(z1);
+
+  // logprint("dir: %.2f %.2f %.2f\n", direction.x, direction.y, direction.z);
+  // logprint("dstep: %d %d %d\n", dx, dy, dz);
+  // logprint("origin: %.2f %.2f %.2f\n", origin.x, origin.y, origin.z);
+  // logprint("start: %d %d %d\n", block.x, block.y, block.z);
+
+  while (true) {
+    if (tMaxX < tMaxY) {
+      if (tMaxX < tMaxZ) {
+        block.x += dx;
+        tMaxX += tDeltaX;
+        raycast->face = (dx < 0) ? FACE_EAST : FACE_WEST;
+      } else {
+        block.z += dz;
+        tMaxZ += tDeltaZ;
+        raycast->face = (dz < 0) ? FACE_NORTH : FACE_SOUTH;
+      }
+    } else {
+      if (tMaxY < tMaxZ) {
+        block.y += dy;
+        tMaxY += tDeltaY;
+        raycast->face = (dy < 0) ? FACE_TOP : FACE_BOTTOM;
+      } else {
+        block.z += dz;
+        tMaxZ += tDeltaZ;
+        raycast->face = (dz < 0) ? FACE_NORTH : FACE_SOUTH;
+      }
+    }
+    if (tMaxX > 1 && tMaxY > 1 && tMaxZ > 1) break;
+
+    // logprint("step: %d %d %d\n", block.x, block.y, block.z);
+
+    Entity *entity = find_entity_at(get_world(), to_vec3(block));
+    if (entity) {
+      // logprint("hit: %d %d %d\n", block.x, block.y, block.z);
+      
+      raycast->hit = entity;
+      raycast->hit_position.x = (f32)block.x;
+      raycast->hit_position.y = (f32)block.y;
+      raycast->hit_position.z = (f32)block.z;
+      return true;
+    }
+
+    if (block.x < 0 && block.y < 0 && block.z < 0) break;
+  }
+
+  return false;
+}
+
 internal char *string_from_field_kind(Field_Kind kind) {
   switch (kind) {
   case FIELD_INT:
@@ -43,6 +130,7 @@ internal inline void clear_selection(Editor *editor) {
 internal inline void select_entity(Editor *editor, Entity *e) {
   editor->selections.push(e);
   editor->active_selection = e;
+  editor->entity_panel->dirty = true;
 }
 
 internal inline void single_select_entity(Editor *editor, Entity *e) {
@@ -206,6 +294,29 @@ COMMAND(EditorDeleteSelection) {
   clear_selection(editor);
 }
 
+COMMAND(EditorClearSelection) {
+  Editor *editor = get_editor();
+  clear_selection(editor);
+}
+
+COMMAND(EditorMultiSelect) {
+  Editor *editor = get_editor();
+  if (editor->hover_entity) {
+    if (is_selected(editor, editor->hover_entity)) {
+      deselect_entity(editor, editor->hover_entity);
+    } else {
+      select_entity(editor, editor->hover_entity);
+    }
+  }
+}
+
+COMMAND(EditorSelect) {
+  Editor *editor = get_editor();
+  if (editor->hover_entity) {
+    single_select_entity(editor, editor->hover_entity);
+  }
+}
+
 internal void insert_key_map_command(String8 name, Key_Proc *proc) {
   Key_Command command;
   command.name = name;
@@ -225,6 +336,9 @@ internal void init_editor_key_map() {
   insert_key_map_command(str8_lit("EditorMoveDown"), EditorMoveDown);
   insert_key_map_command(str8_lit("EditorCopySelection"), EditorCopySelection);
   insert_key_map_command(str8_lit("EditorDeleteSelection"), EditorDeleteSelection);
+  insert_key_map_command(str8_lit("EditorClearSelection"), EditorClearSelection);
+  insert_key_map_command(str8_lit("EditorSelect"), EditorSelect);
+  insert_key_map_command(str8_lit("EditorMultiSelect"), EditorMultiSelect);
 
   OS_Handle file_handle = os_open_file(str8_lit("data/Editor.keymap"), OS_AccessFlag_Read);
   if (!os_valid_handle(file_handle)) {
@@ -296,6 +410,8 @@ internal void init_editor_key_map() {
       if (it != editor_command_table.end()) {
         Key_Command command = it->second;
         key_map_bind(editor_key_map, key, command);
+      } else {
+        logprint("Command '%S' not found.\n", command_name);
       }
     }
   }
@@ -365,6 +481,10 @@ internal void init_editor() {
   }
   editor->entity_panel->sun_dir_field = sun_dir;
   editor->entity_panel->entity_fields[ENTITY_SUN].push(sun_dir);
+
+  editor->select_strobe_t = 0;
+  editor->select_strobe_max = 0.8f;
+  editor->select_strobe_target = editor->select_strobe_max;
 }
 
 internal void update_entity_panel(Editor *editor) {
@@ -442,7 +562,7 @@ internal void r_picker_render_gizmo(Picker *picker) {
   for (u32 axis = AXIS_X; axis <= AXIS_Z; axis++) {
     Triangle_Mesh *mesh = editor->gizmo_meshes[editor->active_gizmo][axis];
 
-    Matrix4 world_matrix = translate(e->position) * scale(make_vec3(gizmo_scale_factor));
+    Matrix4 world_matrix = translate(e->position) * translate(e->offset) * scale(make_vec3(gizmo_scale_factor));
     Matrix4 view_matrix = editor->camera.view_matrix;
     Matrix4 xform = editor->camera.projection_matrix * view_matrix * world_matrix;
 
@@ -497,9 +617,8 @@ internal void picker_render(Picker *picker) {
     Triangle_Mesh *mesh = e->mesh;
     if (!mesh) continue;
 
-    Matrix4 rotation_matrix = rotate_rh(e->visual_rotation.y, editor->camera.up);
-    Matrix4 world_matrix = translate(e->position) * rotation_matrix;
-    Matrix4 view = editor->camera.view_matrix;
+    Matrix4 rotation_matrix = rotate_rh(e->theta, editor->camera.up);
+    Matrix4 world_matrix = translate(e->position) * translate(e->offset) * rotation_matrix;
     Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * world_matrix;
 
     Vector4 pick_color;
@@ -528,9 +647,8 @@ internal void picker_render(Picker *picker) {
   for (int i = 0; i < world->entities.count; i++) {
     Entity *e = world->entities[i];
     if (e->kind == ENTITY_SUN) {
-      Matrix4 rotation_matrix = rotate_rh(e->visual_rotation.y, editor->camera.up);
-      Matrix4 world_matrix = translate(e->position) * rotation_matrix;
-      Matrix4 view = editor->camera.view_matrix;
+      Matrix4 rotation_matrix = rotate_rh(e->theta, editor->camera.up);
+      Matrix4 world_matrix = translate(e->position) * translate(e->offset) * rotation_matrix;
       Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * world_matrix;
 
       Vector4 pick_color;
@@ -632,49 +750,68 @@ internal Pid picker_get_id(Picker *picker, Vector2Int mouse) {
 internal void update_editor(OS_Event_List *events) {
   Editor *editor = g_editor;
 
+  R_D3D11_State *d3d = r_d3d11_state();
+
+  World *world = get_world();
+
+  // Camera
+  update_camera_position(&editor->camera);
+  Vector2 camera_delta = get_mouse_right_drag_delta();
+  camera_delta = 0.2f * camera_delta;
+  update_camera_orientation(&editor->camera, camera_delta);
+
+  // Picking
+  {
+    Vector3 origin = editor->camera.origin;
+    Vector3 mouse_ray = get_mouse_ray(editor->camera, g_input.mouse_position, get_viewport()->dimension);
+    Raycast raycast_result = {};
+    if (raycast(origin, mouse_ray, 100.0f, &raycast_result)) {
+      editor->hover_entity = raycast_result.hit;
+    } else {
+      editor-> hover_entity = nullptr; 
+    }
+  }
+
   for (OS_Event *evt = events->first; evt; evt = evt->next) {
     bool pressed = false;
+
+    Key key = 0;
     Key_Mod mods = 0;
     if (evt->flags & OS_EventFlag_Control) mods |= KEYMOD_CONTROL;
     if (evt->flags & OS_EventFlag_Alt)     mods |= KEYMOD_ALT;
     if (evt->flags & OS_EventFlag_Shift)   mods |= KEYMOD_SHIFT;
 
     switch (evt->kind) {
-    case OS_EventKind_MouseDown:
+    default:
       break;
+    case OS_EventKind_MouseDown:
     case OS_EventKind_Press:
       pressed = true;
-      // case OS_EventKind_Release:
-      // case OS_EventKind_MouseUp:
+    case OS_EventKind_Release:
+    case OS_EventKind_MouseUp:
     {
-      Key key = make_key((u16)evt->key, mods);
+      key = make_key((u16)evt->key, mods);
+      break;
+    }
+    }
+
+    if (key && pressed) {
       Key_Command *command = key_map_lookup(editor_key_map, key);
-      if (command->proc) {
+      if (command->proc && !ui_keyboard_captured() && !ui_keyboard_captured()) {
         command->proc();
       }
-      break;
-    }
-    case OS_EventKind_Scroll:
-      break;
     }
   }
-
-
-  R_D3D11_State *d3d = r_d3d11_state();
-
-  World *world = get_world();
-
-  update_camera_position(&editor->camera);
 
   Vector2Int mouse_position = g_input.mouse_position;
 
   editor->gizmo_axis_hover = (Axis)-1;
   if (editor->active_selection) {
-    r_picker_render_gizmo(g_picker);
-    Pid gizmo_id = picker_get_id(g_picker, mouse_position);
-    if (gizmo_id != 0xFFFFFFFF) {
-      editor->gizmo_axis_hover = (Axis)gizmo_id;
-    }
+    // r_picker_render_gizmo(g_picker);
+    // Pid gizmo_id = picker_get_id(g_picker, mouse_position);
+    // if (gizmo_id != 0xFFFFFFFF) {
+    //   editor->gizmo_axis_hover = (Axis)gizmo_id;
+    // }
   }
 
   if (!mouse_down(0)) {
@@ -687,7 +824,7 @@ internal void update_editor(OS_Event_List *events) {
     {
       Vector3 ray = get_mouse_ray(editor->camera, Vector2Int((int)mouse_position.x, (int)mouse_position.y), g_viewport->dimension);
       Vector3 ray_start = get_mouse_ray(editor->camera, editor->gizmo_mouse_start, g_viewport->dimension);
-      Vector3 distance = 15.0f * (ray - ray_start);
+      Vector3 distance = (ray - ray_start);
 
       Axis gizmo_axis = editor->gizmo_axis_active;
       Vector3 axis_vector = unit_vector(gizmo_axis);
@@ -714,41 +851,23 @@ internal void update_editor(OS_Event_List *events) {
     }
   }
 
-  editor->hover_entity = nullptr;
+  // if (editor->gizmo_axis_hover != -1) {
+  //   if (mouse_clicked(0)) {
+  //     editor->gizmo_axis_active = editor->gizmo_axis_hover;
+  //     editor->gizmo_mouse_start = mouse_position;
+  //   }
+  // } else if (editor->gizmo_axis_active == -1){
+  //   if (mouse_clicked(0)) {
+  //     picker_render(g_picker);
+  //     Pid id = picker_get_id(g_picker, g_input.mouse_position);
+  //     if (id != 0xFFFFFFFF) {
+  //       Entity *e = lookup_entity(id);
+  //       editor->hover_entity = e;
+  //     }
+  //   }
+  // }
 
-  if (editor->gizmo_axis_hover != -1) {
-    if (mouse_clicked(0)) {
-      editor->gizmo_axis_active = editor->gizmo_axis_hover;
-      editor->gizmo_mouse_start = mouse_position;
-    }
-  } else if (editor->gizmo_axis_active == -1){
-    if (mouse_clicked(0)) {
-      picker_render(g_picker);
-      Pid id = picker_get_id(g_picker, g_input.mouse_position);
-      if (id != 0xFFFFFFFF) {
-        Entity *e = lookup_entity(id);
-        editor->hover_entity = e;
-      }
-    }
-  }
-
-  if (key_pressed(OS_KEY_LEFTMOUSE)) {
-    Entity *hover = editor->hover_entity;
-    if (hover) {
-      if (is_selected(editor, hover)) {
-        deselect_entity(editor, hover);
-      } else {
-        select_entity(editor, hover);
-      }
-    } else {
-      clear_selection(editor);
-    }
-  }
-
-  Vector2 camera_delta = get_mouse_right_drag_delta();
-  camera_delta = 0.2f * camera_delta;
-  update_camera_orientation(&editor->camera, camera_delta);
-
+  //@Note Draw
   Entity *selected_entity = editor->active_selection;
 
   draw_scene();
@@ -764,7 +883,7 @@ internal void update_editor(OS_Event_List *events) {
     Entity *e = world->entities[i];
     if (e->kind == ENTITY_SUN) {
       Matrix4 rotation_matrix = rotate_rh(e->theta, editor->camera.up);
-      Matrix4 world_matrix = translate(e->position) * rotation_matrix;
+      Matrix4 world_matrix = translate(e->position) * translate(e->offset) * rotation_matrix;
       Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * world_matrix;
 
       set_constant(str8_lit("xform"), xform);
@@ -801,17 +920,16 @@ internal void update_editor(OS_Event_List *events) {
   bind_uniform(shader_mesh, str8_lit("Constants"));
   set_rasterizer(rasterizer_wireframe);
   set_depth_state(DEPTH_STATE_DEFAULT);
+  set_texture(str8_lit("diffuse_texture"), d3d->fallback_tex);
 
   for (int i = 0; i < editor->selections.count; i++) {
     Entity *e = editor->selections[i];
-
-    Matrix4 rotation_matrix = rotate_rh(e->theta, Vector3(0, 1, 0));
-    Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * translate(e->position) * rotation_matrix;
+    Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * translate(e->position) * translate(e->offset) * rotate_rh(e->theta, Vector3(0, 1, 0));
     set_constant(str8_lit("xform"), xform);
     apply_constants();
 
-    Vector4 strobe_color = (0.5f * editor->select_strobe_t + 0.5f) * Vector4(1, 0, 1, 1);
-    if (e->mesh) draw_mesh(e->mesh, strobe_color);
+    Vector4 strobe_color = lerp(Vector4(0.8f, 0.f, 0.8f, 1.f), Vector4(1.f, 0.5f, 1.f, 1.f), editor->select_strobe_t / editor->select_strobe_max);
+    if (e->mesh) draw_wireframe_mesh(e->mesh, strobe_color);
   }
   set_rasterizer(rasterizer_cull_back);
 
@@ -867,11 +985,12 @@ internal void update_editor(OS_Event_List *events) {
     }
   }
 
-  editor->select_strobe_t += (editor->select_strobe_target - editor->select_strobe_t) * get_frame_delta();
-  if (Abs(editor->select_strobe_target - editor->select_strobe_t) < 0.1f) {
-    editor->select_strobe_t = editor->select_strobe_target;
-    if (editor->select_strobe_target > 0.0f) editor->select_strobe_target = 0.0f;
-    else editor->select_strobe_target = 1.0f;
+  editor->select_strobe_t += (editor->select_strobe_target == 0.0f) ? -get_frame_delta(): get_frame_delta();
+  if (editor->select_strobe_target == 0.0f && editor->select_strobe_t <= 0.0f) {
+    editor->select_strobe_target = editor->select_strobe_max;
+  }
+  if (editor->select_strobe_target == editor->select_strobe_max && editor->select_strobe_t >= editor->select_strobe_max) {
+    editor->select_strobe_target = 0.0f;
   }
 }
 
@@ -901,20 +1020,18 @@ internal Entity_Prototype *entity_prototype_create(char *name) {
   return result;
 }
 
-internal Entity *entity_from_prototype(Entity_Prototype *prototype) {
-  Entity *entity = entity_make(prototype->entity.kind);
-  entity->prototype_id = prototype->id;
-  entity->kind  = prototype->entity.kind;
-  entity->flags = prototype->entity.flags;
-  entity->mesh = prototype->entity.mesh;
-  return entity;
-}
-
 internal void entity_from_prototype(Entity *entity, Entity_Prototype *prototype) {
   entity->prototype_id = prototype->id;
   entity->kind  = prototype->entity.kind;
   entity->flags = prototype->entity.flags;
   entity->mesh = prototype->entity.mesh;
+  entity->offset = prototype->entity.offset;
+}
+
+internal Entity *entity_from_prototype(Entity_Prototype *prototype) {
+  Entity *entity = entity_make(prototype->entity.kind);
+  entity_from_prototype(entity, prototype);
+  return entity;
 }
 
 internal void editor_present_ui() {

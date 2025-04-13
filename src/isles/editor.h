@@ -114,7 +114,8 @@ struct Editor {
   Triangle_Mesh *gizmo_meshes[GIZMO_COUNT][3];
 
   f32 select_strobe_t = 0;
-  f32 select_strobe_target = 1.0f;
+  f32 select_strobe_max = 0;
+  f32 select_strobe_target = 0;
 };
 
 internal Picker *make_picker(int width, int height);
