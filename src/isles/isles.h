@@ -68,8 +68,10 @@ internal void save_world(World *world);
 internal void save_world(World *world, String8 name);
 
 internal void remove_grid_entity(World *world, Entity *entity);
+internal Entity *find_entity_at(World *world, Vector3 position);
 
 
 internal Sun *get_sun(World *world);
+
 
 #endif // ISLES_H
