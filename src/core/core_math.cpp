@@ -342,6 +342,21 @@ internal inline Vector4& operator-=(Vector4 &a, Vector4 b) {
   return a;
 }
 
+internal inline Vector2 lerp(Vector2 a, Vector2 b, f32 t) {
+  Vector2 result = (1.0f - t) * a + b * t;
+  return result;
+}
+
+internal inline Vector3 lerp(Vector3 a, Vector3 b, f32 t) {
+  Vector3 result = (1 - t) * a + b * t;
+  return result;
+}
+
+internal inline Vector4 lerp(Vector4 a, Vector4 b, f32 t) {
+  Vector4 result = (1 - t) * a + b * t;
+  return result;
+}
+
 internal inline Vector2 mix(Vector2 start, Vector2 end, f32 t) {
   Vector2 result;
   result.x = ClampTop(start.x + (end.x - start.x) * t, end.x);
@@ -874,5 +889,12 @@ internal inline Vector3 floor(Vector3 v) {
     floor(v.x),
     floor(v.y),
     floor(v.z));
+  return result;
+}
+
+internal inline f32 get_shortest_delta(f32 from, f32 to) {
+  f32 max_angle = TAU;
+  f32 dt = fmod(to - from, max_angle);
+  f32 result = fmod(2 * dt, max_angle) - dt;
   return result;
 }
