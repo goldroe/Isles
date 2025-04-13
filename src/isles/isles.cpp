@@ -494,10 +494,13 @@ void update_guy(Guy *guy) {
       move_direction = right * (f32)right_dt;
     }
 
-    f32 theta = atan2f((f32)-move_direction.z, (f32)move_direction.x);
-    if (theta < 0) theta += 2 * PI;
-    guy->theta_target = theta;
     moved = move_entity(guy, move_direction);
+
+    {
+      f32 theta = atan2f((f32)-move_direction.z, (f32)move_direction.x);
+      guy->theta_target = theta;
+    }
+
 
     if (moved) {
       play_effect("tile_0.ogg");
@@ -557,94 +560,9 @@ internal void update_entity(Entity *e, f32 dt) {
     }
 
     f32 rot_speed = 8.0f;
-    f32 theta_dt = e->theta_target - e->theta;
-    if (Abs(theta_dt) > 0.001f) {
-      e->theta += theta_dt * rot_speed * dt;
-    } else {
-      e->theta = (f32)e->theta_target;
-    }
+    e->theta = e->theta +  get_shortest_delta(e->theta, e->theta_target) * rot_speed * dt;
   }
 }
-
-#define SIGN(x) (x > 0 ? 1 : (x < 0 ? -1 : 0))
-#define FRAC0(x) (x - floor(x))
-#define FRAC1(x) (1 - x + floor(x))
-
-#if 0
-internal bool raycast(Vector3 origin, Vector3 direction, f32 max_d, Raycast *raycast) {
-  // raycast->ray = make_ray(origin, direction);
-  // raycast->block = block_id_zero();
-  raycast->hit = NULL;
-  raycast->hit_position = {0, 0, 0};
-  raycast->face = FACE_TOP;
-
-  f64 tMaxX, tMaxY, tMaxZ, tDeltaX, tDeltaY, tDeltaZ;
-  Vector3Int block;
-
-  f64 x1, y1, z1; // start point   
-  f64 x2, y2, z2; // end point   
-
-  x1 = origin.x;
-  y1 = origin.y;
-  z1 = origin.z;
-  x2 = x1 + (f64)(direction.x * max_d);
-  y2 = y1 + (f64)(direction.y * max_d);
-  z2 = z1 + (f64)(direction.z * max_d);
-
-  int dx = SIGN(x2 - x1);
-  if (dx != 0) tDeltaX = fmin(dx / (x2 - x1), 10000000.0); else tDeltaX = 10000000.0;
-  if (dx > 0) tMaxX = tDeltaX * FRAC1(x1); else tMaxX = tDeltaX * FRAC0(x1);
-  block.x = (int)floor(x1);
-
-  int dy = SIGN(y2 - y1);
-  if (dy != 0) tDeltaY = fmin(dy / (y2 - y1), 10000000.0); else tDeltaY = 10000000.0;
-  if (dy > 0) tMaxY = tDeltaY * FRAC1(y1); else tMaxY = tDeltaY * FRAC0(y1);
-  block.y = (int)floor(y1);
-
-  int dz = SIGN(z2 - z1);
-  if (dz != 0) tDeltaZ = fmin(dz / (z2 - z1), 10000000.0); else tDeltaZ = 10000000.0;
-  if (dz > 0) tMaxZ = tDeltaZ * FRAC1(z1); else tMaxZ = tDeltaZ * FRAC0(z1);
-  block.z = (int)floor(z1);
-
-  while (true) {
-    if (tMaxX < tMaxY) {
-      if (tMaxX < tMaxZ) {
-        block.x += dx;
-        tMaxX += tDeltaX;
-        raycast->face = (dx < 0) ? FACE_EAST : FACE_WEST;
-      } else {
-        block.z += dz;
-        tMaxZ += tDeltaZ;
-        raycast->face = (dz < 0) ? FACE_NORTH : FACE_SOUTH;
-      }
-    } else {
-      if (tMaxY < tMaxZ) {
-        block.y += dy;
-        tMaxY += tDeltaY;
-        raycast->face = (dy < 0) ? FACE_TOP : FACE_BOTTOM;
-      } else {
-        block.z += dz;
-        tMaxZ += tDeltaZ;
-        raycast->face = (dz < 0) ? FACE_NORTH : FACE_SOUTH;
-      }
-    }
-    if (tMaxX > 1 && tMaxY > 1 && tMaxZ > 1) break;
-
-    // process block here
-        
-    Entity *entity = find_entity_at(get_world(), block);
-    if (entity) {
-      raycast->hit = entity;
-      raycast->hit_position.x = (f32)block.x;
-      raycast->hit_position.y = (f32)block.y;
-      raycast->hit_position.z = (f32)block.z;
-      return true;
-    }
-  }
-
-  return false;
-}
-#endif
 
 internal void update_camera_position(Camera *camera) {
   f32 forward_dt =  0.0f;
@@ -749,6 +667,7 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     guy_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
     guy_prototype->entity.mesh = guy_mesh;
     guy_prototype->entity.override_color = Vector4(1, 1, 1, 1);
+    guy_prototype->entity.offset = Vector3(0.5f, 0.0f, 0.5f);
 
     Entity_Prototype *mirror_prototype = entity_prototype_create("Mirror");
     mirror_prototype->entity.kind = ENTITY_MIRROR;
@@ -792,7 +711,7 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     game_state->camera.right = Vector3(1, 0, 0);
     game_state->camera.yaw = -PI * 0.5f;
     game_state->camera.pitch = 0;
-    game_state->camera.fov = PI * 0.30f;
+    game_state->camera.fov = PI * 0.28f;
 
     game_state->camera.update_euler_angles(-PI * 0.5f, 0.0f);
 
