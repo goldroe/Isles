@@ -76,6 +76,7 @@
 #include "undo.cpp"
 #include "render_target.cpp"
 #include "isles.cpp"
+#include "simulate.cpp"
 
 global bool window_should_close;
 
@@ -116,6 +117,8 @@ int main() {
   r_d3d11_initialize(hWnd);
 
   V2_F32 old_window_dim = {};
+
+  init_game();
 
   int target_frames_per_second = 75;
   int target_ms_per_frame = (int)(1000.f / (f32)target_frames_per_second);

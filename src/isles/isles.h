@@ -73,5 +73,6 @@ internal Entity *find_entity_at(World *world, Vector3 position);
 
 internal Sun *get_sun(World *world);
 
+internal void init_game();
 
 #endif // ISLES_H

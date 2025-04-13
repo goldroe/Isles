@@ -308,262 +308,6 @@ internal Entity *find_entity_at(World *world, Vector3 position) {
   return nullptr;
 }
 
-internal void update_guy_mirror(Guy *guy) {
-  World *world = get_world();
-  guy->mirror_id = 0;
-
-  Auto_Array<Entity*> mirrors;
-  for (int i = 0; i < world->entities.count; i++) {
-    if (world->entities[i]->kind == ENTITY_MIRROR) {
-      mirrors.push(world->entities[i]);
-    }
-  }
-
-  for (int i = 0; i < mirrors.count; i++) {
-    Entity *mirror = mirrors[i];
-
-    Vector3 forward = to_vec3(rotate_rh(-mirror->theta, Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1));
-    Vector3 dist = guy->position - mirror->position;
-    if (dist.y != 0) break;
-    f32 dx = forward.x > 0 ? 1.0f : -1.0f;
-    f32 dz = forward.z > 0 ? 1.0f : -1.0f;
-
-    Vector3 position = mirror->position;
-    if ((int)mirror->position.z == (int)guy->position.z && (dist.x > 0 == dx > 0)) {
-      // Move X
-      for (;;) {
-        position.x += dx;
-        Entity *e = find_entity_at(world, position);
-        if (e) {
-          if (e == guy) {
-            guy->mirror_id = mirror->id;
-          }
-          break;
-        }
-      }
-    } else if ((int)mirror->position.x == (int)guy->position.x && (dist.z > 0 == dz > 0)) {
-      // Move Z
-      for (;;) {
-        position.z += dz;
-        Entity *e = find_entity_at(world, position);
-        if (e) {
-          if (e == guy) {
-            guy->mirror_id = mirror->id;
-          }
-          break;
-        }
-      }
-    }
-  }
-
-  mirrors.clear();
-
-  Entity *mirror = lookup_entity(guy->mirror_id);
-  if (mirror) {
-    Vector3 mirror_forward = forward_from_theta(-mirror->theta);
-    Vector3 direction = guy->position - mirror->position;
-    int distance = (int)Abs(length(direction));
-
-    if (direction.x) {
-      f32 dz = roundf(mirror_forward.z);
-      Vector3 target = mirror->position;
-      target.z += distance * dz;
-      Vector3 new_position = mirror->position;
-      new_position.z += dz;
-
-      for (;;) {
-        Entity *e = find_entity_at(get_world(), new_position);
-        if (e) {
-          new_position.z -= dz;
-          break;
-        }
-        if (new_position == target) {
-          break;
-        }
-        new_position.z += dz;
-      }
-
-      guy->reflect_target = target;
-      guy->reflect_position = new_position;
-
-    } else if (direction.z) {
-      f32 dx = roundf(mirror_forward.x);
-      Vector3 target = mirror->position;
-      target.x += distance * dx;
-      Vector3 new_position = mirror->position;
-      new_position.x += dx;
-
-      for (;;) {
-        Entity *e = find_entity_at(get_world(), new_position);
-        if (e) {
-          new_position.x -= dx;
-          break;
-        }
-        if (new_position == target) {
-          break;
-        }
-        new_position.x += dx;
-      }
-
-      guy->reflect_target = target;
-      guy->reflect_position = new_position;
-    }
-  }
-
-  if (key_pressed(OS_KEY_SPACE) && lookup_entity(guy->mirror_id)) {
-    Action *move = action_make(ACTION_TELEPORT);
-    move->actor_id = guy->id;
-    move->from = guy->position;
-    move->to = guy->reflect_position;
-    guy->set_position(guy->reflect_position);
-    play_effect("swosh.flac");
-  }
-}
-
-internal bool move_entity(Entity *e, Vector3 distance) {
-  Vector3 new_position = e->position + distance;
-  Entity *wall = find_entity_at(get_world(), new_position);
-  Entity *below = find_entity_at(get_world(), new_position - Vector3(0, 1, 0));
-
-  bool valid_move = true;
-
-  Action *move = action_make(ACTION_MOVE);
-  move->actor_id = e->id;
-  move->from = e->position;
-  move->to = e->position + distance;
-
-  if (wall) {
-    if (wall->flags & ENTITY_FLAG_PUSHABLE) {
-      valid_move = move_entity(wall, distance);
-    } else {
-      valid_move = false;
-    }
-  } else {
-    if (e->kind == ENTITY_GUY && !below) {
-      valid_move = false;
-    }
-  }
-
-  if (valid_move) {
-    e->position = new_position;
-    // if (!below) {
-    //   e->position.y -= 1;
-    // }
-  } else {
-    action_pop();
-  }
-
-  return valid_move;
-}
-
-void update_guy(Guy *guy) {
-  update_guy_mirror(guy);
-
-  //@Note Move
-  Camera *camera = &game_state->camera;
-
-  int forward_dt = 0;
-  int right_dt = 0;
-  if (key_pressed(OS_KEY_UP)) {
-    forward_dt += 1;
-  }
-  if (key_pressed(OS_KEY_DOWN)) {
-    forward_dt -= 1;
-  }
-  if (key_pressed(OS_KEY_LEFT)) {
-    right_dt += -1;
-  }
-  if (key_pressed(OS_KEY_RIGHT)) {
-    right_dt += 1;
-  }
-
-  bool moving = forward_dt || right_dt;
-  bool moved = false;
-
-  if (moving) {
-    Vector3 move_direction = Vector3();
-
-    Vector3 forward = camera->forward;
-    forward.y = 0;
-    forward = get_nearest_axis(forward);
-    Vector3 right = normalize(cross(forward, Vector3(0, 1, 0)));
-
-    if (forward_dt) {
-      move_direction = forward * (f32)forward_dt;
-    } else if (right_dt) {
-      move_direction = right * (f32)right_dt;
-    }
-
-    moved = move_entity(guy, move_direction);
-
-    {
-      f32 theta = atan2f((f32)-move_direction.z, (f32)move_direction.x);
-      guy->theta_target = theta;
-    }
-
-
-    if (moved) {
-      play_effect("tile_0.ogg");
-    }
-  }
-
-  if (key_pressed(OS_KEY_Z)) {
-    undo();
-  }
-}
-
-internal void update_sun(Sun *sun) {
-  World *world = get_world();
-  AABB bounds = world->bounding_box;
-  Vector3 center = get_aabb_center(bounds);
-  Vector3 bound_dim = get_aabb_dimension(bounds);
-  f32 radius = get_max_elem(bound_dim);
-
-  sun->light_direction = normalize(sun->light_direction);
-
-  Vector3 light_position = center;
-  Vector3 light_target = light_position + sun->light_direction;
-
-  sun->light_projection = ortho_rh_zo(center.x - radius, center.x + radius, center.y - radius, center.y + radius, center.z - radius, center.z + radius);
-  // sun->light_projection = ortho_rh_zo(center.x - bound_dim.x, center.x + bound_dim.x, center.y - bound_dim.y, center.y + bound_dim.y, center.z - bound_dim.z, center.z + bound_dim.z);
-  sun->light_view = look_at_rh(light_position, light_target, Vector3(0, 1, 0));
-  sun->light_space_matrix = sun->light_projection * sun->light_view;
-}
-
-internal void update_entity(Entity *e, f32 dt) {
-  switch (e->kind) {
-
-  case ENTITY_GUY:
-  {
-    Guy *guy = static_cast<Guy*>(e);
-    update_guy(guy);
-    break;
-  }
-  }
-
-  if (!(e->flags & ENTITY_FLAG_STATIC)) {
-    f32 move_speed = 8.0f;
-    if (Abs(e->visual_position.x - e->position.x) > 0.001f) {
-      e->visual_position.x += (e->position.x - e->visual_position.x) * move_speed * dt;
-    } else {
-      e->visual_position.x = (f32)e->position.x;
-    }
-    if (Abs(e->visual_position.y - e->position.y) > 0.001f) {
-      e->visual_position.y += (e->position.y - e->visual_position.y) * move_speed * dt;
-    } else {
-      e->visual_position.y = (f32)e->position.y;
-    }
-    if (Abs(e->visual_position.z - e->position.z) > 0.001f) {
-      e->visual_position.z += (e->position.z - e->visual_position.z) * move_speed * dt;
-    } else {
-      e->visual_position.z = (f32)e->position.z;
-    }
-
-    f32 rot_speed = 8.0f;
-    e->theta = e->theta +  get_shortest_delta(e->theta, e->theta_target) * rot_speed * dt;
-  }
-}
-
 internal void update_camera_position(Camera *camera) {
   f32 forward_dt =  0.0f;
   f32 right_dt = 0.0f;
@@ -588,242 +332,105 @@ internal void update_camera_position(Camera *camera) {
   }
 }
 
-internal AABB get_world_bounds(World *world) {
-  AABB bounds = {};
+internal void init_game() {
+  UI_State *ui_state = new UI_State();
+  ui_set_state(ui_state);
+  ui_state->arena = arena_alloc(get_virtual_allocator(), MB(4));
 
-  for (int i = 0; i < world->entities.count; i++) {
-    Entity *e = world->entities[i];
-    if (e->kind == ENTITY_SUN) continue;
-    if (e->position.x < bounds.min.x) bounds.min.x = (f32)e->position.x;
-    if (e->position.y < bounds.min.y) bounds.min.y = (f32)e->position.y;
-    if (e->position.z < bounds.min.z) bounds.min.z = (f32)e->position.z;
-    if (e->position.x > bounds.max.x) bounds.max.x = (f32)e->position.x;
-    if (e->position.y > bounds.max.y) bounds.max.y = (f32)e->position.y;
-    if (e->position.z > bounds.max.z) bounds.max.z = (f32)e->position.z;
-  }
+  g_picker = make_picker(1280, 720);
 
-  return bounds;
-}
+  game_state = new Game_State();
+  game_state->paused = false;
+  game_state->editing = false;
 
-internal void update_world_state() {
-  World *world = get_world();
-  if (!game_state->editing && !game_state->paused) {
-    Vector2 mouse_delta = get_mouse_delta();
-    update_camera_orientation(&game_state->camera, mouse_delta);
-    update_camera_position(&game_state->camera);
-  }
+  Arena *temp = make_arena(get_malloc_allocator());
+  default_font = load_font(temp, str8_lit("data/fonts/seguisb.ttf"), 16);
+  default_fonts[FONT_DEFAULT] = default_font;
 
-  if (!game_state->editing && !game_state->paused) {
-    //@Note Update entities
-    for (int i = 0; i < world->entities.count; i++) {
-      Entity *e = world->entities[i];
-      update_entity(e, game_state->dt);
-    }
-  }
+  Font *icon_font;
+  u32 icon_font_glyphs[] = { 87, 120, 33, 49, 85, 68, 76, 82, 57, 48, 55, 56, 123, 125, 67, 70, 35 };
+  icon_font = load_icon_font(temp, str8_lit("data/fonts/icons.ttf"), 24, icon_font_glyphs, ArrayCount(icon_font_glyphs));
+  default_fonts[FONT_ICON] = icon_font;
 
-  {
-    Sun *sun = get_sun(world);
-    if (sun) update_sun(sun);
-  }
+  Triangle_Mesh *guy_mesh      = load_mesh("data/meshes/Character/character.obj");
+  Triangle_Mesh *block_mesh    = load_mesh("data/meshes/tile.obj");
+  Triangle_Mesh *stone_mesh    = load_mesh("data/meshes/stone.obj");
+  Triangle_Mesh *mirror_mesh   = load_mesh("data/meshes/mirror/mirror.obj");
+  Triangle_Mesh *crate_mesh    = load_mesh("data/meshes/Crate.obj");
+  Triangle_Mesh *sand_mesh     = load_mesh("data/meshes/sand.obj");
 
-  world->bounding_box = get_world_bounds(world);
-}
+  init_editor();
 
-internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, f32 dt) {
-  local_persist bool first_call = true;
-  if (first_call) {
-    first_call = false;
+  Entity_Prototype *guy_prototype = entity_prototype_create("Guy");
+  guy_prototype->entity.kind = ENTITY_GUY;
+  guy_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
+  guy_prototype->entity.mesh = guy_mesh;
+  guy_prototype->entity.override_color = Vector4(1, 1, 1, 1);
+  guy_prototype->entity.offset = Vector3(0.5f, 0.0f, 0.5f);
 
-    UI_State *ui_state = new UI_State();
-    ui_set_state(ui_state);
-    ui_state->arena = arena_alloc(get_virtual_allocator(), MB(4));
+  Entity_Prototype *mirror_prototype = entity_prototype_create("Mirror");
+  mirror_prototype->entity.kind = ENTITY_MIRROR;
+  mirror_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
+  mirror_prototype->entity.mesh = mirror_mesh;
+  mirror_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
-    g_picker = make_picker(1280, 720);
+  Entity_Prototype *block_prototype = entity_prototype_create("Block");
+  block_prototype->entity.kind = ENTITY_BLOCK;
+  block_prototype->entity.flags = ENTITY_FLAG_STATIC;
+  block_prototype->entity.mesh = block_mesh;
+  block_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
-    game_state = new Game_State();
-    game_state->paused = false;
-    game_state->editing = false;
+  Entity_Prototype *stone_prototype = entity_prototype_create("Stone");
+  stone_prototype->entity.kind = ENTITY_BLOCK;
+  stone_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
+  stone_prototype->entity.mesh = stone_mesh;
+  stone_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
-    Arena *temp = make_arena(get_malloc_allocator());
-    default_font = load_font(temp, str8_lit("data/fonts/seguisb.ttf"), 16);
-    default_fonts[FONT_DEFAULT] = default_font;
+  Entity_Prototype *crate_prototype = entity_prototype_create("Crate");
+  crate_prototype->entity.kind = ENTITY_BLOCK;
+  crate_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
+  crate_prototype->entity.mesh = crate_mesh;
+  crate_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
-    Font *icon_font;
-    u32 icon_font_glyphs[] = { 87, 120, 33, 49, 85, 68, 76, 82, 57, 48, 55, 56, 123, 125, 67, 70, 35 };
-    icon_font = load_icon_font(temp, str8_lit("data/fonts/icons.ttf"), 24, icon_font_glyphs, ArrayCount(icon_font_glyphs));
-    default_fonts[FONT_ICON] = icon_font;
+  Entity_Prototype *sand_prototype = entity_prototype_create("Sand");
+  sand_prototype->entity.kind = ENTITY_BLOCK;
+  sand_prototype->entity.flags = ENTITY_FLAG_STATIC;
+  sand_prototype->entity.mesh = sand_mesh;
+  sand_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
-    Triangle_Mesh *guy_mesh      = load_mesh("data/meshes/Character/character.obj");
-    Triangle_Mesh *block_mesh    = load_mesh("data/meshes/tile.obj");
-    Triangle_Mesh *stone_mesh    = load_mesh("data/meshes/stone.obj");
-    Triangle_Mesh *mirror_mesh   = load_mesh("data/meshes/mirror/mirror.obj");
-    Triangle_Mesh *crate_mesh    = load_mesh("data/meshes/Crate.obj");
-    Triangle_Mesh *sand_mesh     = load_mesh("data/meshes/sand.obj");
+  Entity_Prototype *sun_prototype = entity_prototype_create("Sun");
+  sun_prototype->entity.kind = ENTITY_SUN;
+  sun_prototype->entity.flags = ENTITY_FLAG_STATIC;
+  sun_prototype->entity.mesh = nullptr;
+  sun_prototype->entity.override_color = Vector4(0.9f, 0.84f, 0.1f, 1.0f);
 
-    init_editor();
+  game_state->camera.origin = Vector3(0, 0, 0);
+  game_state->camera.up = Vector3(0, 1, 0);
+  game_state->camera.forward = Vector3(0, 0, -1);
+  game_state->camera.right = Vector3(1, 0, 0);
+  game_state->camera.yaw = -PI * 0.5f;
+  game_state->camera.pitch = 0;
+  game_state->camera.fov = PI * 0.28f;
 
-    Entity_Prototype *guy_prototype = entity_prototype_create("Guy");
-    guy_prototype->entity.kind = ENTITY_GUY;
-    guy_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
-    guy_prototype->entity.mesh = guy_mesh;
-    guy_prototype->entity.override_color = Vector4(1, 1, 1, 1);
-    guy_prototype->entity.offset = Vector3(0.5f, 0.0f, 0.5f);
+  game_state->camera.update_euler_angles(-PI * 0.5f, 0.0f);
 
-    Entity_Prototype *mirror_prototype = entity_prototype_create("Mirror");
-    mirror_prototype->entity.kind = ENTITY_MIRROR;
-    mirror_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
-    mirror_prototype->entity.mesh = mirror_mesh;
-    mirror_prototype->entity.override_color = Vector4(1, 1, 1, 1);
+  load_world(str8_lit("1.lvl"));
 
-    Entity_Prototype *block_prototype = entity_prototype_create("Block");
-    block_prototype->entity.kind = ENTITY_BLOCK;
-    block_prototype->entity.flags = ENTITY_FLAG_STATIC;
-    block_prototype->entity.mesh = block_mesh;
-    block_prototype->entity.override_color = Vector4(1, 1, 1, 1);
+  g_viewport = new Viewport();
+  g_viewport->dimension.x = 1;
+  g_viewport->dimension.y = 1;
 
-    Entity_Prototype *stone_prototype = entity_prototype_create("Stone");
-    stone_prototype->entity.kind = ENTITY_BLOCK;
-    stone_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
-    stone_prototype->entity.mesh = stone_mesh;
-    stone_prototype->entity.override_color = Vector4(1, 1, 1, 1);
+  undo_stack = new Undo_Stack();
+  undo_stack->arena = make_arena(get_malloc_allocator());
 
-    Entity_Prototype *crate_prototype = entity_prototype_create("Crate");
-    crate_prototype->entity.kind = ENTITY_BLOCK;
-    crate_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
-    crate_prototype->entity.mesh = crate_mesh;
-    crate_prototype->entity.override_color = Vector4(1, 1, 1, 1);
+  //@Note Game settings
+  game_settings = new Game_Settings();
+  game_settings->audio_settings.master_volume = 100;
+  game_settings->audio_settings.sfx_volume = 70;
+  game_settings->audio_settings.music_volume = 80;
 
-    Entity_Prototype *sand_prototype = entity_prototype_create("Sand");
-    sand_prototype->entity.kind = ENTITY_BLOCK;
-    sand_prototype->entity.flags = ENTITY_FLAG_STATIC;
-    sand_prototype->entity.mesh = sand_mesh;
-    sand_prototype->entity.override_color = Vector4(1, 1, 1, 1);
+  audio_engine = new Audio_Engine();
+  audio_engine->init();
 
-    Entity_Prototype *sun_prototype = entity_prototype_create("Sun");
-    sun_prototype->entity.kind = ENTITY_SUN;
-    sun_prototype->entity.flags = ENTITY_FLAG_STATIC;
-    sun_prototype->entity.mesh = nullptr;
-    sun_prototype->entity.override_color = Vector4(0.9f, 0.84f, 0.1f, 1.0f);
-
-    game_state->camera.origin = Vector3(0, 0, 0);
-    game_state->camera.up = Vector3(0, 1, 0);
-    game_state->camera.forward = Vector3(0, 0, -1);
-    game_state->camera.right = Vector3(1, 0, 0);
-    game_state->camera.yaw = -PI * 0.5f;
-    game_state->camera.pitch = 0;
-    game_state->camera.fov = PI * 0.28f;
-
-    game_state->camera.update_euler_angles(-PI * 0.5f, 0.0f);
-
-    load_world(str8_lit("1.lvl"));
-
-    g_viewport = new Viewport();
-    g_viewport->dimension.x = 1;
-    g_viewport->dimension.y = 1;
-    g_viewport->window_handle = window_handle;
-
-    undo_stack = new Undo_Stack();
-    undo_stack->arena = make_arena(get_malloc_allocator());
-
-    //@Note Game settings
-    game_settings = new Game_Settings();
-    game_settings->audio_settings.master_volume = 100;
-    game_settings->audio_settings.sfx_volume = 70;
-    game_settings->audio_settings.music_volume = 80;
-
-    audio_engine = new Audio_Engine();
-    audio_engine->init();
-
-    // play_music("439015_somepin_cavernous.mp3");
-  }
-
-  Editor *editor = get_editor();
-
-  audio_engine->origin = game_state->camera.origin;
-  audio_engine->update();
-
-  ui_g_state->animation_dt = dt;
-
-  r_d3d11_update_dirty_shaders();
-    
-  Vector2 window_dim = os_get_window_dim(window_handle);
-
-  game_state->dt = dt / 1000.0f;
-  game_state->window_dim = to_vec2i(window_dim);
-
-  g_viewport->window_handle = window_handle;
-  g_viewport->dimension = window_dim;
-
-  os_set_cursor(OS_Cursor_Arrow);
-
-  f32 aspect = (f32)game_state->window_dim.x / (f32)game_state->window_dim.y;
-  game_state->camera.projection_matrix = perspective_rh(game_state->camera.fov, aspect, 0.1f, 1000.0f);
-  editor->camera.projection_matrix     = perspective_rh(editor->camera.fov, aspect, 0.1f, 1000.0f);
-
-  input_begin(window_handle, events);
-
-  // draw_begin(window_handle);
-
-  r_resize_render_target(game_state->window_dim);
-
-  r_d3d11_begin(window_handle);
-
-  r_clear_color(0.0f, 0.0f, 0.0f, 1.0f);
-
-  for (int i = 0; i < get_world()->entities.count; i++) {
-    Entity *e = get_world()->entities[i];
-    if (e->to_be_destroyed) {
-      get_world()->entities.remove(i);
-      entity_free(e);
-    }
-  }
-
-  if (game_state->paused) {
-    input_set_mouse_capture(false);
-  }
-
-  if (game_state->editing) {
-    input_set_mouse_capture(false);
-    update_editor(events);
-  }
-
-  if (!game_state->paused && !game_state->editing) {
-    input_set_mouse_capture(true);
-  }
-
-  update_world_state();
-  if (!game_state->editing) {
-    draw_scene();
-  }
-
-  if (key_pressed(OS_KEY_F1) ||
-      key_pressed(OS_KEY_1)) {
-    if (!game_state->editing) {
-      game_state->editing = true; 
-      editor->camera = game_state->camera;
-      update_entity_panel(editor);
-    } else {
-      game_state->editing = false; 
-    }
-  }
-
-  //@Note UI Layout
-  ui_begin(window_handle, events);
-
-  ui_push_font(default_font);
-  ui_push_background_color(Vector4(0.55f, 0.22f, 0.63f, 1.0f));
-  ui_push_text_color(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-
-  if (game_state->editing) {
-    editor_present_ui(); 
-  }
-
-  ui_layout_apply();
-  draw_ui_layout();
-
-  r_d3d11_state()->swap_chain->Present(1, 0);
-
-  input_end(window_handle);
-
-  ui_end();
+  // play_music("439015_somepin_cavernous.mp3");
 }
