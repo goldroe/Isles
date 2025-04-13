@@ -9,6 +9,10 @@
 #include <stb_image.h>
 #pragma warning(pop)
 
+
+#define STB_RECT_PACK_IMPLEMENTATION
+#include <stb_rect_pack.h>
+
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
@@ -30,6 +34,11 @@
 #include "render/render.h"
 #include "font/font.h"
 
+#define STB_SPRINTF_IMPLEMENTATION
+// #define STB_SPRINTF_DECORATE(name) base_##name
+#include <stb_sprintf.h>
+
+
 #undef near
 #undef far
 
@@ -46,10 +55,6 @@
 #include "input.h"
 #include "undo.h"
 #include "render_target.h"
-
-#define STB_SPRINTF_IMPLEMENTATION
-// #define STB_SPRINTF_DECORATE(name) base_##name
-#include <stb_sprintf.h>
 
 #include "base/base_core.cpp"
 #include "core/core_math.cpp"
@@ -136,7 +141,9 @@ int main() {
       DispatchMessageA(&message);
     }
 
-    update_and_render(&win32_events, window_handle, dt);
+    ui_g_state->animation_dt = dt;
+
+    update_and_render(&win32_events, window_handle, dt / 1000.0f);
 
     win32_events.first = nullptr;
     win32_events.last = nullptr;
