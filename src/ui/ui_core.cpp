@@ -600,7 +600,6 @@ internal UI_Signal ui_signal_from_box(UI_Box *box) {
       if ((box->flags & UI_BOX_FLAG_CLICKABLE) && ui_active_key_match(box->key) &&
         event.key == OS_KEY_LEFTMOUSE) {
         signal.flags |= UI_SIGNAL_FLAG_RELEASED;
-        ui_set_active_key(0);
       }
       break;
     }

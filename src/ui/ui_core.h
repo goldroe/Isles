@@ -244,5 +244,6 @@ internal bool ui_input_captured();
 #define ui_hover(sig) (sig.flags & UI_SIGNAL_FLAG_HOVER)
 #define ui_clicked(sig) (sig.flags & UI_SIGNAL_FLAG_CLICKED)
 #define ui_pressed(sig) (sig.flags & UI_SIGNAL_FLAG_PRESSED)
+#define ui_released(sig) (sig.flags & UI_SIGNAL_FLAG_RELEASED)
 
 #endif // UI_CORE_H
