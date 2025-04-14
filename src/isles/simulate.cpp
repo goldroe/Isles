@@ -1,18 +1,16 @@
 
+internal Entity* find_support(Entity *e) {
+  Entity *support = find_entity_at(e->position - Vector3(0, 1, 0));
+  return support;
+}
+
 internal void update_guy_mirror(Guy *guy) {
+  Entity_Manager *manager = get_entity_manager();
+
   World *world = get_world();
   guy->mirror_id = 0;
 
-  Auto_Array<Entity*> mirrors;
-  for (int i = 0; i < world->entities.count; i++) {
-    if (world->entities[i]->kind == ENTITY_MIRROR) {
-      mirrors.push(world->entities[i]);
-    }
-  }
-
-  for (int i = 0; i < mirrors.count; i++) {
-    Entity *mirror = mirrors[i];
-
+  for (Mirror *mirror : manager->entities._type.Mirror) {
     Vector3 forward = to_vec3(rotate_rh(-mirror->theta, Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1));
     Vector3 dist = guy->position - mirror->position;
     if (dist.y != 0) break;
@@ -24,7 +22,7 @@ internal void update_guy_mirror(Guy *guy) {
       // Move X
       for (;;) {
         position.x += dx;
-        Entity *e = find_entity_at(world, position);
+        Entity *e = find_entity_at(position);
         if (e) {
           if (e == guy) {
             guy->mirror_id = mirror->id;
@@ -36,7 +34,7 @@ internal void update_guy_mirror(Guy *guy) {
       // Move Z
       for (;;) {
         position.z += dz;
-        Entity *e = find_entity_at(world, position);
+        Entity *e = find_entity_at(position);
         if (e) {
           if (e == guy) {
             guy->mirror_id = mirror->id;
@@ -46,8 +44,6 @@ internal void update_guy_mirror(Guy *guy) {
       }
     }
   }
-
-  mirrors.clear();
 
   Entity *mirror = lookup_entity(guy->mirror_id);
   if (mirror) {
@@ -63,7 +59,7 @@ internal void update_guy_mirror(Guy *guy) {
       new_position.z += dz;
 
       for (;;) {
-        Entity *e = find_entity_at(get_world(), new_position);
+        Entity *e = find_entity_at(new_position);
         if (e) {
           new_position.z -= dz;
           break;
@@ -85,7 +81,7 @@ internal void update_guy_mirror(Guy *guy) {
       new_position.x += dx;
 
       for (;;) {
-        Entity *e = find_entity_at(get_world(), new_position);
+        Entity *e = find_entity_at(new_position);
         if (e) {
           new_position.x -= dx;
           break;
@@ -111,62 +107,66 @@ internal void update_guy_mirror(Guy *guy) {
   }
 }
 
-internal bool move_entity(Entity *e, Vector3 distance) {
-  Vector3 new_position = e->position + distance;
-  Entity *wall = find_entity_at(get_world(), new_position);
-  Entity *below = find_entity_at(get_world(), new_position - Vector3(0, 1, 0));
 
-  bool valid_move = true;
+
+
+internal void signal_world_step() {
+  Game_State *state = get_game_state();
+  state->can_world_step = false;
+  state->world_step_dt = 0;
+}
+
+internal bool move_entity(Entity *e, Vector3 distance) {
+  World *world = get_world();
+  Vector3 new_position = e->position + distance;
+  Entity *wall = find_entity_at(new_position);
+
+  if (wall) {
+    if (wall->flags & ENTITY_FLAG_PUSHABLE) {
+      bool valid = move_entity(wall, distance);
+      if (!valid) goto INVALID_MOVE;
+    } else {
+      goto INVALID_MOVE;
+    }
+  }
+
+  Entity *support = find_support(e);
+  if (!support && new_position.y == 0.0f) {
+    goto INVALID_MOVE;
+  }
 
   Action *move = action_make(ACTION_MOVE);
   move->actor_id = e->id;
   move->from = e->position;
   move->to = e->position + distance;
+  e->position = new_position;
 
-  if (wall) {
-    if (wall->flags & ENTITY_FLAG_PUSHABLE) {
-      valid_move = move_entity(wall, distance);
-    } else {
-      valid_move = false;
-    }
-  } else {
-    if (e->kind == ENTITY_GUY && !below) {
-      valid_move = false;
-    }
-  }
+  signal_world_step();
 
-  if (valid_move) {
-    e->position = new_position;
-    // if (!below) {
-    //   e->position.y -= 1;
-    // }
-  } else {
-    action_pop();
-  }
+  return true;
 
-  return valid_move;
+INVALID_MOVE:
+  return false;
 }
 
-internal AABB get_world_bounds(World *world) {
+internal AABB get_world_bounds() {
+  Entity_Manager *manager = get_entity_manager();
   AABB bounds = {};
-
-  for (int i = 0; i < world->entities.count; i++) {
-    Entity *e = world->entities[i];
-    if (e->kind == ENTITY_SUN) continue;
-    if (e->position.x < bounds.min.x) bounds.min.x = (f32)e->position.x;
-    if (e->position.y < bounds.min.y) bounds.min.y = (f32)e->position.y;
-    if (e->position.z < bounds.min.z) bounds.min.z = (f32)e->position.z;
-    if (e->position.x > bounds.max.x) bounds.max.x = (f32)e->position.x;
-    if (e->position.y > bounds.max.y) bounds.max.y = (f32)e->position.y;
-    if (e->position.z > bounds.max.z) bounds.max.z = (f32)e->position.z;
+  for (Entity *entity : manager->entities.all) {
+    if (entity->kind == ENTITY_SUN) continue;
+    if (entity->position.x < bounds.min.x) bounds.min.x = (f32)entity->position.x;
+    if (entity->position.y < bounds.min.y) bounds.min.y = (f32)entity->position.y;
+    if (entity->position.z < bounds.min.z) bounds.min.z = (f32)entity->position.z;
+    if (entity->position.x > bounds.max.x) bounds.max.x = (f32)entity->position.x;
+    if (entity->position.y > bounds.max.y) bounds.max.y = (f32)entity->position.y;
+    if (entity->position.z > bounds.max.z) bounds.max.z = (f32)entity->position.z;
   }
-
   return bounds;
 }
 
 internal void update_sun(Sun *sun) {
   World *world = get_world();
-  AABB bounds = world->bounding_box;
+  AABB bounds = get_game_state()->bounding_box;
   Vector3 center = get_aabb_center(bounds);
   Vector3 bound_dim = get_aabb_dimension(bounds);
   f32 radius = get_max_elem(bound_dim);
@@ -177,7 +177,6 @@ internal void update_sun(Sun *sun) {
   Vector3 light_target = light_position + sun->light_direction;
 
   sun->light_projection = ortho_rh_zo(center.x - radius, center.x + radius, center.y - radius, center.y + radius, center.z - radius, center.z + radius);
-  // sun->light_projection = ortho_rh_zo(center.x - bound_dim.x, center.x + bound_dim.x, center.y - bound_dim.y, center.y + bound_dim.y, center.z - bound_dim.z, center.z + bound_dim.z);
   sun->light_view = look_at_rh(light_position, light_target, Vector3(0, 1, 0));
   sun->light_space_matrix = sun->light_projection * sun->light_view;
 }
@@ -222,11 +221,7 @@ void update_guy(Guy *guy) {
 
     moved = move_entity(guy, move_direction);
 
-    {
-      f32 theta = atan2f((f32)-move_direction.z, (f32)move_direction.x);
-      guy->theta_target = theta;
-    }
-
+    guy->theta_target = atan2f((f32)-move_direction.z, (f32)move_direction.x);
 
     if (moved) {
       play_effect("tile_0.ogg");
@@ -238,13 +233,25 @@ void update_guy(Guy *guy) {
   }
 }
 
+internal void update_mirror(Mirror *mirror) {
+  Vector3 direction = forward_from_theta(-mirror->theta);
+  mirror->reflection_vectors[0] = Vector3(direction.x, 0, 0);
+  mirror->reflection_vectors[1] = Vector3(0, 0, -direction.z);
+}
+
 internal void update_entity(Entity *e, f32 dt) {
   switch (e->kind) {
-
-  case ENTITY_GUY:
+  case ENTITY_MIRROR:
   {
-    Guy *guy = static_cast<Guy*>(e);
-    update_guy(guy);
+    Mirror *mirror = static_cast<Mirror*>(e);
+    update_mirror(mirror);
+    break;
+  }
+
+  case ENTITY_SUN:
+  {
+    Sun *sun = static_cast<Sun*>(e);
+    update_sun(sun);
     break;
   }
   }
@@ -272,28 +279,53 @@ internal void update_entity(Entity *e, f32 dt) {
   }
 }
 
-internal void simulate() {
-  World *world = get_world();
-  if (!game_state->editing && !game_state->paused) {
-    Vector2 mouse_delta = get_mouse_delta();
-    update_camera_orientation(&game_state->camera, mouse_delta);
-    update_camera_position(&game_state->camera);
+internal void simulate_world(f32 dt) {
+  if (game_state->editing) return;
+
+
+  Entity_Manager *manager = get_entity_manager();
+
+  Vector2 mouse_delta = get_mouse_delta();
+  update_camera_orientation(&game_state->camera, mouse_delta);
+  update_camera_position(&game_state->camera);
+
+  for (Entity *entity : manager->entities.all) {
+    update_entity(entity, game_state->dt);
   }
 
-  if (!game_state->editing && !game_state->paused) {
-    //@Note Update entities
-    for (int i = 0; i < world->entities.count; i++) {
-      Entity *e = world->entities[i];
-      update_entity(e, game_state->dt);
+  if (game_state->can_world_step) {
+    Auto_Array<Entity*> unsupported;
+    for (Entity *entity : manager->entities.all) {
+      update_entity(entity, game_state->dt);
+      if (entity->flags & ENTITY_FLAG_STATIC) continue;
+
+      Entity *support = find_support(entity);
+      if (!support && entity->position.y > 0.0f) {
+        unsupported.push(entity);
+      }
+    }
+
+    for (int i = 0; i < unsupported.count; i++) {
+      Entity *e = unsupported[i];
+      e->position.y -= 1;
+      signal_world_step();
+    }
+    unsupported.clear();
+
+    for (Entity *entity : manager->entities.all) {
+      if (entity->kind != ENTITY_GUY) continue;
+      Guy *guy = static_cast<Guy*>(entity);
+      update_guy(guy);
+    }
+  } else {
+    game_state->world_step_dt += dt;
+    if (game_state->world_step_dt > 0.2f) {
+      game_state->can_world_step = true;
+      game_state->world_step_dt = 0; 
     }
   }
 
-  {
-    Sun *sun = get_sun(world);
-    if (sun) update_sun(sun);
-  }
-
-  world->bounding_box = get_world_bounds(world);
+  get_game_state()->bounding_box = get_world_bounds();
 }
 
 internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, f32 dt) {
@@ -302,13 +334,11 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
   audio_engine->origin = game_state->camera.origin;
   audio_engine->update();
 
-  ui_g_state->animation_dt = dt;
-
   r_d3d11_update_dirty_shaders();
     
   Vector2 window_dim = os_get_window_dim(window_handle);
 
-  game_state->dt = dt / 1000.0f;
+  game_state->dt = dt;
   game_state->window_dim = to_vec2i(window_dim);
 
   g_viewport->dimension = window_dim;
@@ -322,21 +352,13 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
 
   input_begin(window_handle, events);
 
-  // draw_begin(window_handle);
-
   r_resize_render_target(game_state->window_dim);
 
   r_d3d11_begin(window_handle);
 
   r_clear_color(0.0f, 0.0f, 0.0f, 1.0f);
 
-  for (int i = 0; i < get_world()->entities.count; i++) {
-    Entity *e = get_world()->entities[i];
-    if (e->to_be_destroyed) {
-      get_world()->entities.remove(i);
-      entity_free(e);
-    }
-  }
+  remove_entities_to_be_destroyed();
 
   if (game_state->paused) {
     input_set_mouse_capture(false);
@@ -351,7 +373,7 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
     input_set_mouse_capture(true);
   }
 
-  simulate();
+  simulate_world(dt);
   if (!game_state->editing) {
     draw_scene();
   }

@@ -30,19 +30,19 @@ struct Raycast {
 
 struct World {
   String8 name;
-  Auto_Array<Entity*> entities;
-  Guy *guy = nullptr;
-  Pid next_pid = 1;
-
-  AABB bounding_box;
+  // Auto_Array<Entity*> entities;
 };
 
 struct Game_State {
   Vector2Int window_dim;
   f32 dt;
   Camera camera;
-  b32 paused;
-  b32 editing;
+  b32 paused = 0;
+  b32 editing = 0;
+
+  AABB bounding_box;
+  b32 can_world_step = 0;
+  f32 world_step_dt = 0;
 };
 
 internal inline Game_Settings *get_settings();
@@ -67,11 +67,10 @@ internal World *load_world(String8 file_name);
 internal void save_world(World *world);
 internal void save_world(World *world, String8 name);
 
-internal void remove_grid_entity(World *world, Entity *entity);
-internal Entity *find_entity_at(World *world, Vector3 position);
+internal Entity *find_entity_at(Vector3 position);
 
 
-internal Sun *get_sun(World *world);
+internal inline Entity_Manager *get_entity_manager();
 
 internal void init_game();
 

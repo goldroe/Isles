@@ -72,22 +72,20 @@ internal bool raycast(Vector3 origin, Vector3 direction, f32 max_d, Raycast *ray
         raycast->face = (dz < 0) ? FACE_NORTH : FACE_SOUTH;
       }
     }
+
+    raycast->hit_position.x = (f32)block.x;
+    raycast->hit_position.y = (f32)block.y;
+    raycast->hit_position.z = (f32)block.z;
+
     if (tMaxX > 1 && tMaxY > 1 && tMaxZ > 1) break;
 
-    // logprint("step: %d %d %d\n", block.x, block.y, block.z);
-
-    Entity *entity = find_entity_at(get_world(), to_vec3(block));
+    Entity *entity = find_entity_at(to_vec3(block));
     if (entity) {
-      // logprint("hit: %d %d %d\n", block.x, block.y, block.z);
-      
       raycast->hit = entity;
-      raycast->hit_position.x = (f32)block.x;
-      raycast->hit_position.y = (f32)block.y;
-      raycast->hit_position.z = (f32)block.z;
       return true;
     }
 
-    if (block.x < 0 && block.y < 0 && block.z < 0) break;
+    if (block.y == 0.0f) return false;
   }
 
   return false;
@@ -155,6 +153,8 @@ internal void deselect_entity(Editor *editor, Entity *e) {
 }
 
 internal Entity *copy_entity(Entity *e) {
+  Entity_Manager *manager = get_entity_manager();
+
   Entity_Prototype *prototype = entity_prototype_lookup(e->prototype_id);
   Entity *clone = entity_from_prototype(prototype);
   clone->flags = e->flags;
@@ -173,7 +173,7 @@ internal Entity *copy_entity(Entity *e) {
   }
   }
 
-  get_world()->entities.push(clone);
+  entity_push(manager, clone);
   return clone;
 }
 
@@ -289,7 +289,6 @@ COMMAND(EditorDeleteSelection) {
   for (int i = 0; i < editor->selections.count; i++) {
     Entity *e = editor->selections[i];
     e->to_be_destroyed = true;
-    remove_grid_entity(get_world(), e);
   }
   clear_selection(editor);
 }
@@ -563,8 +562,7 @@ internal void r_picker_render_gizmo(Picker *picker) {
     Triangle_Mesh *mesh = editor->gizmo_meshes[editor->active_gizmo][axis];
 
     Matrix4 world_matrix = translate(e->position) * translate(e->offset) * scale(make_vec3(gizmo_scale_factor));
-    Matrix4 view_matrix = editor->camera.view_matrix;
-    Matrix4 xform = editor->camera.projection_matrix * view_matrix * world_matrix;
+    Matrix4 xform = editor->camera.transform * world_matrix;
 
     u32 id = axis;
     Vector4 pick_color;
@@ -590,6 +588,8 @@ internal void r_picker_render_gizmo(Picker *picker) {
 }
 
 internal void picker_render(Picker *picker) {
+  Entity_Manager *manager = get_entity_manager();
+
   R_D3D11_State *d3d = r_d3d11_state();
 
   Editor *editor = g_editor;
@@ -612,14 +612,14 @@ internal void picker_render(Picker *picker) {
   Game_State *game_state = get_game_state();
   World *world = get_world();
 
-  for (int i = 0; i < world->entities.count; i++) {
-    Entity *e = world->entities[i];
+  for (int i = 0; i < manager->entities.all.count; i++) {
+    Entity *e = manager->entities.all[i];
     Triangle_Mesh *mesh = e->mesh;
     if (!mesh) continue;
 
     Matrix4 rotation_matrix = rotate_rh(e->theta, editor->camera.up);
     Matrix4 world_matrix = translate(e->position) * translate(e->offset) * rotation_matrix;
-    Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * world_matrix;
+    Matrix4 xform = editor->camera.transform * world_matrix;
 
     Vector4 pick_color;
     pick_color.x = ((e->id & 0x000000FF) >> 0 ) / 255.0f;
@@ -643,50 +643,48 @@ internal void picker_render(Picker *picker) {
     vertex_buffer->Release();
   }
 
-  // Draw billboards
-  for (int i = 0; i < world->entities.count; i++) {
-    Entity *e = world->entities[i];
-    if (e->kind == ENTITY_SUN) {
-      Matrix4 rotation_matrix = rotate_rh(e->theta, editor->camera.up);
-      Matrix4 world_matrix = translate(e->position) * translate(e->offset) * rotation_matrix;
-      Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * world_matrix;
+  for (int i = 0; i < manager->entities._type.Sun.count; i++) {
+    Sun *sun = manager->entities._type.Sun[i];
+    
+    Matrix4 rotation_matrix = rotate_rh(sun->theta, editor->camera.up);
+    Matrix4 world_matrix = translate(sun->position) * translate(sun->offset) * rotation_matrix;
+    Matrix4 xform = editor->camera.transform * world_matrix;
 
-      Vector4 pick_color;
-      pick_color.x = ((e->id & 0x000000FF) >> 0 ) / 255.0f;
-      pick_color.y = ((e->id & 0x0000FF00) >> 8 ) / 255.0f;
-      pick_color.z = ((e->id & 0x00FF00FF) >> 16) / 255.0f;
-      pick_color.w = ((e->id & 0xFF0000FF) >> 24) / 255.0f;
+    Vector4 pick_color;
+    pick_color.x = ((sun->id & 0x000000FF) >> 0 ) / 255.0f;
+    pick_color.y = ((sun->id & 0x0000FF00) >> 8 ) / 255.0f;
+    pick_color.z = ((sun->id & 0x00FF00FF) >> 16) / 255.0f;
+    pick_color.w = ((sun->id & 0xFF0000FF) >> 24) / 255.0f;
 
-      set_constant(str8_lit("xform"), xform);
-      set_constant(str8_lit("pick_color"), pick_color);
-      apply_constants();
+    set_constant(str8_lit("xform"), xform);
+    set_constant(str8_lit("pick_color"), pick_color);
+    apply_constants();
 
-      Vector3 plane_normal = e->position - editor->camera.origin;
-      plane_normal.y = 0.0f;
-      plane_normal = normalize(plane_normal);
+    Vector3 plane_normal = sun->position - editor->camera.origin;
+    plane_normal.y = 0.0f;
+    plane_normal = normalize(plane_normal);
       
-      Vector3 up = Vector3(0, 1, 0);
-      Vector3 right = normalize(cross(plane_normal, up));
-      f32 size = 0.5f;
-      Vector3 p0 = -size * right - size * up;
-      Vector3 p1 =  size * right - size * up;
-      Vector3 p2 =  size * right + size * up;
-      Vector3 p3 = -size * right + size * up;
+    Vector3 up = Vector3(0, 1, 0);
+    Vector3 right = normalize(cross(plane_normal, up));
+    f32 size = 0.5f;
+    Vector3 p0 = -size * right - size * up;
+    Vector3 p1 =  size * right - size * up;
+    Vector3 p2 =  size * right + size * up;
+    Vector3 p3 = -size * right + size * up;
 
-      Vector3 vertices[6];
-      vertices[0] = p0;
-      vertices[1] = p1;
-      vertices[2] = p2;
-      vertices[3] = p0;
-      vertices[4] = p2;
-      vertices[5] = p3;
+    Vector3 vertices[6];
+    vertices[0] = p0;
+    vertices[1] = p1;
+    vertices[2] = p2;
+    vertices[3] = p0;
+    vertices[4] = p2;
+    vertices[5] = p3;
 
-      ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices, ArrayCount(vertices), sizeof(Vector3));
-      UINT stride = sizeof(Vector3), offset = 0;
-      d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
-      d3d->device_context->Draw((UINT)ArrayCount(vertices), 0);
-      vertex_buffer->Release();
-    }
+    ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices, ArrayCount(vertices), sizeof(Vector3));
+    UINT stride = sizeof(Vector3), offset = 0;
+    d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+    d3d->device_context->Draw((UINT)ArrayCount(vertices), 0);
+    vertex_buffer->Release();
   }
 
   set_render_target(d3d->default_render_target);
@@ -748,6 +746,7 @@ internal Pid picker_get_id(Picker *picker, Vector2Int mouse) {
 }
 
 internal void update_editor(OS_Event_List *events) {
+  Entity_Manager *manager = get_entity_manager();
   Editor *editor = g_editor;
 
   R_D3D11_State *d3d = r_d3d11_state();
@@ -797,7 +796,7 @@ internal void update_editor(OS_Event_List *events) {
 
     if (key && pressed) {
       Key_Command *command = key_map_lookup(editor_key_map, key);
-      if (command->proc && !ui_keyboard_captured() && !ui_keyboard_captured()) {
+      if (command->proc && !ui_mouse_captured() && !ui_keyboard_captured()) {
         command->proc();
       }
     }
@@ -879,38 +878,36 @@ internal void update_editor(OS_Event_List *events) {
   set_texture(str8_lit("diffuse_texture"), sun_icon_texture);
   set_blend_state(BLEND_STATE_ALPHA);
 
-  for (int i = 0; i < world->entities.count; i++) {
-    Entity *e = world->entities[i];
-    if (e->kind == ENTITY_SUN) {
-      Matrix4 rotation_matrix = rotate_rh(e->theta, editor->camera.up);
-      Matrix4 world_matrix = translate(e->position) * translate(e->offset) * rotation_matrix;
-      Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * world_matrix;
+  for (int i = 0; i < manager->entities._type.Sun.count; i++) {
+    Sun *sun = manager->entities._type.Sun[i];
+    Matrix4 rotation_matrix = rotate_rh(sun->theta, editor->camera.up);
+    Matrix4 world_matrix = translate(sun->position) * translate(sun->offset) * rotation_matrix;
+    Matrix4 xform = editor->camera.transform * world_matrix;
 
-      set_constant(str8_lit("xform"), xform);
-      apply_constants();
+    set_constant(str8_lit("xform"), xform);
+    apply_constants();
      
-      Vector3 right = editor->camera.right;
-      Vector3 up = cross(right, editor->camera.forward);
-      f32 size = 0.5f;
-      Vertex_XCUU p0 = Vertex_XCUU(-size * right - size * up, make_vec4(1.0f), Vector2(0, 1));
-      Vertex_XCUU p1 = Vertex_XCUU( size * right - size * up, make_vec4(1.0f), Vector2(1, 1));
-      Vertex_XCUU p2 = Vertex_XCUU( size * right + size * up, make_vec4(1.0f), Vector2(1, 0));
-      Vertex_XCUU p3 = Vertex_XCUU(-size * right + size * up, make_vec4(1.0f), Vector2(0, 0));
+    Vector3 right = editor->camera.right;
+    Vector3 up = cross(right, editor->camera.forward);
+    f32 size = 0.5f;
+    Vertex_XCUU p0 = Vertex_XCUU(-size * right - size * up, make_vec4(1.0f), Vector2(0, 1));
+    Vertex_XCUU p1 = Vertex_XCUU( size * right - size * up, make_vec4(1.0f), Vector2(1, 1));
+    Vertex_XCUU p2 = Vertex_XCUU( size * right + size * up, make_vec4(1.0f), Vector2(1, 0));
+    Vertex_XCUU p3 = Vertex_XCUU(-size * right + size * up, make_vec4(1.0f), Vector2(0, 0));
 
-      Vertex_XCUU vertices[6];
-      vertices[0] = p0;
-      vertices[1] = p1;
-      vertices[2] = p2;
-      vertices[3] = p0;
-      vertices[4] = p2;
-      vertices[5] = p3;
+    Vertex_XCUU vertices[6];
+    vertices[0] = p0;
+    vertices[1] = p1;
+    vertices[2] = p2;
+    vertices[3] = p0;
+    vertices[4] = p2;
+    vertices[5] = p3;
  
-      ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices, ArrayCount(vertices), sizeof(Vertex_XCUU));
-      UINT stride = sizeof(Vertex_XCUU), offset = 0;
-      d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
-      d3d->device_context->Draw((UINT)ArrayCount(vertices), 0);
-      vertex_buffer->Release();
-    }
+    ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices, ArrayCount(vertices), sizeof(Vertex_XCUU));
+    UINT stride = sizeof(Vertex_XCUU), offset = 0;
+    d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+    d3d->device_context->Draw((UINT)ArrayCount(vertices), 0);
+    vertex_buffer->Release();
   }
 
   set_blend_state(BLEND_STATE_DEFAULT);
@@ -924,7 +921,7 @@ internal void update_editor(OS_Event_List *events) {
 
   for (int i = 0; i < editor->selections.count; i++) {
     Entity *e = editor->selections[i];
-    Matrix4 xform = editor->camera.projection_matrix * editor->camera.view_matrix * translate(e->position) * translate(e->offset) * rotate_rh(e->theta, Vector3(0, 1, 0));
+    Matrix4 xform = editor->camera.transform * translate(e->position) * translate(e->offset) * rotate_rh(e->theta, Vector3(0, 1, 0));
     set_constant(str8_lit("xform"), xform);
     apply_constants();
 
@@ -950,8 +947,7 @@ internal void update_editor(OS_Event_List *events) {
     gizmo_scale_factor = ClampBot(gizmo_scale_factor, 1.0f);
 
     Matrix4 world_matrix = translate(selected_entity->position) * scale(make_vec3(gizmo_scale_factor));
-    Matrix4 view_matrix = editor->camera.view_matrix;
-    Matrix4 xform = editor->camera.projection_matrix * view_matrix * world_matrix;
+    Matrix4 xform = editor->camera.transform * world_matrix;
     set_constant(str8_lit("xform"), xform);
     set_texture(str8_lit("diffuse_texture"), d3d->fallback_tex);
     apply_constants();
@@ -1038,6 +1034,8 @@ internal void editor_present_ui() {
   Editor *editor = g_editor;
   Editor_Panel *panel = editor->panel;
   Entity_Panel *entity_panel = editor->entity_panel;
+
+  Entity_Manager *manager = get_entity_manager();
 
   if (entity_panel->dirty) {
     update_entity_panel(editor); 
@@ -1191,20 +1189,20 @@ internal void editor_present_ui() {
         }
 
         ui_set_next_pref_width(ui_pct(1.0f));
-        if (ui_clicked(ui_button(str8_lit("Instantiate")))) {
+        if (ui_released(ui_button(str8_lit("Instantiate")))) {
+          Raycast raycast_result = {};
+          raycast(editor->camera.origin, editor->camera.forward, 100.0f, &raycast_result);
+
           Entity_Prototype *prototype = editor->prototype_array[editor->prototype_idx];
           Entity *instance = entity_from_prototype(prototype);
-          instance->set_position(floor(editor->camera.origin + editor->camera.forward));
-          if (editor->active_selection) {
-            Vector3 unit = get_nearest_axis(editor->camera.origin - editor->active_selection->position);
-            instance->set_position(editor->active_selection->position + unit);
+          // entity_push(manager, instance);
+          if (raycast_result.hit) {
+            instance->set_position(raycast_result.hit_position + Vector3(0, 1, 0));
+          } else {
+            instance->set_position(raycast_result.hit_position);
           }
+
           single_select_entity(editor, instance);
-          World *world = get_world();
-          world->entities.push(instance);
-          if (instance->kind == ENTITY_GUY) {
-            world->guy = static_cast<Guy*>(instance);
-          }
         }
       }
 
@@ -1303,7 +1301,6 @@ internal void editor_present_ui() {
               // ui_set_next_text_padding(4.0f);
               UI_Signal sig = ui_line_edit(line_edit, str8_lit("##edit"));
               if (ui_pressed(sig) && sig.key == OS_KEY_ENTER) {
-                printf("ENTER\n");
                 field->dirty = true;
                 editor->entity_panel->dirty = true;
               }
@@ -1349,7 +1346,6 @@ internal void editor_present_ui() {
         }
 
         if (ui_clicked(ui_button(str8_lit("Destroy!")))) {
-          remove_grid_entity(get_world(), editor->active_selection);
           e->to_be_destroyed = true;
           deselect_entity(editor, e);
         }

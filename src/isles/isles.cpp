@@ -17,11 +17,20 @@ global Arena *permanent_arena;
 global Arena *temporary_arena;
 
 global Game_State *game_state;
-global World *g_world;
 
 global Font *default_font;
 
 global Game_Settings *game_settings;
+
+global World *g_world;
+
+internal World *get_world() {
+  return g_world;
+}
+
+internal void set_world(World *world) {
+  g_world = world;
+}
 
 internal inline Arena *get_permanent_arena() {
   return permanent_arena;
@@ -35,18 +44,6 @@ internal inline Game_State *get_game_state() {
   return game_state;
 }
 
-internal inline World *get_world() {
-  return g_world;
-}
-
-internal inline void set_world(World *world) {
-  if (g_world) {
-    g_world->entities.clear();
-    delete g_world;
-  }
-  g_world = world;
-}
-
 internal inline f32 get_frame_delta() {
   return game_state->dt;
 }
@@ -57,7 +54,7 @@ internal char *string_from_entity_kind(Entity_Kind kind) {
     return "";
   case ENTITY_GUY:
     return "Guy";
-  case ENTITY_BLOCK:
+  case ENTITY_INANIMATE:
     return "Block";
   case ENTITY_MIRROR:
     return "Mirror";
@@ -77,32 +74,13 @@ internal char *string_from_entity_flag(Entity_Flags flags) {
   }
 }
 
-internal void remove_grid_entity(World *world, Entity *entity) {
-  for (int i = 0; i < world->entities.count; i++) {
-    if (world->entities[i] == entity) {
-      world->entities.remove(i);
-      break;
-    }
-  }
-}
-
-internal Sun *get_sun(World *world) {
-  Sun *sun = nullptr;
-  for (int i = 0; i < world->entities.count; i++) {
-    Entity *e = world->entities[i];
-    if (e->kind == ENTITY_SUN) {
-      sun = static_cast<Sun*>(e);
-      break;
-    }
-  }
-  return sun;
-}
-
 internal World *load_world(String8 name) {
   String8 file_name = path_join(get_permanent_arena(), str8_lit("data/worlds"), name);
 
   World *world = new World();
   world->name = str8_copy(permanent_arena, name);
+
+  Entity_Manager *manager = get_entity_manager();
 
   set_world(world);
 
@@ -138,8 +116,6 @@ internal World *load_world(String8 name) {
   camera->origin = Vector3(x, y, z);
   camera->update_euler_angles(yaw, pitch);
 
-  Pid id = 1;
-
   u32 entity_count = buffer->get_le32();
   for (u32 i = 0; i < entity_count; i++) {
     Entity_Kind kind = (Entity_Kind)buffer->get_le16();
@@ -152,7 +128,6 @@ internal World *load_world(String8 name) {
 
     Entity_Prototype *prototype = entity_prototype_lookup(prototype_id);
     Entity *entity = entity_from_prototype(prototype);
-    entity->id = id;
     entity->flags = flags;
     entity->set_position(Vector3((f32)x, (f32)y, (f32)z));
     entity->set_theta(theta);
@@ -166,7 +141,6 @@ internal World *load_world(String8 name) {
     switch (entity->kind) {
     case ENTITY_GUY:
     {
-      world->guy = static_cast<Guy*>(entity);
       break;
     }
 
@@ -179,21 +153,16 @@ internal World *load_world(String8 name) {
       break;
     }
     }
-
-    world->entities.push(entity);
-    id++;
   }
 
-  world->next_pid = id + 1;
-
-  if (!world->guy) {
-    Entity_Prototype *prototype = entity_prototype_lookup("Guy");
-    Entity *guy = entity_from_prototype(prototype);
-    guy->set_position(Vector3(0, 2, 0));
-    guy->set_theta(0);
-    world->guy = static_cast<Guy*>(guy);
-    world->entities.push(guy);
-  }
+  // if (!world->guy) {
+  //   Entity_Prototype *prototype = entity_prototype_lookup("Guy");
+  //   Entity *guy = entity_from_prototype(prototype);
+  //   guy->set_position(Vector3(0, 2, 0));
+  //   guy->set_theta(0);
+  //   world->guy = static_cast<Guy*>(guy);
+  //   world->entities.push(guy);
+  // }
 
   return world;
 }
@@ -232,6 +201,7 @@ internal void serialize_entity(Byte_Buffer *buffer, Entity *e) {
 }
 
 internal void save_world(World *world, String8 file_name) {
+  Entity_Manager *manager = get_entity_manager();
   String8 file_path = path_join(get_permanent_arena(), str8_lit("data/worlds"), file_name);
 
   Byte_Buffer *buffer = new Byte_Buffer();
@@ -248,64 +218,16 @@ internal void save_world(World *world, String8 file_name) {
   buffer->put_f32(camera.pitch);
 
   // Entities
-  buffer->put_le32((u32)world->entities.count);
+  buffer->put_le32((u32)manager->entities.all.count);
 
-  for (int i = 0; i < world->entities.count; i++) {
-    Entity *e = world->entities[i];
+  for (int i = 0; i < manager->entities.all.count; i++) {
+    Entity *e = manager->entities.all[i];
     serialize_entity(buffer, e);
   }
 
   OS_Handle file = os_open_file(file_path, OS_AccessFlag_Write);
   os_write_file(file, buffer->buffer, buffer->len);
   os_close_handle(file);
-}
-
-internal void *entity_alloc(int bytes) {
-  void *memory = calloc(1, bytes);
-  return memory;
-}
-
-internal void entity_free(Entity *entity) {
-  free(entity);
-}
-
-internal Entity *entity_make(Entity_Kind kind) {
-  Entity *e = nullptr;
-  switch (kind) {
-  default:
-    e = (Entity *)entity_alloc(sizeof(Entity));
-    break;
-  case ENTITY_GUY:
-    e = (Entity *)entity_alloc(sizeof(Guy));
-    break;
-  case ENTITY_SUN:
-    e = (Entity *)entity_alloc(sizeof(Sun));
-    break;
-  }
-  e->kind = kind;
-  e->override_color = Vector4(1, 1, 1, 1);
-  e->id = get_world()->next_pid++;
-  return e;
-}
-
-internal Entity *lookup_entity(Pid id) {
-  if (id == 0) return nullptr;
-  World *world = get_world();
-  for (int i = 0; i < world->entities.count; i++) {
-    Entity *e = world->entities[i];
-    if (e->id == id) return e;
-  }
-  return nullptr;
-}
-    
-internal Entity *find_entity_at(World *world, Vector3 position) {
-  Vector3Int p0 = to_vec3i(position);
-  for (int i = 0; i < world->entities.count; i++) {
-    Entity *wall = world->entities[i];
-    Vector3Int p1 = to_vec3i(wall->position);
-    if (p0 == p1) return wall;
-  }
-  return nullptr;
 }
 
 internal void update_camera_position(Camera *camera) {
@@ -333,6 +255,8 @@ internal void update_camera_position(Camera *camera) {
 }
 
 internal void init_game() {
+  entity_manager = new Entity_Manager();
+
   UI_State *ui_state = new UI_State();
   ui_set_state(ui_state);
   ui_state->arena = arena_alloc(get_virtual_allocator(), MB(4));
@@ -344,14 +268,14 @@ internal void init_game() {
   game_state->editing = false;
 
   Arena *temp = make_arena(get_malloc_allocator());
-  default_font = load_font(temp, str8_lit("data/fonts/seguisb.ttf"), 20);
+  default_font = load_font(temp, str8_lit("data/fonts/seguisb.ttf"), 18);
   default_fonts[FONT_DEFAULT] = default_font;
 
   Font *icon_font;
   u32 icon_font_glyphs[] = { 87, 120, 33, 49, 85, 68, 76, 82, 57, 48, 55, 56, 123, 125, 67, 70, 35 };
 
   temp = make_arena(get_malloc_allocator());
-  icon_font = load_icon_font(temp, str8_lit("data/fonts/icons.ttf"), 30, icon_font_glyphs, ArrayCount(icon_font_glyphs));
+  icon_font = load_icon_font(temp, str8_lit("data/fonts/icons.ttf"), 24, icon_font_glyphs, ArrayCount(icon_font_glyphs));
   default_fonts[FONT_ICON] = icon_font;
 
   Triangle_Mesh *guy_mesh      = load_mesh("data/meshes/Character/character.obj");
@@ -377,26 +301,26 @@ internal void init_game() {
   mirror_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
   Entity_Prototype *block_prototype = entity_prototype_create("Block");
-  block_prototype->entity.kind = ENTITY_BLOCK;
+  block_prototype->entity.kind = ENTITY_INANIMATE;
   block_prototype->entity.flags = ENTITY_FLAG_STATIC;
   block_prototype->entity.mesh = block_mesh;
   block_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
   Entity_Prototype *stone_prototype = entity_prototype_create("Stone");
-  stone_prototype->entity.kind = ENTITY_BLOCK;
+  stone_prototype->entity.kind = ENTITY_INANIMATE;
   stone_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
   stone_prototype->entity.mesh = stone_mesh;
   stone_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
   Entity_Prototype *crate_prototype = entity_prototype_create("Crate");
-  crate_prototype->entity.kind = ENTITY_BLOCK;
+  crate_prototype->entity.kind = ENTITY_INANIMATE;
   crate_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
   crate_prototype->entity.mesh = crate_mesh;
   crate_prototype->entity.override_color = Vector4(1, 1, 1, 1);
   crate_prototype->entity.offset = Vector3(0.5f, 0.0f, 0.5f);
 
   Entity_Prototype *sand_prototype = entity_prototype_create("Sand");
-  sand_prototype->entity.kind = ENTITY_BLOCK;
+  sand_prototype->entity.kind = ENTITY_INANIMATE;
   sand_prototype->entity.flags = ENTITY_FLAG_STATIC;
   sand_prototype->entity.mesh = sand_mesh;
   sand_prototype->entity.override_color = Vector4(1, 1, 1, 1);

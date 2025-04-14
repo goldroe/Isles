@@ -28,7 +28,9 @@ internal void action_pop() {
 }
 
 internal void undo() {
-  Guy *guy = get_world()->guy;
+  Entity_Manager *manager = get_entity_manager();
+  Guy *guy = manager->entities._type.Guy[0];
+
   while (undo_stack->top) {
     Action *action = undo_stack->top;
     switch (action->kind) {

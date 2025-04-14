@@ -48,6 +48,7 @@
 #include "mesh.h"
 #include "audio.h"
 #include "entity.h"
+#include "manager.h"
 #include "ui/ui_core.h"
 #include "editor.h"
 #include "isles.h"
@@ -80,6 +81,7 @@
 #include "editor.cpp"
 #include "undo.cpp"
 #include "render_target.cpp"
+#include "manager.cpp"
 #include "isles.cpp"
 #include "simulate.cpp"
 

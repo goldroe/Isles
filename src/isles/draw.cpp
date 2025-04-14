@@ -453,6 +453,8 @@ internal void draw_scene() {
     shadow_map = make_shadow_map(2048, 2048);
   }
 
+  Entity_Manager *manager = get_entity_manager();
+
   R_D3D11_State *d3d = r_d3d11_state();
 
   Game_State *game_state = get_game_state();
@@ -467,7 +469,7 @@ internal void draw_scene() {
   }
 
   // @Note Shadow mapping
-  Sun *sun = get_sun(world);
+  Sun *sun = manager->entities._type.Sun.count ? manager->entities._type.Sun[0] : 0;
   if (sun) {
     set_viewport(0, 0, (f32)shadow_map->texture->width, (f32)shadow_map->texture->height);
     set_depth_state(DEPTH_STATE_DEFAULT);
@@ -480,8 +482,8 @@ internal void draw_scene() {
     bind_uniform(shader_shadow_map, str8_lit("Constants"));
     Shader_Uniform *shadow_map_uniform = shader_shadow_map->bindings->lookup_uniform(str8_lit("Constants"));
 
-    for (int i = 0; i < world->entities.count; i++) {
-      Entity *entity = world->entities[i];
+    for (int i = 0; i < manager->entities.all.count; i++) {
+      Entity *entity = manager->entities.all[i];
       Triangle_Mesh *mesh = entity->mesh;
       if (!mesh) continue;
 
@@ -512,80 +514,80 @@ internal void draw_scene() {
 
   if (!game_state->editing) {
     Entity *mirror = nullptr;
-    if (world->guy && (mirror = lookup_entity(world->guy->mirror_id))) {
-      {
-        //@Note Draw guy clone
-        Guy *guy = world->guy;
 
-        Matrix4 rotation_matrix = rotate_rh(guy->theta, camera.up);
-        Matrix4 world_matrix = translate(guy->reflect_position) * translate(guy->offset) * rotation_matrix;
-        Matrix4 xform = camera.projection_matrix * camera.view_matrix * world_matrix;
+    //@Note Draw guy clone
+    for (Guy *guy : manager->entities._type.Guy) {
+      Mirror *mirror = static_cast<Mirror*>(lookup_entity(guy->mirror_id));
+      if (!mirror) continue;
 
-        set_shader(shader_entity);
+      Matrix4 rotation_matrix = rotate_rh(guy->theta, camera.up);
+      Matrix4 world_matrix = translate(guy->reflect_position) * translate(guy->offset) * rotation_matrix;
+      Matrix4 xform = camera.transform * world_matrix;
 
-        bind_uniform(shader_entity, str8_lit("Constants"));
+      set_shader(shader_entity);
 
-        set_constant(str8_lit("xform"), xform);
-        set_constant(str8_lit("world"), world_matrix);
-        apply_constants(); 
+      bind_uniform(shader_entity, str8_lit("Constants"));
 
-        set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
-        set_sampler(str8_lit("point_sampler"), SAMPLER_STATE_POINT);
+      set_constant(str8_lit("xform"), xform);
+      set_constant(str8_lit("world"), world_matrix);
+      apply_constants(); 
 
-        draw_mesh(guy->mesh, true, Vector4(0.4f, 0.4f, 0.4f, 1.0f));
-      }
+      set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
+      set_sampler(str8_lit("point_sampler"), SAMPLER_STATE_POINT);
 
-      // @Note Draw reflection beams
-      // {
-      //   immediate_begin();
-
-      //   d3d->device_context->OMSetBlendState(d3d->blend_states[R_BLEND_STATE_ALPHA], NULL, 0xffffffff);
-      //   d3d->device_context->OMSetDepthStencilState(d3d->depth_stencil_states[R_DEPTH_STENCIL_STATE_DEFAULT], 0);
-
-      //   Vector3 mirror_forward = to_vec3(rotate_rh(-mirror->theta,  Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1));
-      //   Vector3 direction = to_vec3(world->guy->position - mirror->position);
-      //   int distance = (int)Abs(magnitude(direction));
-
-      //   Vector3 beam_size = Vector3(1, 1, 1);
-      //   Vector4 beam_color = Vector4(1, 1, 1, 0.5f);
-      //   Vector3 beam_start = to_vec3(mirror->position);
-      //   f32 dx = mirror_forward.x > 0 ? 1.0f : -1.0f;
-      //   f32 dz = mirror_forward.z > 0 ? 1.0f : -1.0f;
-      //   f32 beam_start_x = (f32)mirror->position.x + dx;
-      //   f32 beam_start_z = (f32)mirror->position.z + dz;
-
-      //   Vector3 beam_position;
-      //   // x
-      //   beam_start = to_vec3(mirror->position);
-      //   beam_start.x = beam_start_x;
-
-      //   Matrix4 world_matrix = translate(beam_start);
-      //   Matrix4 transform = camera.projection_matrix * camera.view_matrix * world_matrix;
-
-      //   beam_size = Vector3(dx * (f32)distance, 1.f, 1.f);
-      //   beam_size -= Vector3(0.f, 0.1f, 0.1f);
-      //   beam_position = Vector3(dx * -0.5f, 0.001f, -0.5f);
-      //   beam_position += Vector3(0.f, 0.05f, 0.05f);
-      //   draw_imm_rectangle(beam_position, beam_size, beam_color);
-
-      //   // z
-      //   batch = push_immediate_batch(bucket);
-      //   beam_start = to_vec3(mirror->position);
-      //   beam_start.z = beam_start_z;
-
-      //   batch = push_immediate_batch(bucket);
-      //   batch->world = translate(beam_start);
-      //   batch->view = camera.view_matrix;
-      //   batch->projection = camera.projection_matrix;
-      //   batch->texture = nullptr;
-
-      //   beam_size = Vector3(1.f, 1.f, dz * (f32)distance);
-      //   beam_size -= Vector3(0.1f, 0.1f, 0.f);
-      //   beam_position = Vector3(dz * -0.5f, 0.001f, -0.5f);
-      //   beam_position += Vector3(0.05f, 0.05f, 0.0f);
-      //   draw_rectangle(batch, beam_position, beam_size, beam_color);
-      // }
+      draw_mesh(guy->mesh, true, Vector4(0.4f, 0.4f, 0.4f, 1.0f));
     }
+
+    // @Note Draw reflection beams
+    // {
+    //   immediate_begin();
+
+    //   d3d->device_context->OMSetBlendState(d3d->blend_states[R_BLEND_STATE_ALPHA], NULL, 0xffffffff);
+    //   d3d->device_context->OMSetDepthStencilState(d3d->depth_stencil_states[R_DEPTH_STENCIL_STATE_DEFAULT], 0);
+
+    //   Vector3 mirror_forward = to_vec3(rotate_rh(-mirror->theta,  Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1));
+    //   Vector3 direction = to_vec3(world->guy->position - mirror->position);
+    //   int distance = (int)Abs(magnitude(direction));
+
+    //   Vector3 beam_size = Vector3(1, 1, 1);
+    //   Vector4 beam_color = Vector4(1, 1, 1, 0.5f);
+    //   Vector3 beam_start = to_vec3(mirror->position);
+    //   f32 dx = mirror_forward.x > 0 ? 1.0f : -1.0f;
+    //   f32 dz = mirror_forward.z > 0 ? 1.0f : -1.0f;
+    //   f32 beam_start_x = (f32)mirror->position.x + dx;
+    //   f32 beam_start_z = (f32)mirror->position.z + dz;
+
+    //   Vector3 beam_position;
+    //   // x
+    //   beam_start = to_vec3(mirror->position);
+    //   beam_start.x = beam_start_x;
+
+    //   Matrix4 world_matrix = translate(beam_start);
+    //   Matrix4 transform = camera.projection_matrix * camera.view_matrix * world_matrix;
+
+    //   beam_size = Vector3(dx * (f32)distance, 1.f, 1.f);
+    //   beam_size -= Vector3(0.f, 0.1f, 0.1f);
+    //   beam_position = Vector3(dx * -0.5f, 0.001f, -0.5f);
+    //   beam_position += Vector3(0.f, 0.05f, 0.05f);
+    //   draw_imm_rectangle(beam_position, beam_size, beam_color);
+
+    //   // z
+    //   batch = push_immediate_batch(bucket);
+    //   beam_start = to_vec3(mirror->position);
+    //   beam_start.z = beam_start_z;
+
+    //   batch = push_immediate_batch(bucket);
+    //   batch->world = translate(beam_start);
+    //   batch->view = camera.view_matrix;
+    //   batch->projection = camera.projection_matrix;
+    //   batch->texture = nullptr;
+
+    //   beam_size = Vector3(1.f, 1.f, dz * (f32)distance);
+    //   beam_size -= Vector3(0.1f, 0.1f, 0.f);
+    //   beam_position = Vector3(dz * -0.5f, 0.001f, -0.5f);
+    //   beam_position += Vector3(0.05f, 0.05f, 0.0f);
+    //   draw_rectangle(batch, beam_position, beam_size, beam_color);
+    // }
   }
 
   // Shadow map
@@ -608,9 +610,11 @@ internal void draw_scene() {
 }
 
 internal void draw_world(World *world, Camera camera) {
+  Entity_Manager *manager = get_entity_manager();
+
   R_D3D11_State *d3d = r_d3d11_state();
 
-  Sun *sun = get_sun(world);
+  Sun *sun = manager->entities._type.Sun.count ? manager->entities._type.Sun[0] : 0;
   Matrix4 light_space = sun ? sun->light_space_matrix : make_matrix4(1.0f);
   Vector3 light_direction = sun ? sun->light_direction : Vector3(0, 0, 0);
   Vector4 light_color = sun ? sun->override_color : make_vec4(1.0f);
@@ -627,14 +631,13 @@ internal void draw_world(World *world, Camera camera) {
   set_constant(str8_lit("light_view_projection"), light_space);
   set_constant(str8_lit("light_color"), light_color);
     
-  for (int i = 0; i < world->entities.count; i++) {
-    Entity *entity = world->entities[i];
+  for (Entity *entity : manager->entities.all) {
     Triangle_Mesh *mesh = entity->mesh;
     if (!mesh) continue;
 
     Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
     Matrix4 world_matrix = translate(entity->visual_position) * translate(entity->offset) *rotation_matrix;
-    Matrix4 xform = camera.projection_matrix * camera.view_matrix * world_matrix;
+    Matrix4 xform = camera.transform * world_matrix;
 
     set_constant(str8_lit("xform"), xform);
     set_constant(str8_lit("world"), world_matrix);
