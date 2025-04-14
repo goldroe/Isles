@@ -324,6 +324,7 @@ internal Vector3 vector_from_axis(Axis axis) {
 internal void update_camera_matrix(Camera *camera) {
   Vector3 target = camera->origin + camera->forward;
   camera->view_matrix = look_at_rh(camera->origin, target, camera->up);
+  camera->transform = camera->projection_matrix * camera->view_matrix;
 }
 
 void Camera::update_euler_angles(f32 Yaw, f32 Pitch) {

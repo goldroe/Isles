@@ -33,6 +33,7 @@ struct Camera {
   f32 far;
   Matrix4 view_matrix;
   Matrix4 projection_matrix;
+  Matrix4 transform;
 
   void update_euler_angles(f32 Yaw, f32 Pitch);
 };
