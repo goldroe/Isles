@@ -4,7 +4,7 @@
 enum Entity_Kind : u16 {
   ENTITY_NIL,
   ENTITY_GUY,
-  ENTITY_BLOCK,
+  ENTITY_INANIMATE,
   ENTITY_MIRROR,
   ENTITY_SUN,
   ENTITY_COUNT
@@ -68,6 +68,10 @@ struct Guy : Entity {
   Pid mirror_id;
   Vector3 reflect_target;
   Vector3 reflect_position;
+};
+
+struct Mirror : Entity {
+  Vector3 reflection_vectors[2];
 };
 
 struct Sun : Entity {
