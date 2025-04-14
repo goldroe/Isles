@@ -70,9 +70,6 @@ internal Font *load_font(Arena *arena, String8 font_name, int font_height) {
     stbrp_init_target(&context, 1024, 1024, glyph_rect_nodes, glyphs_count);
 
     bool packed = stbrp_pack_rects(&context, glyph_rects, glyphs_count);
-    if (packed) {
-      printf("PACKED\n");
-    }
 
     delete [] glyph_rect_nodes;
 
@@ -209,9 +206,6 @@ internal Font *load_icon_font(Arena *arena, String8 font_name, int font_height, 
     stbrp_init_target(&context, 1024, 1024, glyph_rect_nodes, glyphs_count);
 
     bool packed = stbrp_pack_rects(&context, glyph_rects, glyphs_count);
-    if (packed) {
-      printf("PACKED\n");
-    }
 
     delete [] glyph_rect_nodes;
 
