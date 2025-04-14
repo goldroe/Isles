@@ -23,14 +23,19 @@ internal String8 get_tweak_setting_string(String8 name) {
 
 internal void insert_tweak_setting(String8 name, Value value) {
   u64 hash = djb2_hash_string(name);
-  tweak_settings->values.insert({hash, value});
+  auto it = tweak_settings->values.find(hash);
+  if (it == tweak_settings->values.end()) {
+    tweak_settings->values.insert({hash, value});
+  } else {
+    it->second = value;
+  }
 }
 
 internal void init_tweak_settings() {
   tweak_settings = new Tweak_Settings();
 
   insert_tweak_setting(str8_lit("WindowWidth"), value_int(1600));
-  insert_tweak_setting(str8_lit("WindowWidth"), value_int(900));
+  insert_tweak_setting(str8_lit("WindowHeight"), value_int(900));
 
   OS_Handle file_handle = os_open_file(str8_lit("data/All.settings"), OS_AccessFlag_Read);
   String8 file_contents = str8_zero();
