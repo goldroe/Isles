@@ -4,111 +4,129 @@ internal Entity* find_support(Entity *e) {
   return support;
 }
 
-internal void update_guy_mirror(Guy *guy) {
-  Entity_Manager *manager = get_entity_manager();
-
-  World *world = get_world();
-  guy->mirror_id = 0;
-
-  for (Mirror *mirror : manager->entities._type.Mirror) {
-    Vector3 forward = to_vec3(rotate_rh(-mirror->theta, Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1));
-    Vector3 dist = guy->position - mirror->position;
-    if (dist.y != 0) break;
-    f32 dx = forward.x > 0 ? 1.0f : -1.0f;
-    f32 dz = forward.z > 0 ? 1.0f : -1.0f;
-
-    Vector3 position = mirror->position;
-    if ((int)mirror->position.z == (int)guy->position.z && (dist.x > 0 == dx > 0)) {
-      // Move X
-      for (;;) {
-        position.x += dx;
-        Entity *e = find_entity_at(position);
-        if (e) {
-          if (e == guy) {
-            guy->mirror_id = mirror->id;
-          }
-          break;
-        }
+internal Mirror *get_facing_mirror(Guy *guy) {
+  Mirror *mirror = nullptr;
+  AABB bounds = game_state->bounding_box;
+  Vector3 position = guy->position + guy->forward;
+  while (in_bounds(bounds, position)) {
+    Entity *entity = find_entity_at(position);
+    if (entity) {
+      if (entity->kind == ENTITY_MIRROR) {
+        mirror = static_cast<Mirror*>(entity);
       }
-    } else if ((int)mirror->position.x == (int)guy->position.x && (dist.z > 0 == dz > 0)) {
-      // Move Z
-      for (;;) {
-        position.z += dz;
-        Entity *e = find_entity_at(position);
-        if (e) {
-          if (e == guy) {
-            guy->mirror_id = mirror->id;
-          }
-          break;
-        }
-      }
+      break;
     }
+    position += guy->forward;
+  }
+  return mirror;
+}
+
+internal void maybe_mirror_teleport(Guy *guy) {
+  Mirror *mirror = static_cast<Mirror*>(lookup_entity(guy->mirror_id));
+  if (!mirror) return;
+
+  f32 dist = Abs(distance(mirror->position, guy->position));
+  Vector3 position = mirror->position;
+
+  Vector3 last_dir = get_nearest_axis(guy->forward);
+  while (dist > 0) {
+    Vector3 outgoing = (Abs(last_dir.x) > Abs(last_dir.z)) ? mirror->reflection_vectors[1] : mirror->reflection_vectors[0];
+    last_dir = outgoing;
+
+    f32 mirror_dist = 0;
+    Reflection_Node *next_node = (Abs(outgoing.x) > Abs(outgoing.z)) ? mirror->node->reflect_x : mirror->node->reflect_z;
+    if (next_node) mirror_dist = Abs(distance(next_node->mirror->position, mirror->position));
+
+    if (!next_node || dist < mirror_dist) {
+      position = mirror->position + outgoing * dist;
+      dist = 0;
+    } else {
+      position = mirror->position + outgoing * mirror_dist;
+      dist -= mirror_dist;
+    }
+
+    if (next_node) mirror = next_node->mirror;
   }
 
-  Entity *mirror = lookup_entity(guy->mirror_id);
-  if (mirror) {
-    Vector3 mirror_forward = forward_from_theta(-mirror->theta);
-    Vector3 direction = guy->position - mirror->position;
-    int distance = (int)Abs(length(direction));
-
-    if (direction.x) {
-      f32 dz = roundf(mirror_forward.z);
-      Vector3 target = mirror->position;
-      target.z += distance * dz;
-      Vector3 new_position = mirror->position;
-      new_position.z += dz;
-
-      for (;;) {
-        Entity *e = find_entity_at(new_position);
-        if (e) {
-          new_position.z -= dz;
-          break;
-        }
-        if (new_position == target) {
-          break;
-        }
-        new_position.z += dz;
-      }
-
-      guy->reflect_target = target;
-      guy->reflect_position = new_position;
-
-    } else if (direction.z) {
-      f32 dx = roundf(mirror_forward.x);
-      Vector3 target = mirror->position;
-      target.x += distance * dx;
-      Vector3 new_position = mirror->position;
-      new_position.x += dx;
-
-      for (;;) {
-        Entity *e = find_entity_at(new_position);
-        if (e) {
-          new_position.x -= dx;
-          break;
-        }
-        if (new_position == target) {
-          break;
-        }
-        new_position.x += dx;
-      }
-
-      guy->reflect_target = target;
-      guy->reflect_position = new_position;
-    }
-  }
-
-  if (key_pressed(OS_KEY_SPACE) && lookup_entity(guy->mirror_id)) {
+  if (position != guy->position) {
     Action *move = action_make(ACTION_TELEPORT);
     move->actor_id = guy->id;
     move->from = guy->position;
-    move->to = guy->reflect_position;
-    guy->set_position(guy->reflect_position);
+    move->to = position;
     play_effect("swosh.flac");
+    guy->set_position(position);
   }
 }
 
+internal void compute_reflection_graph() {
+  Reflection_Graph *graph = game_state->reflection_graph;
+
+  Entity_Manager *manager = get_entity_manager();
+  AABB bounds = game_state->bounding_box;
+
+  for (Reflection_Node *node : graph->nodes) {
+    delete node;
+  }
+
+  graph->visiting.reset_count();
+  graph->nodes.reset_count();
+
+  for (Mirror *mirror : manager->by_type._Mirror) {
+    Reflection_Node *node = new Reflection_Node();
+    node->mirror = mirror;
+    graph->nodes.push(node);
+    graph->visiting.push(node);
+    mirror->node = node;
+  }
+
+  while (graph->visiting.count > 0) {
+    Reflection_Node *node = graph->visiting.back();
+    Mirror *mirror = node->mirror;
+    // X
+    if (!node->reflect_x) {
+      Vector3 dir = mirror->reflection_vectors[0];
+      Vector3 position = mirror->position + dir;
+      while (in_bounds(bounds, position)) {
+        Entity *entity = find_entity_at(position);
+        if (entity) {
+          if (entity->kind == ENTITY_MIRROR) {
+            Mirror *mirror = static_cast<Mirror*>(entity);
+            // facing toward
+            if (dot_product(node->mirror->reflection_vectors[0], mirror->reflection_vectors[0]) < 0) {
+              node->reflect_x = mirror->node;
+              mirror->node->reflect_x = node;
+            }
+          }
+          break;
+        }
+        position += dir;
+      }
+    }
+
+    // Z
+    if (!node->reflect_z) {
+      Vector3 dir = mirror->reflection_vectors[1];
+      Vector3 position = mirror->position + dir;
+      while (in_bounds(bounds, position)) {
+        Entity *entity = find_entity_at(position);
+        if (entity) {
+          if (entity->kind == ENTITY_MIRROR) {
+            Mirror *mirror = static_cast<Mirror*>(entity);
+            if (dot_product(node->mirror->reflection_vectors[1], mirror->reflection_vectors[1]) < 0) {
+              node->reflect_z = mirror->node;
+              mirror->node->reflect_z = node;
+            }
+          }
+          break;
+        }
+        position += dir;
+      }
+    }
 
 
+    graph->visiting.pop();
+  }
+}
 
 internal void signal_world_step() {
   Game_State *state = get_game_state();
@@ -152,7 +170,7 @@ INVALID_MOVE:
 internal AABB get_world_bounds() {
   Entity_Manager *manager = get_entity_manager();
   AABB bounds = {};
-  for (Entity *entity : manager->entities.all) {
+  for (Entity *entity : manager->entities) {
     if (entity->kind == ENTITY_SUN) continue;
     if (entity->position.x < bounds.min.x) bounds.min.x = (f32)entity->position.x;
     if (entity->position.y < bounds.min.y) bounds.min.y = (f32)entity->position.y;
@@ -182,8 +200,6 @@ internal void update_sun(Sun *sun) {
 }
 
 void update_guy(Guy *guy) {
-  update_guy_mirror(guy);
-
   //@Note Move
   Camera *camera = &game_state->camera;
 
@@ -211,7 +227,7 @@ void update_guy(Guy *guy) {
     Vector3 forward = camera->forward;
     forward.y = 0;
     forward = get_nearest_axis(forward);
-    Vector3 right = normalize(cross(forward, Vector3(0, 1, 0)));
+    Vector3 right = normalize(cross_product(forward, Vector3(0, 1, 0)));
 
     if (forward_dt) {
       move_direction = forward * (f32)forward_dt;
@@ -231,12 +247,20 @@ void update_guy(Guy *guy) {
   if (key_pressed(OS_KEY_Z)) {
     undo();
   }
+
+  guy->forward = forward_from_theta(-guy->theta_target);
+  Mirror *mirror = get_facing_mirror(guy);
+  guy->mirror_id = mirror ? mirror->id : 0;
+
+  if (key_pressed(OS_KEY_SPACE)) {
+    maybe_mirror_teleport(guy);
+  }
 }
 
 internal void update_mirror(Mirror *mirror) {
-  Vector3 direction = forward_from_theta(-mirror->theta);
-  mirror->reflection_vectors[0] = Vector3(direction.x, 0, 0);
-  mirror->reflection_vectors[1] = Vector3(0, 0, -direction.z);
+  Vector3 direction = forward_from_theta(-mirror->theta_target);
+  mirror->reflection_vectors[0] = Vector3(direction.x / Abs(direction.x), 0, 0);
+  mirror->reflection_vectors[1] = Vector3(0, 0, direction.z / Abs(direction.z));
 }
 
 internal void update_entity(Entity *e, f32 dt) {
@@ -282,6 +306,7 @@ internal void update_entity(Entity *e, f32 dt) {
 internal void simulate_world(f32 dt) {
   if (game_state->editing) return;
 
+  compute_reflection_graph();
 
   Entity_Manager *manager = get_entity_manager();
 
@@ -289,13 +314,13 @@ internal void simulate_world(f32 dt) {
   update_camera_orientation(&game_state->camera, mouse_delta);
   update_camera_position(&game_state->camera);
 
-  for (Entity *entity : manager->entities.all) {
+  for (Entity *entity : manager->entities) {
     update_entity(entity, game_state->dt);
   }
 
   if (game_state->can_world_step) {
     Auto_Array<Entity*> unsupported;
-    for (Entity *entity : manager->entities.all) {
+    for (Entity *entity : manager->entities) {
       update_entity(entity, game_state->dt);
       if (entity->flags & ENTITY_FLAG_STATIC) continue;
 
@@ -312,7 +337,7 @@ internal void simulate_world(f32 dt) {
     }
     unsupported.clear();
 
-    for (Entity *entity : manager->entities.all) {
+    for (Entity *entity : manager->entities) {
       if (entity->kind != ENTITY_GUY) continue;
       Guy *guy = static_cast<Guy*>(entity);
       update_guy(guy);
