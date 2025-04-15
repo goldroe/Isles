@@ -361,76 +361,19 @@ internal void immediate_begin() {
   immediate_flush();
 }
 
-internal void draw_wireframe_mesh(Triangle_Mesh *mesh, Vector4 color) {
+internal void draw_wireframe_mesh(Triangle_Mesh *mesh) {
   R_D3D11_State *d3d = r_d3d11_state();
-
-  Auto_Array<Vertex_XCUU> vertices;
-  vertices.reserve(mesh->vertices.count);
-  for (int i = 0; i < mesh->vertices.count; i++) {
-    Vertex_XCUU vertex;
-    vertex.position = mesh->vertices[i];
-    vertex.color = color;
-    vertex.uv = mesh->uvs[i];
-    vertices.push(vertex);
-  }
-
-  UINT stride = sizeof(Vertex_XCUU), offset = 0;
-  ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices.data, vertices.count, sizeof(Vertex_XCUU));
-  d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
-  d3d->device_context->Draw((UINT)vertices.count, 0);
-
-  vertices.clear();
-  vertex_buffer->Release();
-}
-
-internal void draw_mesh(Triangle_Mesh *mesh, Vector4 color) {
-  R_D3D11_State *d3d = r_d3d11_state();
-
-  Auto_Array<Vertex_XCUU> vertices;
-  vertices.reserve(mesh->vertices.count);
-  for (int i = 0; i < mesh->vertices.count; i++) {
-    Vertex_XCUU vertex;
-    vertex.position = mesh->vertices[i];
-    vertex.color = color;
-    vertex.uv = mesh->uvs[i];
-    vertices.push(vertex);
-  }
-
-  UINT stride = sizeof(Vertex_XCUU), offset = 0;
-  ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices.data, vertices.count, sizeof(Vertex_XCUU));
-  d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
-
-  for (int i = 0; i < mesh->triangle_list_info.count; i++) {
-    Triangle_List_Info triangle_list_info = mesh->triangle_list_info[i];
-
-    Material *material = mesh->materials[triangle_list_info.material_index];
-    set_texture(str8_lit("diffuse_texture"), material->texture);
-
-    d3d->device_context->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
-  }
-
-  vertices.clear();
-  vertex_buffer->Release();
-}
-
-
-internal void draw_mesh(Triangle_Mesh *mesh, bool use_override_color, Vector4 override_color) {
-  R_D3D11_State *d3d = r_d3d11_state();
-
-  Auto_Array<Vertex_XNCUU> vertices;
-  vertices.reserve(mesh->vertices.count);
-  for (int i = 0; i < mesh->vertices.count; i++) {
-    Vertex_XNCUU vertex;
-    vertex.position = mesh->vertices[i];
-    vertex.normal = mesh->normals[i];
-    vertex.color = use_override_color ? override_color : Vector4(1, 1, 1, 1);
-    vertex.uv = mesh->uvs[i];
-    vertices.push(vertex);
-  }
 
   UINT stride = sizeof(Vertex_XNCUU), offset = 0;
-  ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices.data, vertices.count, sizeof(Vertex_XNCUU));
-  d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+  d3d->device_context->IASetVertexBuffers(0, 1, &mesh->vertex_buffer, &stride, &offset);
+  d3d->device_context->Draw((UINT)mesh->vertices.count, 0);
+}
+
+internal void draw_mesh(Triangle_Mesh *mesh) {
+  R_D3D11_State *d3d = r_d3d11_state();
+
+  UINT stride = sizeof(Vertex_XNCUU), offset = 0;
+  d3d->device_context->IASetVertexBuffers(0, 1, &mesh->vertex_buffer, &stride, &offset);
 
   for (int i = 0; i < mesh->triangle_list_info.count; i++) {
     Triangle_List_Info triangle_list_info = mesh->triangle_list_info[i];
@@ -440,11 +383,68 @@ internal void draw_mesh(Triangle_Mesh *mesh, bool use_override_color, Vector4 ov
 
     d3d->device_context->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
   }
-
-  vertices.clear();
-  vertex_buffer->Release();
 }
 
+
+internal void draw_mirror_reflection() {
+  Entity_Manager *manager = get_entity_manager();
+  Guy *guy = manager->by_type._Guy[0];
+  Mirror *mirror = static_cast<Mirror*>(lookup_entity(guy->mirror_id));
+  if (!mirror) return;
+
+  Camera camera = get_game_state()->camera;
+
+  // immediate_begin();
+
+  // set_shader(shader_mesh);
+
+  // set_blend_state(BLEND_STATE_ALPHA);
+  // set_depth_state(DEPTH_STATE_DEFAULT);
+
+  f32 dist = Abs(distance(mirror->position, guy->position));
+  Vector3 position = mirror->position;
+
+  Vector3 last_dir = get_nearest_axis(guy->forward);
+  while (dist > 0) {
+    Vector3 outgoing = (Abs(last_dir.x) > Abs(last_dir.z)) ? mirror->reflection_vectors[1] : mirror->reflection_vectors[0];
+    last_dir = outgoing;
+
+    f32 mirror_dist = 0;
+    Reflection_Node *next_node = (Abs(outgoing.x) > Abs(outgoing.z)) ? mirror->node->reflect_x : mirror->node->reflect_z;
+    if (next_node) mirror_dist = Abs(distance(next_node->mirror->position, mirror->position));
+
+    if (!next_node || dist < mirror_dist) {
+      position = mirror->position + outgoing * dist;
+      dist = 0;
+    } else {
+      position = mirror->position + outgoing * mirror_dist;
+      dist -= mirror_dist;
+    }
+
+    if (next_node) mirror = next_node->mirror;
+  }
+
+  //Draw clone
+  {
+    Vector3 reflect_position = position;
+    Matrix4 rotation_matrix = rotate_rh(guy->theta, camera.up);
+    Matrix4 world_matrix = translate(reflect_position) * translate(guy->offset) * rotation_matrix;
+    Matrix4 xform = camera.transform * world_matrix;
+
+    set_shader(shader_mesh);
+
+    bind_uniform(shader_mesh, str8_lit("Constants"));
+
+    set_constant(str8_lit("xform"), xform);
+    set_constant(str8_lit("color"), Vector4(.4f, .4f, .4f, 1.f));
+    apply_constants(); 
+
+    set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
+
+    draw_mesh(guy->mesh);
+  }
+
+}
 
 internal void draw_scene() {
   local_persist bool first_call = true;
@@ -469,7 +469,7 @@ internal void draw_scene() {
   }
 
   // @Note Shadow mapping
-  Sun *sun = manager->entities._type.Sun.count ? manager->entities._type.Sun[0] : 0;
+  Sun *sun = manager->by_type._Sun.count ? manager->by_type._Sun[0] : 0;
   if (sun) {
     set_viewport(0, 0, (f32)shadow_map->texture->width, (f32)shadow_map->texture->height);
     set_depth_state(DEPTH_STATE_DEFAULT);
@@ -482,8 +482,7 @@ internal void draw_scene() {
     bind_uniform(shader_shadow_map, str8_lit("Constants"));
     Shader_Uniform *shadow_map_uniform = shader_shadow_map->bindings->lookup_uniform(str8_lit("Constants"));
 
-    for (int i = 0; i < manager->entities.all.count; i++) {
-      Entity *entity = manager->entities.all[i];
+    for (Entity *entity : manager->entities) {
       Triangle_Mesh *mesh = entity->mesh;
       if (!mesh) continue;
 
@@ -495,11 +494,9 @@ internal void draw_scene() {
       set_constant(str8_lit("light_view_projection"), sun->light_space_matrix);
       apply_constants();
 
-      ID3D11Buffer *vertex_buffer = make_vertex_buffer(mesh->vertices.data, mesh->vertices.count, sizeof(Vector3));
-      UINT stride = sizeof(Vector3), offset = 0;
-      d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+      UINT stride = sizeof(Vertex_XNCUU), offset = 0;
+      d3d->device_context->IASetVertexBuffers(0, 1, &mesh->vertex_buffer, &stride, &offset);
       d3d->device_context->Draw((UINT)mesh->vertices.count, 0);
-      vertex_buffer->Release();
     }
 
     reset_viewport();
@@ -513,81 +510,7 @@ internal void draw_scene() {
   draw_world(world, camera);
 
   if (!game_state->editing) {
-    Entity *mirror = nullptr;
-
-    //@Note Draw guy clone
-    for (Guy *guy : manager->entities._type.Guy) {
-      Mirror *mirror = static_cast<Mirror*>(lookup_entity(guy->mirror_id));
-      if (!mirror) continue;
-
-      Matrix4 rotation_matrix = rotate_rh(guy->theta, camera.up);
-      Matrix4 world_matrix = translate(guy->reflect_position) * translate(guy->offset) * rotation_matrix;
-      Matrix4 xform = camera.transform * world_matrix;
-
-      set_shader(shader_entity);
-
-      bind_uniform(shader_entity, str8_lit("Constants"));
-
-      set_constant(str8_lit("xform"), xform);
-      set_constant(str8_lit("world"), world_matrix);
-      apply_constants(); 
-
-      set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
-      set_sampler(str8_lit("point_sampler"), SAMPLER_STATE_POINT);
-
-      draw_mesh(guy->mesh, true, Vector4(0.4f, 0.4f, 0.4f, 1.0f));
-    }
-
-    // @Note Draw reflection beams
-    // {
-    //   immediate_begin();
-
-    //   d3d->device_context->OMSetBlendState(d3d->blend_states[R_BLEND_STATE_ALPHA], NULL, 0xffffffff);
-    //   d3d->device_context->OMSetDepthStencilState(d3d->depth_stencil_states[R_DEPTH_STENCIL_STATE_DEFAULT], 0);
-
-    //   Vector3 mirror_forward = to_vec3(rotate_rh(-mirror->theta,  Vector3(0, 1, 0)) * Vector4(1, 0, 0, 1));
-    //   Vector3 direction = to_vec3(world->guy->position - mirror->position);
-    //   int distance = (int)Abs(magnitude(direction));
-
-    //   Vector3 beam_size = Vector3(1, 1, 1);
-    //   Vector4 beam_color = Vector4(1, 1, 1, 0.5f);
-    //   Vector3 beam_start = to_vec3(mirror->position);
-    //   f32 dx = mirror_forward.x > 0 ? 1.0f : -1.0f;
-    //   f32 dz = mirror_forward.z > 0 ? 1.0f : -1.0f;
-    //   f32 beam_start_x = (f32)mirror->position.x + dx;
-    //   f32 beam_start_z = (f32)mirror->position.z + dz;
-
-    //   Vector3 beam_position;
-    //   // x
-    //   beam_start = to_vec3(mirror->position);
-    //   beam_start.x = beam_start_x;
-
-    //   Matrix4 world_matrix = translate(beam_start);
-    //   Matrix4 transform = camera.projection_matrix * camera.view_matrix * world_matrix;
-
-    //   beam_size = Vector3(dx * (f32)distance, 1.f, 1.f);
-    //   beam_size -= Vector3(0.f, 0.1f, 0.1f);
-    //   beam_position = Vector3(dx * -0.5f, 0.001f, -0.5f);
-    //   beam_position += Vector3(0.f, 0.05f, 0.05f);
-    //   draw_imm_rectangle(beam_position, beam_size, beam_color);
-
-    //   // z
-    //   batch = push_immediate_batch(bucket);
-    //   beam_start = to_vec3(mirror->position);
-    //   beam_start.z = beam_start_z;
-
-    //   batch = push_immediate_batch(bucket);
-    //   batch->world = translate(beam_start);
-    //   batch->view = camera.view_matrix;
-    //   batch->projection = camera.projection_matrix;
-    //   batch->texture = nullptr;
-
-    //   beam_size = Vector3(1.f, 1.f, dz * (f32)distance);
-    //   beam_size -= Vector3(0.1f, 0.1f, 0.f);
-    //   beam_position = Vector3(dz * -0.5f, 0.001f, -0.5f);
-    //   beam_position += Vector3(0.05f, 0.05f, 0.0f);
-    //   draw_rectangle(batch, beam_position, beam_size, beam_color);
-    // }
+    draw_mirror_reflection();
   }
 
   // Shadow map
@@ -614,7 +537,7 @@ internal void draw_world(World *world, Camera camera) {
 
   R_D3D11_State *d3d = r_d3d11_state();
 
-  Sun *sun = manager->entities._type.Sun.count ? manager->entities._type.Sun[0] : 0;
+  Sun *sun = manager->by_type._Sun.count ? manager->by_type._Sun[0] : 0;
   Matrix4 light_space = sun ? sun->light_space_matrix : make_matrix4(1.0f);
   Vector3 light_direction = sun ? sun->light_direction : Vector3(0, 0, 0);
   Vector4 light_color = sun ? sun->override_color : make_vec4(1.0f);
@@ -631,7 +554,7 @@ internal void draw_world(World *world, Camera camera) {
   set_constant(str8_lit("light_view_projection"), light_space);
   set_constant(str8_lit("light_color"), light_color);
     
-  for (Entity *entity : manager->entities.all) {
+  for (Entity *entity : manager->entities) {
     Triangle_Mesh *mesh = entity->mesh;
     if (!mesh) continue;
 
@@ -641,9 +564,11 @@ internal void draw_world(World *world, Camera camera) {
 
     set_constant(str8_lit("xform"), xform);
     set_constant(str8_lit("world"), world_matrix);
+    set_constant(str8_lit("use_override_color"), (float)entity->use_override_color);
+    set_constant(str8_lit("override_color"), entity->override_color);
     apply_constants();
 
-    draw_mesh(mesh, entity->use_override_color, entity->override_color);
+    draw_mesh(mesh);
   }
 
   reset_texture(str8_lit("shadow_map"));
