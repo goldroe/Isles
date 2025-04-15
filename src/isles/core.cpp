@@ -335,7 +335,7 @@ void Camera::update_euler_angles(f32 Yaw, f32 Pitch) {
   F.y = sinf(pitch);
   F.z = sinf(yaw) * cosf(pitch);
   forward = normalize(F);
-  right = normalize(cross(forward, up));
+  right = normalize(cross_product(forward, up));
 
   update_camera_matrix(this);
 }
@@ -354,7 +354,7 @@ internal void update_camera_orientation(Camera *camera, Vector2 delta) {
     forward.z = sinf(camera->yaw) * cosf(camera->pitch);
 
     camera->forward = normalize(forward);
-    camera->right = normalize(cross(camera->forward, camera->up));
+    camera->right = normalize(cross_product(camera->forward, camera->up));
 
     update_camera_matrix(camera);
   }
@@ -375,8 +375,8 @@ internal Vector3 get_mouse_ray(Camera camera, Vector2Int mouse_position, Vector2
   // I know the camera position, the camera "target" position, camera "up" vector (simply set to [0,1,0]), and the camera's vertical FOV. These are used for gluLookAt() and GluPerspective(). 
   // So, I did this:
   // 1. camera target minus camera position gives me the vector that the camera is pointing in ("target vector"). I normalize this vector.
-  // 2. I get the right-angle vector of the camera by the cross product of camera target vector and camera up vector.
-  // 3. I re-calculate the camera's "up" vector by cross product between the camera target vector and the right-angle vector I just calculated. It's no longer simply straight up, but calculated properly.
+  // 2. I get the right-angle vector of the camera by the cross_product product of camera target vector and camera up vector.
+  // 3. I re-calculate the camera's "up" vector by cross_product product between the camera target vector and the right-angle vector I just calculated. It's no longer simply straight up, but calculated properly.
   // 4. I multiply the right-angle vector by the X/Y ratio of the screen (about 1.77...).
   // 5. I multiply both the up vector and right-angle vectors by the tan() of the vertical FOV divided by 2.
   // 6. I get the ratio of the mouse's X and Y coordinates of the screen compared to the size of the screen. I also offset the coordinate so that the center screen is [0,0].
@@ -395,8 +395,8 @@ internal Vector3 get_mouse_ray(Camera camera, Vector2Int mouse_position, Vector2
   // 			XYZf camV = target - pos;
   // 			camV.normalize();
 
-  // 			XYZf camSide = camV.cross(up);
-  // 			XYZf camUp = camV.cross(camSide);
+  // 			XYZf camSide = camV.cross_product(up);
+  // 			XYZf camUp = camV.cross_product(camSide);
 
   // 			float t = tan((fovY / 2) * 0.0174532925);
 
@@ -416,7 +416,7 @@ internal Vector3 get_mouse_ray(Camera camera, Vector2Int mouse_position, Vector2
 
   Vector3 forward = camera.forward;
   Vector3 right = camera.right;
-  Vector3 up = cross(forward, right);
+  Vector3 up = cross_product(forward, right);
 
   f32 aspect = (f32)window_dim.x / (f32)window_dim.y;
 
@@ -430,6 +430,17 @@ internal Vector3 get_mouse_ray(Camera camera, Vector2Int mouse_position, Vector2
 
   ray = normalize(forward + up + right);
   return ray;
+}
+
+internal AABB make_aabb_from_corners(Vector3 a, Vector3 b) {
+  AABB result;
+  result.min.x = Min(a.x, b.x);
+  result.min.y = Min(a.y, b.y);
+  result.min.z = Min(a.z, b.z);
+  result.max.x = Max(a.x, b.x);
+  result.max.y = Max(a.y, b.y);
+  result.max.z = Max(a.z, b.z);
+  return result;
 }
 
 internal inline Vector3 get_aabb_center(AABB box) {
@@ -448,3 +459,11 @@ internal inline Vector3 get_aabb_dimension(AABB box) {
   return result;
 }
 
+internal bool in_bounds(AABB bounds, Vector3 position) {
+  if (position.x >= bounds.min.x && position.x <= bounds.max.x &&
+      position.y >= bounds.min.y && position.y <= bounds.max.y && 
+      position.z >= bounds.min.z && position.z <= bounds.max.z) {
+    return true;
+  }
+  return false;
+}

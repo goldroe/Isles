@@ -379,15 +379,15 @@ internal inline Vector4 mix(Vector4 start, Vector4 end, f32 t) {
   return result;
 }
 
-internal inline f32 dot(Vector2 a, Vector2 b) {
+internal inline f32 dot_product(Vector2 a, Vector2 b) {
   f32 result = a.x * b.x + a.y * b.y;
   return result;
 }
-internal inline f32 dot(Vector3 a, Vector3 b) {
+internal inline f32 dot_product(Vector3 a, Vector3 b) {
   f32 result = a.x * b.x + a.y * b.y + a.z * b.z;
   return result;
 }
-internal inline f32 dot(Vector4 a, Vector4 b) {
+internal inline f32 dot_product(Vector4 a, Vector4 b) {
   f32 result = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
   return result;
 }
@@ -502,7 +502,7 @@ internal inline f32 distance(Vector3 p0, Vector3 p1) {
   return result;
 }
 
-internal inline Vector3 cross(Vector3 a, Vector3 b) {
+internal inline Vector3 cross_product(Vector3 a, Vector3 b) {
   Vector3 result = {
     (a.y * b.z) - (a.z * b.y),
     (a.z * b.x) - (a.x * b.z),
@@ -535,7 +535,7 @@ internal inline Vector4 normalize(Vector4 v) {
 
 internal inline Vector3 projection(Vector3 a, Vector3 b) {
   Vector3 result;
-  f32 d = dot(a, b);
+  f32 d = dot_product(a, b);
   f32 m = length(b);
   result = d / (m * m) * b;
   return result;
@@ -770,8 +770,8 @@ internal inline Matrix4 scale(f32 x, f32 y, f32 z) {
 
 internal inline Matrix4 look_at_rh(Vector3 eye, Vector3 target, Vector3 up) {
   Vector3 F = normalize(target - eye);
-  Vector3 R = normalize(cross(F, up));
-  Vector3 U = cross(R, F);
+  Vector3 R = normalize(cross_product(F, up));
+  Vector3 U = cross_product(R, F);
 
   Matrix4 result;
   result._00 = R.x;
@@ -786,9 +786,9 @@ internal inline Matrix4 look_at_rh(Vector3 eye, Vector3 target, Vector3 up) {
   result._21 = U.z;
   result._22 = -F.z;
   result._23 = 0.f;
-  result._30 = -dot(R, eye);
-  result._31 = -dot(U, eye);
-  result._32 =  dot(F, eye);
+  result._30 = -dot_product(R, eye);
+  result._31 = -dot_product(U, eye);
+  result._32 =  dot_product(F, eye);
   result._33 = 1.f;
   return result;
 }
