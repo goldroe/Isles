@@ -12,3 +12,4 @@ Delete  ::  EditorDeleteSelection
 
 LeftMouse :: EditorSelect
 C-LeftMouse  :: EditorMultiSelect
+S-LeftMouse  :: EditorSelectRange
