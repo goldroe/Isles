@@ -3,9 +3,10 @@ cbuffer Constants : register(b0) {
   matrix xform;
   matrix world;
   matrix light_view_projection;
-  float3 light_direction;
-  float _pad0;
   float4 light_color;
+  float3 light_direction;
+  float use_override_color;
+  float4 override_color;
 };
 
 struct Vertex_Input {
@@ -36,6 +37,9 @@ Vertex_Output vs_main(Vertex_Input input) {
   output.pos_w = mul(world, float4(input.pos_l, 1.0)).xyz;
   output.normal = mul((float3x3)world, input.normal);
   output.color = input.color;
+  if (use_override_color) {
+    output.color = override_color;
+  }
   output.uv = input.uv;
   float4 shadow_h = mul(light_view_projection, float4(output.pos_w, 1.0));
   output.shadow_pos = shadow_h * float4(0.5, -0.5, 1.0, 1.0) + (float4(0.5, 0.5, 0.0, 0.0) * shadow_h.w);
