@@ -23,6 +23,9 @@ struct Triangle_Mesh {
 
   Auto_Array<Triangle_List_Info> triangle_list_info;
   Auto_Array<Material*> materials;
+
+  // Vertex_XNCUU
+  ID3D11Buffer *vertex_buffer = nullptr;
 };
 
 

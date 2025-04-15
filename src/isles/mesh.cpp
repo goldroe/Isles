@@ -71,7 +71,6 @@ internal Triangle_Mesh *load_mesh(std::string file_name) {
     mesh->triangle_list_info.push(triangle_list_info);
   }
 
-
   std::string mesh_path = get_parent_path(file_name);
 
   mesh->materials.reserve(scene->mNumMaterials);
@@ -99,6 +98,18 @@ internal Triangle_Mesh *load_mesh(std::string file_name) {
 
     mesh->materials.push(material);
   }
+
+  Auto_Array<Vertex_XNCUU> vertices;
+  vertices.reserve(mesh->vertices.count);
+  for (int i = 0; i < mesh->vertices.count; i++) {
+    Vertex_XNCUU vertex;
+    vertex.position = mesh->vertices[i];
+    vertex.normal = mesh->normals[i];
+    vertex.color = Vector4(1, 1, 1, 1);
+    vertex.uv = mesh->uvs[i];
+    vertices.push(vertex);
+  }
+  mesh->vertex_buffer = make_vertex_buffer(vertices.data, vertices.count, sizeof(Vertex_XNCUU));
 
   return mesh;
 }
