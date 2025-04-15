@@ -15,6 +15,13 @@ enum Axis {
   AXIS_COUNT
 };
 
+enum Direction {
+  NORTH,
+  EAST,
+  SOUTH,
+  WEST
+};
+
 struct Viewport {
   OS_Handle window_handle;
   Vector2 dimension;
@@ -78,6 +85,9 @@ struct Vertex_XNCUU {
   Vector3 normal;
   Vector4 color;
   Vector2 uv;
+
+  Vertex_XNCUU() {}
+  Vertex_XNCUU(Vector3 p, Vector3 n, Vector4 c, Vector2 uv) : position(p), normal(n), color(c), uv(uv) {}
 };
 
 struct Vertex_ARGB {
