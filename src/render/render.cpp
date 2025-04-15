@@ -554,9 +554,8 @@ internal void r_d3d11_initialize(HWND window_handle) {
   shader_basic = r_d3d11_make_shader(str8_lit("data/shaders/basic_3d.hlsl"), str8_lit("Basic"), basic_ilay, ArrayCount(basic_ilay));
 
   D3D11_INPUT_ELEMENT_DESC mesh_ilay[] = {
-    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Vertex_XCUU, position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
-    { "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(Vertex_XCUU, color),    D3D11_INPUT_PER_VERTEX_DATA, 0 },
-    { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex_XCUU, uv),       D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Vertex_XNCUU, position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex_XNCUU, uv),       D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
   shader_mesh = r_d3d11_make_shader(str8_lit("data/shaders/mesh.hlsl"), str8_lit("Mesh"), mesh_ilay, ArrayCount(mesh_ilay));
 
@@ -571,7 +570,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
   D3D11_INPUT_ELEMENT_DESC argb_texture_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-    { "ARGB",     0, DXGI_FORMAT_R32_UINT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "ARGB",     0, DXGI_FORMAT_R32_UINT,     0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
   shader_argb_texture = r_d3d11_make_shader(str8_lit("data/shaders/argb_texture.hlsl"), str8_lit("ARGB Texture"), argb_texture_ilay, ArrayCount(argb_texture_ilay));
 
@@ -589,7 +588,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
   shader_picker = r_d3d11_make_shader(str8_lit("data/shaders/picker.hlsl"), str8_lit("Picker"), picker_ilay, ArrayCount(picker_ilay));
 
   D3D11_INPUT_ELEMENT_DESC shadowmap_ilay[] = {
-    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Vertex_XNCUU, position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
   shader_shadow_map = r_d3d11_make_shader(str8_lit("data/shaders/shadow_map.hlsl"), str8_lit("ShadowMap"), shadowmap_ilay, ArrayCount(shadowmap_ilay));
 
