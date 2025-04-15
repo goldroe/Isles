@@ -1,11 +1,11 @@
 
 cbuffer Constants : register(b0) {
   matrix xform;
+  float4 color;
 };
 
 struct Vertex_Input {
   float3 pos_l : POSITION;
-  float4 color : COLOR;
   float2 uv : TEXCOORD;
 };
 
@@ -22,7 +22,7 @@ Texture2D diffuse_texture : register(t0);
 Vertex_Output vs_main(Vertex_Input input) {
   Vertex_Output output;
   output.pos_h = mul(xform, float4(input.pos_l, 1.0));
-  output.color = input.color;
+  output.color = color;
   output.uv = input.uv;
   return output;
 }
