@@ -55,7 +55,7 @@ internal char *string_from_entity_kind(Entity_Kind kind) {
   case ENTITY_GUY:
     return "Guy";
   case ENTITY_INANIMATE:
-    return "Block";
+    return "Inanimate";
   case ENTITY_MIRROR:
     return "Mirror";
   case ENTITY_SUN:
@@ -155,15 +155,6 @@ internal World *load_world(String8 name) {
     }
   }
 
-  // if (!world->guy) {
-  //   Entity_Prototype *prototype = entity_prototype_lookup("Guy");
-  //   Entity *guy = entity_from_prototype(prototype);
-  //   guy->set_position(Vector3(0, 2, 0));
-  //   guy->set_theta(0);
-  //   world->guy = static_cast<Guy*>(guy);
-  //   world->entities.push(guy);
-  // }
-
   return world;
 }
 
@@ -218,10 +209,9 @@ internal void save_world(World *world, String8 file_name) {
   buffer->put_f32(camera.pitch);
 
   // Entities
-  buffer->put_le32((u32)manager->entities.all.count);
+  buffer->put_le32((u32)manager->entities.count);
 
-  for (int i = 0; i < manager->entities.all.count; i++) {
-    Entity *e = manager->entities.all[i];
+  for (Entity *e : manager->entities) {
     serialize_entity(buffer, e);
   }
 
@@ -299,6 +289,7 @@ internal void init_game() {
   mirror_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
   mirror_prototype->entity.mesh = mirror_mesh;
   mirror_prototype->entity.override_color = Vector4(1, 1, 1, 1);
+  mirror_prototype->entity.offset = Vector3(0.5f, 0.f, 0.5f);
 
   Entity_Prototype *block_prototype = entity_prototype_create("Block");
   block_prototype->entity.kind = ENTITY_INANIMATE;
@@ -342,7 +333,7 @@ internal void init_game() {
 
   game_state->camera.update_euler_angles(-PI * 0.5f, 0.0f);
 
-  load_world(str8_lit("1.lvl"));
+  load_world(str8_lit("test.lvl"));
 
   g_viewport = new Viewport();
   g_viewport->dimension.x = 1;
@@ -361,4 +352,6 @@ internal void init_game() {
   audio_engine->init();
 
   // play_music("439015_somepin_cavernous.mp3");
+
+  game_state->reflection_graph = new Reflection_Graph();
 }

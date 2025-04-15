@@ -40,7 +40,7 @@ struct Entity {
   f32 theta_target;
 
   Triangle_Mesh *mesh;
-  
+
   b32 use_override_color;
   Vector4 override_color;
 
@@ -66,12 +66,13 @@ struct Entity {
 struct Guy : Entity {
   Vector3 forward;
   Pid mirror_id;
-  Vector3 reflect_target;
-  Vector3 reflect_position;
 };
+
+struct Reflection_Node;
 
 struct Mirror : Entity {
   Vector3 reflection_vectors[2];
+  Reflection_Node *node;
 };
 
 struct Sun : Entity {

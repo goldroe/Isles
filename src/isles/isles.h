@@ -43,6 +43,8 @@ struct Game_State {
   AABB bounding_box;
   b32 can_world_step = 0;
   f32 world_step_dt = 0;
+
+  Reflection_Graph *reflection_graph;
 };
 
 internal inline Game_Settings *get_settings();

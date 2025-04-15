@@ -51,6 +51,7 @@
 #include "manager.h"
 #include "ui/ui_core.h"
 #include "editor.h"
+#include "simulate.h"
 #include "isles.h"
 #include "draw.h"
 #include "input.h"

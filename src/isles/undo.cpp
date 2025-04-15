@@ -29,7 +29,7 @@ internal void action_pop() {
 
 internal void undo() {
   Entity_Manager *manager = get_entity_manager();
-  Guy *guy = manager->entities._type.Guy[0];
+  Guy *guy = manager->by_type._Guy[0];
 
   while (undo_stack->top) {
     Action *action = undo_stack->top;
