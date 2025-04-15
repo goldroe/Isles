@@ -20,6 +20,12 @@ public:
         capacity = 0;
     }
 
+    ~Auto_Array() {
+        if (data) free(data);
+        count = 0;
+        capacity = 0;
+    }
+
     Auto_Array(const Auto_Array<T> &array) {
         data = array.data;
         count = array.count;
