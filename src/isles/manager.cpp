@@ -5,6 +5,7 @@ internal inline Entity_Manager *get_entity_manager() {
   return entity_manager;
 }
 
+
 internal void *entity_alloc(int bytes) {
   void *memory = calloc(1, bytes);
   return memory;
@@ -14,20 +15,36 @@ internal void entity_free(Entity *entity) {
   free(entity);
 }
 
+internal void reset_manager() {
+  Entity_Manager *manager = get_entity_manager();
+
+  for (int i = 0; i < manager->entities.count; i++) {
+    Entity *entity = manager->entities[i];
+    entity_free(entity);
+  }
+
+  manager->by_type._Guy.clear();
+  manager->by_type._Mirror.clear();
+  manager->by_type._Sun.clear();
+  manager->entities.clear();
+  manager->next_pid = 1;
+}
+
 internal void entity_push(Entity_Manager *manager, Entity *entity) {
   switch (entity->kind) {
   default:
+    break;
   case ENTITY_GUY:
-    manager->entities._type.Guy.push(static_cast<Guy*>(entity));
+    manager->by_type._Guy.push(static_cast<Guy*>(entity));
     break;
   case ENTITY_MIRROR:
-    manager->entities._type.Mirror.push(static_cast<Mirror*>(entity));
+    manager->by_type._Mirror.push(static_cast<Mirror*>(entity));
     break;
   case ENTITY_SUN:
-    manager->entities._type.Sun.push(static_cast<Sun*>(entity));
+    manager->by_type._Sun.push(static_cast<Sun*>(entity));
     break;
   }
-  manager->entities.all.push(entity);
+  manager->entities.push(entity);
 
   entity->id = manager->next_pid++;
 }
@@ -44,11 +61,18 @@ internal void remove_entities_to_be_destroyed() {
     } \
   } \
 
-  ENTITY_REMOVE(manager->entities._type.Guy);
-  ENTITY_REMOVE(manager->entities._type.Mirror);
-  ENTITY_REMOVE(manager->entities._type.Sun);
-  ENTITY_REMOVE(manager->entities._type.Guy);
-  ENTITY_REMOVE(manager->entities.all);
+  ENTITY_REMOVE(manager->by_type._Guy);
+  ENTITY_REMOVE(manager->by_type._Mirror);
+  ENTITY_REMOVE(manager->by_type._Sun);
+
+  for (int i = 0; i < manager->entities.count; i++) {
+    Entity *entity = manager->entities[i];   
+    if (entity->to_be_destroyed) {
+      entity_free(entity);
+      manager->entities.remove(i);
+      i--;
+    }
+  }
 
 #undef ENTITY_REMOVE
 }
@@ -80,8 +104,7 @@ internal Entity *entity_make(Entity_Kind kind) {
 internal Entity *lookup_entity(Pid id) {
   Entity_Manager *manager = get_entity_manager();
   if (id == 0) return nullptr;
-  for (int i = 0; i < manager->entities.all.count; i++) {
-    Entity *e = manager->entities.all[i];
+  for (Entity *e : manager->entities) {
     if (e->id == id) return e;
   }
   return nullptr;
@@ -91,8 +114,7 @@ internal Entity *find_entity_at(Vector3 position) {
   Entity_Manager *manager = get_entity_manager();
 
   Vector3Int p0 = to_vec3i(position);
-  for (int i = 0; i < manager->entities.all.count; i++) {
-    Entity *e = manager->entities.all[i];
+  for (Entity *e : manager->entities) {
     Vector3Int p1 = to_vec3i(e->position);
     if (p0 == p1) return e;
   }
