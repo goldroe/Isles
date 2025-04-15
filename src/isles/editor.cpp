@@ -189,7 +189,7 @@ internal void get_move_vectors(Camera camera, Vector3 *forward, Vector3 *right) 
   Vector3 F = camera.forward;
   F.y = 0;
   F = get_nearest_axis(F);
-  Vector3 R = normalize(cross(F, U));
+  Vector3 R = normalize(cross_product(F, U));
   *forward = F;
   *right = R;
 }
@@ -316,6 +316,26 @@ COMMAND(EditorSelect) {
   }
 }
 
+COMMAND(EditorSelectRange) {
+  Editor *editor = get_editor();
+  if (editor->active_selection && editor->hover_entity) {
+    Entity *start = editor->active_selection;
+    Entity *end = editor->hover_entity;
+    AABB range_box = make_aabb_from_corners(start->position, end->position);
+
+    for (f32 z = range_box.min.z; z <= range_box.max.z; z++) {
+      for (f32 y = range_box.min.y; y <= range_box.max.y; y++) {
+        for (f32 x = range_box.min.x; x <= range_box.max.x; x++) {
+          Entity *entity = find_entity_at(Vector3(x, y, z));
+          if (entity && !is_selected(editor, entity)) {
+            select_entity(editor, entity);
+          }
+        }
+      }
+    }
+  }
+}
+
 internal void insert_key_map_command(String8 name, Key_Proc *proc) {
   Key_Command command;
   command.name = name;
@@ -338,6 +358,7 @@ internal void init_editor_key_map() {
   insert_key_map_command(str8_lit("EditorClearSelection"), EditorClearSelection);
   insert_key_map_command(str8_lit("EditorSelect"), EditorSelect);
   insert_key_map_command(str8_lit("EditorMultiSelect"), EditorMultiSelect);
+  insert_key_map_command(str8_lit("EditorSelectRange"), EditorSelectRange);
 
   OS_Handle file_handle = os_open_file(str8_lit("data/Editor.keymap"), OS_AccessFlag_Read);
   if (!os_valid_handle(file_handle)) {
@@ -612,8 +633,7 @@ internal void picker_render(Picker *picker) {
   Game_State *game_state = get_game_state();
   World *world = get_world();
 
-  for (int i = 0; i < manager->entities.all.count; i++) {
-    Entity *e = manager->entities.all[i];
+  for (Entity *e : manager->entities) {
     Triangle_Mesh *mesh = e->mesh;
     if (!mesh) continue;
 
@@ -643,9 +663,7 @@ internal void picker_render(Picker *picker) {
     vertex_buffer->Release();
   }
 
-  for (int i = 0; i < manager->entities._type.Sun.count; i++) {
-    Sun *sun = manager->entities._type.Sun[i];
-    
+  for (Sun *sun : manager->by_type._Sun) {
     Matrix4 rotation_matrix = rotate_rh(sun->theta, editor->camera.up);
     Matrix4 world_matrix = translate(sun->position) * translate(sun->offset) * rotation_matrix;
     Matrix4 xform = editor->camera.transform * world_matrix;
@@ -665,7 +683,7 @@ internal void picker_render(Picker *picker) {
     plane_normal = normalize(plane_normal);
       
     Vector3 up = Vector3(0, 1, 0);
-    Vector3 right = normalize(cross(plane_normal, up));
+    Vector3 right = normalize(cross_product(plane_normal, up));
     f32 size = 0.5f;
     Vector3 p0 = -size * right - size * up;
     Vector3 p1 =  size * right - size * up;
@@ -878,24 +896,24 @@ internal void update_editor(OS_Event_List *events) {
   set_texture(str8_lit("diffuse_texture"), sun_icon_texture);
   set_blend_state(BLEND_STATE_ALPHA);
 
-  for (int i = 0; i < manager->entities._type.Sun.count; i++) {
-    Sun *sun = manager->entities._type.Sun[i];
+  for (Sun *sun : manager->by_type._Sun) {
     Matrix4 rotation_matrix = rotate_rh(sun->theta, editor->camera.up);
     Matrix4 world_matrix = translate(sun->position) * translate(sun->offset) * rotation_matrix;
     Matrix4 xform = editor->camera.transform * world_matrix;
 
     set_constant(str8_lit("xform"), xform);
+    set_constant(str8_lit("color"), make_vec4(1.0f));
     apply_constants();
      
     Vector3 right = editor->camera.right;
-    Vector3 up = cross(right, editor->camera.forward);
+    Vector3 up = cross_product(right, editor->camera.forward);
     f32 size = 0.5f;
-    Vertex_XCUU p0 = Vertex_XCUU(-size * right - size * up, make_vec4(1.0f), Vector2(0, 1));
-    Vertex_XCUU p1 = Vertex_XCUU( size * right - size * up, make_vec4(1.0f), Vector2(1, 1));
-    Vertex_XCUU p2 = Vertex_XCUU( size * right + size * up, make_vec4(1.0f), Vector2(1, 0));
-    Vertex_XCUU p3 = Vertex_XCUU(-size * right + size * up, make_vec4(1.0f), Vector2(0, 0));
+    Vertex_XNCUU p0 = Vertex_XNCUU(-size * right - size * up, Vector3(), make_vec4(1.0f), Vector2(0, 1));
+    Vertex_XNCUU p1 = Vertex_XNCUU( size * right - size * up, Vector3(), make_vec4(1.0f), Vector2(1, 1));
+    Vertex_XNCUU p2 = Vertex_XNCUU( size * right + size * up, Vector3(), make_vec4(1.0f), Vector2(1, 0));
+    Vertex_XNCUU p3 = Vertex_XNCUU(-size * right + size * up, Vector3(), make_vec4(1.0f), Vector2(0, 0));
 
-    Vertex_XCUU vertices[6];
+    Vertex_XNCUU vertices[6];
     vertices[0] = p0;
     vertices[1] = p1;
     vertices[2] = p2;
@@ -903,8 +921,8 @@ internal void update_editor(OS_Event_List *events) {
     vertices[4] = p2;
     vertices[5] = p3;
  
-    ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices, ArrayCount(vertices), sizeof(Vertex_XCUU));
-    UINT stride = sizeof(Vertex_XCUU), offset = 0;
+    ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices, ArrayCount(vertices), sizeof(Vertex_XNCUU));
+    UINT stride = sizeof(Vertex_XNCUU), offset = 0;
     d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
     d3d->device_context->Draw((UINT)ArrayCount(vertices), 0);
     vertex_buffer->Release();
@@ -919,14 +937,18 @@ internal void update_editor(OS_Event_List *events) {
   set_depth_state(DEPTH_STATE_DEFAULT);
   set_texture(str8_lit("diffuse_texture"), d3d->fallback_tex);
 
+  Vector4 strobe_color = lerp(Vector4(0.8f, 0.f, 0.8f, 1.f), Vector4(1.f, 0.5f, 1.f, 1.f), editor->select_strobe_t / editor->select_strobe_max);
+
   for (int i = 0; i < editor->selections.count; i++) {
     Entity *e = editor->selections[i];
+    if (!e->mesh) continue;
+
     Matrix4 xform = editor->camera.transform * translate(e->position) * translate(e->offset) * rotate_rh(e->theta, Vector3(0, 1, 0));
     set_constant(str8_lit("xform"), xform);
+    set_constant(str8_lit("color"), strobe_color);
     apply_constants();
 
-    Vector4 strobe_color = lerp(Vector4(0.8f, 0.f, 0.8f, 1.f), Vector4(1.f, 0.5f, 1.f, 1.f), editor->select_strobe_t / editor->select_strobe_max);
-    if (e->mesh) draw_wireframe_mesh(e->mesh, strobe_color);
+    draw_wireframe_mesh(e->mesh);
   }
   set_rasterizer(rasterizer_cull_back);
 
@@ -950,7 +972,6 @@ internal void update_editor(OS_Event_List *events) {
     Matrix4 xform = editor->camera.transform * world_matrix;
     set_constant(str8_lit("xform"), xform);
     set_texture(str8_lit("diffuse_texture"), d3d->fallback_tex);
-    apply_constants();
 
     for (int axis = AXIS_X; axis <= AXIS_Z; axis++) {
       Triangle_Mesh *mesh = editor->gizmo_meshes[editor->active_gizmo][axis];
@@ -965,19 +986,12 @@ internal void update_editor(OS_Event_List *events) {
         color = mix(color, Vector4(1.0f, 1.0f, 1.0f, 1.0f), 0.4f);
       }
 
-      Vertex_XCUU *vertices = new Vertex_XCUU[mesh->vertices.count];
-      for (int i = 0; i < mesh->vertices.count; i++) {
-        Vertex_XCUU vertex = Vertex_XCUU(mesh->vertices[i], color, Vector2());
-        vertices[i] = vertex;
-      }
+      set_constant(str8_lit("color"), color);
+      apply_constants();
 
-      ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices, mesh->vertices.count, sizeof(Vertex_XCUU));
-      UINT stride = sizeof(Vertex_XCUU), offset = 0;
-      d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+      UINT stride = sizeof(Vertex_XNCUU), offset = 0;
+      d3d->device_context->IASetVertexBuffers(0, 1, &mesh->vertex_buffer, &stride, &offset);
       d3d->device_context->Draw((UINT)mesh->vertices.count, 0);
-      vertex_buffer->Release();
-
-      delete [] vertices;
     }
   }
 
@@ -1083,6 +1097,7 @@ internal void editor_present_ui() {
     ui_set_next_text_padding(2.0f);
     UI_Signal sig = ui_line_edit(panel->edit_load_world, str8_lit("##load_edit"));
     if ((sig.flags & UI_SIGNAL_FLAG_PRESSED) && sig.key == OS_KEY_ENTER) {
+      reset_manager();
       String8 name = str8(panel->edit_load_world->buffer, panel->edit_load_world->buffer_len);
       load_world(name);
       editor->panel->expand_load_world = false;
@@ -1092,6 +1107,7 @@ internal void editor_present_ui() {
   ui_set_next_pref_width(ui_txt(2.0f));
   ui_set_next_pref_height(ui_txt(4.0f));
   if (ui_clicked(ui_button(str8_lit("New")))) {
+    reset_manager();
     World *world = new World();
     set_world(world);
   }
@@ -1108,7 +1124,6 @@ internal void editor_present_ui() {
     f32 panel_x = g_viewport->dimension.x - panel_width;
     f32 panel_y = 0;
     Vector4 panel_color = Vector4(0.24f, 0.86f, 0.59f, 1.0f);
-    // Vector4 panel_color = Vector4(0.16f, 0.89f, 0.76f, 1.0f);
 
     ui_set_next_fixed_x(panel_x);
     ui_set_next_fixed_y(panel_y);
@@ -1162,7 +1177,6 @@ internal void editor_present_ui() {
       if (!e) {
         ui_set_next_pref_width(ui_pct(1.0f));
         ui_set_next_pref_height(ui_pixels(field_height));
-        // ui_set_next_background_color(Vector4(1.f, 0.f, 0.f, 1.f));
         ui_set_next_child_layout_axis(AXIS_X);
         UI_Box *etype_panel = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, str8_lit("##etype"));
         UI_Parent(etype_panel)
@@ -1195,7 +1209,6 @@ internal void editor_present_ui() {
 
           Entity_Prototype *prototype = editor->prototype_array[editor->prototype_idx];
           Entity *instance = entity_from_prototype(prototype);
-          // entity_push(manager, instance);
           if (raycast_result.hit) {
             instance->set_position(raycast_result.hit_position + Vector3(0, 1, 0));
           } else {
@@ -1209,7 +1222,7 @@ internal void editor_present_ui() {
       if (e && panel->active_tab == ENTITY_TAB_FIRST) {
         if (e->kind == ENTITY_SUN) {
           Sun *sun = static_cast<Sun*>(e);
-          Auto_Array<Entity_Field*> fields = panel->entity_fields[ENTITY_SUN];
+          Auto_Array<Entity_Field*> &fields = panel->entity_fields[ENTITY_SUN];
           for (int i = 0; i < fields.count; i++) {
             Entity_Field *field = fields[i];
             bool is_compound = field->fields.count > 1;
