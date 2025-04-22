@@ -13,8 +13,8 @@ internal void r_clear_color(f32 r, f32 g, f32 b, f32 a) {
 UINT get_num_mip_levels(UINT width, UINT height) {
   UINT levels = 1;
   while(width > 1 || height > 1) {
-    width = max(width / 2, 1);
-    height = max(height / 2, 1);
+    width = Max(width / 2, 1);
+    height = Max(height / 2, 1);
     ++levels;
   }
   return levels;
@@ -28,6 +28,22 @@ internal ID3D11Buffer *make_uniform_buffer(u32 bytes) {
   desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
   desc.ByteWidth      = bytes;
   r_d3d11_state()->device->CreateBuffer(&desc, nullptr, &buffer);
+  return buffer;
+}
+
+internal ID3D11Buffer *make_index_buffer(void *data, size_t bytes) {
+  ID3D11Buffer *buffer = nullptr;
+  D3D11_BUFFER_DESC desc = {};
+  desc.Usage = D3D11_USAGE_DEFAULT;
+  desc.ByteWidth = (UINT)bytes;
+  desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+  desc.CPUAccessFlags = 0;
+  desc.MiscFlags = 0;
+  D3D11_SUBRESOURCE_DATA res = {};
+  res.pSysMem = data;
+  res.SysMemPitch = 0;
+  res.SysMemSlicePitch = 0;
+  r_g_d3d11_state->device->CreateBuffer(&desc, &res, &buffer);
   return buffer;
 }
 
@@ -268,6 +284,7 @@ internal Texture *r_create_texture_from_file(String8 file_name, int flags) {
   u8 *data = stbi_load((char *)file_name.data, &x, &y, &n, 4);
   if (!data) {
     logprint("Cannot load '%S'\n", file_name);
+    return nullptr;
   }
   Texture *texture = r_create_texture(data, DXGI_FORMAT_R8G8B8A8_UNORM, x, y, flags);
   return texture;
@@ -566,6 +583,17 @@ internal void r_d3d11_initialize(HWND window_handle) {
     { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex_XNCUU, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
   shader_entity = r_d3d11_make_shader(str8_lit("data/shaders/entity.hlsl"), str8_lit("Entity"), entity_ilay, ArrayCount(entity_ilay));
+
+  D3D11_INPUT_ELEMENT_DESC skinned_ilay[] = {
+    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Vertex_Skinned, position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Vertex_Skinned, normal), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex_Skinned, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "BONEIDS",  0, DXGI_FORMAT_R32G32B32A32_SINT,  0, offsetof(Vertex_Skinned, bone_ids), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "WEIGHTS",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(Vertex_Skinned, bone_weights), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+  };
+  shader_skinned = r_d3d11_make_shader(str8_lit("data/shaders/skinned.hlsl"), str8_lit("Skinned"), skinned_ilay, ArrayCount(skinned_ilay));
+
+  shader_skinned_shadow_map = r_d3d11_make_shader(str8_lit("data/shaders/skinned_shadow_map.hlsl"), str8_lit("Skinned ShadowMap"), skinned_ilay, ArrayCount(skinned_ilay));
 
   D3D11_INPUT_ELEMENT_DESC argb_texture_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -889,6 +917,10 @@ internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, ID
     hr = d3d11_state->device->CreatePixelShader(ps_blob->GetBufferPointer(), ps_blob->GetBufferSize(), NULL, pixel_shader);
 
     hr = d3d11_state->device->CreateInputLayout(input_elements, elements_count, vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), input_layout);
+
+    if (hr != S_OK) {
+      logprint("Error creating input layout.\n");
+    }
   }
 
   fill_shader_bindings(bindings, vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), true);
