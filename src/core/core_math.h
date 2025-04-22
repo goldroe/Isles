@@ -14,6 +14,20 @@
 #define RadToDeg(R) (R*180.0f/PI)
 #define DegToRad(R) (R*PI/180.0f)
 
+union Quaternion {
+  struct {
+    float x, y, z, w;
+  };
+  float elements[4];
+
+  Quaternion() { x = y = z = w = 0; }
+  Quaternion(f32 x, f32 y, f32 z, f32 w) : x(x), y(y), z(z), w(w) {}
+  f32 &operator[](int idx) {
+    assert(idx < 4);
+    return elements[idx];
+  }
+};
+
 union Vector2 {
   struct {
     float x;

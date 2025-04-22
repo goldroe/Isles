@@ -898,3 +898,98 @@ internal inline f32 get_shortest_delta(f32 from, f32 to) {
   f32 result = fmod(2 * dt, max_angle) - dt;
   return result;
 }
+
+
+internal inline Quaternion normalize(Quaternion q) {
+  Vector4 v = Vector4(q.x, q.y, q.z, q.w);
+  v = normalize(v);
+  Quaternion result = Quaternion(v.x, v.y, v.z, v.w);
+  return result;
+}
+
+internal inline f32 dot_product(Quaternion left, Quaternion right) {
+  f32 result = ((left.x * right.x) + (left.z * right.z)) + ((left.y * right.y) + (left.w * right.w));
+  return result; 
+}
+
+internal inline Matrix4 matrix_from_quaternion(Quaternion q) {
+  Matrix4 result;
+
+  Quaternion nq = normalize(q);
+
+  f32 xx, yy, zz,
+    xy, xz, yz,
+    wx, wy, wz;
+
+  xx = nq.x * nq.x;
+  yy = nq.y * nq.y;
+  zz = nq.z * nq.z;
+  xy = nq.x * nq.y;
+  xz = nq.x * nq.z;
+  yz = nq.y * nq.z;
+  wx = nq.w * nq.x;
+  wy = nq.w * nq.y;
+  wz = nq.w * nq.z;
+
+  result.columns[0][0] = 1.0f - 2.0f * (yy + zz);
+  result.columns[0][1] = 2.0f * (xy + wz);
+  result.columns[0][2] = 2.0f * (xz - wy);
+  result.columns[0][3] = 0.0f;
+
+  result.columns[1][0] = 2.0f * (xy - wz);
+  result.columns[1][1] = 1.0f - 2.0f * (xx + zz);
+  result.columns[1][2] = 2.0f * (yz + wx);
+  result.columns[1][3] = 0.0f;
+
+  result.columns[2][0] = 2.0f * (xz + wy);
+  result.columns[2][1] = 2.0f * (yz - wx);
+  result.columns[2][2] = 1.0f - 2.0f * (xx + yy);
+  result.columns[2][3] = 0.0f;
+
+  result.columns[3][0] = 0.0f;
+  result.columns[3][1] = 0.0f;
+  result.columns[3][2] = 0.0f;
+  result.columns[3][3] = 1.0f;
+
+  return result;
+}
+
+internal inline Quaternion qmix(Quaternion left, f32 mix_left, Quaternion right, f32 mix_right) {
+  Quaternion result;
+  result.x = left.x*mix_left + right.x*mix_right;
+  result.y = left.y*mix_left + right.y*mix_right;
+  result.z = left.z*mix_left + right.z*mix_right;
+  result.w = left.w*mix_left + right.w*mix_right;
+  return result;
+}
+
+internal inline Quaternion nlerp(Quaternion left, Quaternion right, f32 t) {
+  Quaternion result = qmix(left, 1.0f-t, right, t);
+  result = normalize(result);
+  return result;
+}
+
+static inline Quaternion slerp(Quaternion left, Quaternion right, f32 t) {
+  Quaternion result;
+
+  f32 cos_theta = dot_product(left, right);
+
+  if (cos_theta < 0.0f) { // Take shortest path on Hyper-sphere
+    cos_theta = -cos_theta;
+    right = Quaternion(-right.x, -right.y, -right.z, -right.w);
+  }
+
+  // Use Normalized Linear interpolation when vectors are roughly not L.I.
+  if (cos_theta > 0.9995f) {
+    result = nlerp(left, right, t);
+  } else {
+    f32 angle      = acosf(cos_theta);
+    f32 mix_left   = sinf((1.0f - t) * angle);
+    f32 mix_right  = sinf(t * angle);
+
+    result = qmix(left, mix_left, right, mix_right);
+    result = normalize(result);
+  }
+
+  return result;
+}
