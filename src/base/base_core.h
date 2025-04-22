@@ -105,6 +105,7 @@ typedef s64 b64;
 typedef float  f32;
 typedef double f64;
 typedef uintptr_t uintptr;
+typedef unsigned int uint;
 
 typedef u64 R_Handle;
 
