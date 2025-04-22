@@ -21,6 +21,10 @@ internal bool str8_equal(String8 first, String8 second) {
   return first.count == second.count && (strncmp((const char *)first.data, (const char *)second.data, first.count) == 0); 
 }
 
+bool operator==(String8 first, String8 second) {
+  return str8_equal(first, second); 
+}
+
 internal String8 str8_cstring(const char *c) {
     String8 result;
     result.count = cstr8_length(c);
@@ -42,6 +46,15 @@ internal String8 str8_copy(Arena *arena, String8 string) {
     MemoryCopy(result.data, string.data, string.count);
     result.data[result.count] = 0;
     return result;
+}
+
+internal String8 str8_copy(String8 string) {
+  String8 result;
+  result.data = (u8 *)malloc(string.count + 1);
+  MemoryCopy(result.data, string.data, string.count);
+  result.data[string.count] = 0;
+  result.count = string.count;
+  return result;
 }
 
 internal String8 str8_concat(Arena *arena, String8 first, String8 second) {
