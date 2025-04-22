@@ -268,12 +268,18 @@ internal void init_game() {
   icon_font = load_icon_font(temp, str8_lit("data/fonts/icons.ttf"), 24, icon_font_glyphs, ArrayCount(icon_font_glyphs));
   default_fonts[FONT_ICON] = icon_font;
 
-  Triangle_Mesh *guy_mesh      = load_mesh("data/meshes/Character/character.obj");
-  Triangle_Mesh *block_mesh    = load_mesh("data/meshes/tile.obj");
-  Triangle_Mesh *stone_mesh    = load_mesh("data/meshes/stone.obj");
-  Triangle_Mesh *mirror_mesh   = load_mesh("data/meshes/mirror/mirror.obj");
-  Triangle_Mesh *crate_mesh    = load_mesh("data/meshes/Crate.obj");
-  Triangle_Mesh *sand_mesh     = load_mesh("data/meshes/sand.obj");
+  logprint("START LOADING MESHES\n");
+
+  // Triangle_Mesh *guy_mesh      = load_mesh("data/meshes/Character/character.obj");
+  // Triangle_Mesh *guy_mesh    = load_mesh("data/meshes/Spongebob/Spongebob.dae");
+  Triangle_Mesh *guy_mesh      = load_mesh("data/meshes/vampire/dancing_vampire.dae");
+  Triangle_Mesh *block_mesh  = load_mesh("data/meshes/tile.obj");
+  Triangle_Mesh *stone_mesh  = load_mesh("data/meshes/stone.obj");
+  Triangle_Mesh *mirror_mesh = load_mesh("data/meshes/mirror/mirror.obj");
+  Triangle_Mesh *crate_mesh  = load_mesh("data/meshes/Crate.obj");
+  Triangle_Mesh *sand_mesh   = load_mesh("data/meshes/sand.obj");
+
+  logprint("DONE LOADING MESHES\n");
 
   init_editor();
 
