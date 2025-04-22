@@ -5,6 +5,8 @@ global Shader *shader_rect;
 global Shader *shader_picker;
 global Shader *shader_shadow_map;
 global Shader *shader_argb_texture;
+global Shader *shader_skinned;
+global Shader *shader_skinned_shadow_map;
 
 global Shader *current_shader;
 global Vertex_List immediate_vertices;
@@ -185,9 +187,9 @@ internal void apply_constants() {
   }
 }
 
-internal void write_shader_constant(Shader *shader, String8 name, void *ptr, u32 size) {
-  Shader_Bindings *bindings = shader->bindings;
+internal Shader_Constant *get_shader_constant(Shader *shader, String8 name) {
   Shader_Constant *constant = nullptr;
+  Shader_Bindings *bindings = shader->bindings;
   for (int i = 0; i < bindings->constants.count; i++) {
     constant = &bindings->constants[i];
     if (str8_equal(constant->name, name)) {
@@ -195,9 +197,22 @@ internal void write_shader_constant(Shader *shader, String8 name, void *ptr, u32
     }
     constant = nullptr;
   }
+  return constant;
+}
 
+internal void write_shader_constant(Shader *shader, String8 name, void *ptr, u32 size) {
+  Shader_Constant *constant = get_shader_constant(shader, name);
   Shader_Uniform *uniform = constant->uniform;
   MemoryCopy((void *)((uintptr_t)uniform->memory + constant->offset), ptr, size);
+  uniform->dirty = 1;
+}
+
+internal void set_constant_array(String8 name, void *elems, uint size, uint count) {
+  Shader *shader = current_shader;
+  uint bytes = size * count;
+  Shader_Constant *constant = get_shader_constant(shader, name);
+  Shader_Uniform *uniform = constant->uniform;
+  MemoryCopy((void *)((uintptr_t)uniform->memory + constant->offset), elems, bytes);
   uniform->dirty = 1;
 }
 
@@ -425,24 +440,24 @@ internal void draw_mirror_reflection() {
   }
 
   //Draw clone
-  {
-    Vector3 reflect_position = position;
-    Matrix4 rotation_matrix = rotate_rh(guy->theta, camera.up);
-    Matrix4 world_matrix = translate(reflect_position) * translate(guy->offset) * rotation_matrix;
-    Matrix4 xform = camera.transform * world_matrix;
+  // {
+  //   Vector3 reflect_position = position;
+  //   Matrix4 rotation_matrix = rotate_rh(guy->theta, camera.up);
+  //   Matrix4 world_matrix = translate(reflect_position) * translate(guy->offset) * rotation_matrix;
+  //   Matrix4 xform = camera.transform * world_matrix;
 
-    set_shader(shader_mesh);
+  //   set_shader(shader_mesh);
 
-    bind_uniform(shader_mesh, str8_lit("Constants"));
+  //   bind_uniform(shader_mesh, str8_lit("Constants"));
 
-    set_constant(str8_lit("xform"), xform);
-    set_constant(str8_lit("color"), Vector4(.4f, .4f, .4f, 1.f));
-    apply_constants(); 
+  //   set_constant(str8_lit("xform"), xform);
+  //   set_constant(str8_lit("color"), Vector4(.4f, .4f, .4f, 1.f));
+  //   apply_constants(); 
 
-    set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
+  //   set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
 
-    draw_mesh(guy->mesh);
-  }
+  //   draw_mesh(guy->mesh);
+  // }
 
 }
 
@@ -480,10 +495,11 @@ internal void draw_scene() {
     set_shader(shader_shadow_map);
 
     bind_uniform(shader_shadow_map, str8_lit("Constants"));
-    Shader_Uniform *shadow_map_uniform = shader_shadow_map->bindings->lookup_uniform(str8_lit("Constants"));
+    // Shader_Uniform *shadow_map_uniform = shader_shadow_map->bindings->lookup_uniform(str8_lit("Constants"));
 
     for (Entity *entity : manager->entities) {
       Triangle_Mesh *mesh = entity->mesh;
+      if (entity->animation_state) continue;
       if (!mesh) continue;
 
       //@Todo Set Transform
@@ -497,6 +513,27 @@ internal void draw_scene() {
       UINT stride = sizeof(Vertex_XNCUU), offset = 0;
       d3d->device_context->IASetVertexBuffers(0, 1, &mesh->vertex_buffer, &stride, &offset);
       d3d->device_context->Draw((UINT)mesh->vertices.count, 0);
+    }
+
+    set_shader(shader_skinned_shadow_map);
+    bind_uniform(shader_skinned_shadow_map, str8_lit("Constants"));
+
+    for (Entity *entity : manager->entities) {
+      Animation_State *animation_state = entity->animation_state;
+      Triangle_Mesh *mesh = entity->mesh;
+      if (!animation_state) continue;
+      logprint("anim\n");
+
+      Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
+      Matrix4 world_matrix = translate(entity->visual_position) * translate(entity->offset) *rotation_matrix;
+      set_constant(str8_lit("world"), world_matrix);
+      set_constant_array(str8_lit("bone_matrices"), animation_state->bone_transforms, sizeof(Matrix4), MAX_BONES);
+      set_constant(str8_lit("light_view_projection"), sun->light_space_matrix);
+      apply_constants();
+
+      uint stride = sizeof(Vertex_Skinned), offset = 0;
+      d3d->device_context->IASetVertexBuffers(0, 1, &mesh->skinned_vertex_buffer, &stride, &offset);
+      d3d->device_context->Draw((UINT)mesh->skinned_vertices.count, 0);
     }
 
     reset_viewport();
@@ -544,7 +581,7 @@ internal void draw_world(World *world, Camera camera) {
 
   set_shader(shader_entity);
 
-  Shader_Uniform *uniform = shader_entity->bindings->lookup_uniform(str8_lit("Constants"));
+  // Shader_Uniform *uniform = shader_entity->bindings->lookup_uniform(str8_lit("Constants"));
   bind_uniform(shader_entity, str8_lit("Constants"));
 
   set_texture(str8_lit("shadow_map"), shadow_map->texture);
@@ -553,8 +590,10 @@ internal void draw_world(World *world, Camera camera) {
   set_constant(str8_lit("light_direction"), light_direction);
   set_constant(str8_lit("light_view_projection"), light_space);
   set_constant(str8_lit("light_color"), light_color);
-    
+
   for (Entity *entity : manager->entities) {
+    if (entity->kind == ENTITY_GUY) continue; //temp
+
     Triangle_Mesh *mesh = entity->mesh;
     if (!mesh) continue;
 
@@ -572,6 +611,39 @@ internal void draw_world(World *world, Camera camera) {
   }
 
   reset_texture(str8_lit("shadow_map"));
+
+  for (Guy *guy : manager->by_type._Guy) {
+    Animation_State *animation_state = guy->animation_state;
+    Triangle_Mesh *mesh = guy->mesh;
+
+    set_shader(shader_skinned);
+    set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
+
+    bind_uniform(shader_skinned, str8_lit("Constants"));
+
+    Matrix4 rotation_matrix = rotate_rh(guy->theta, camera.up);
+    Matrix4 world_matrix = translate(guy->visual_position) * translate(guy->offset) * rotation_matrix;
+    Matrix4 xform = camera.transform * world_matrix;
+
+    Vector4 color = guy->use_override_color ? make_vec4(1.0f) : guy->override_color;
+    set_constant(str8_lit("color"), color);
+    set_constant(str8_lit("xform"), xform);
+    set_constant_array(str8_lit("bone_matrices"), animation_state->bone_transforms, sizeof(Matrix4), MAX_BONES);
+    apply_constants();
+
+    uint stride = sizeof(Vertex_Skinned), offset = 0;
+    d3d->device_context->IASetVertexBuffers(0, 1, &mesh->skinned_vertex_buffer, &stride, &offset);
+
+    for (int i = 0; i < mesh->triangle_list_info.count; i++) {
+      Triangle_List_Info triangle_list_info = mesh->triangle_list_info[i];
+
+      Material *material = mesh->materials[triangle_list_info.material_index];
+      set_texture(str8_lit("diffuse_texture"), material->texture);
+
+      d3d->device_context->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
+    }
+  }
+
 }
 
 internal inline ARGB argb_from_vector(Vector4 color) {
