@@ -26,6 +26,12 @@ public:
         capacity = 0;
     }
 
+    Auto_Array(T *array, u64 length) {
+        reserve(length);
+        count = length;
+        MemoryCopy(data, array, length * sizeof(T));
+    }
+
     Auto_Array(const Auto_Array<T> &array) {
         data = array.data;
         count = array.count;
