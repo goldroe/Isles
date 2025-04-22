@@ -199,7 +199,127 @@ internal void update_sun(Sun *sun) {
   sun->light_space_matrix = sun->light_projection * sun->light_view;
 }
 
-void update_guy(Guy *guy) {
+internal Bone *find_bone(Animation *animation, std::string name) {
+  for (int i = 0; i < animation->bones.count; i++) {
+    if (animation->bones[i]->name == name) {
+      return animation->bones[i];
+    }
+  }
+  return nullptr;
+}
+
+internal inline f64 compute_bone_lerp_factor(f64 t, f64 last, f64 next) {
+  f64 result = (t - last) / (next - last);
+  return result;
+}
+
+internal int bone_get_translation_key(Bone *bone, f32 t) {
+  for (int i = 0; i < bone->translations.count - 1; i++) {
+    if (bone->translations[i].time <= t && t <= bone->translations[i + 1].time) {
+      return i;
+    }
+  }
+  return 0;
+}
+
+internal int bone_get_scale_key(Bone *bone, f32 t) {
+  for (int i = 0; i < bone->scalings.count - 1; i++) {
+    if (bone->scalings[i].time <= t && t <= bone->scalings[i + 1].time) {
+      return i;
+    }
+  }
+  return 0;
+}
+
+internal int bone_get_rotation_key(Bone *bone, f32 t) {
+  for (int i = 0; i < bone->rotations.count - 1; i++) {
+    if (bone->rotations[i].time <= t && t <= bone->rotations[i + 1].time) {
+      return i;
+    }
+  }
+  return 0;
+}
+
+internal Matrix4 bone_lerp_translation(Bone *bone, f32 t) {
+  int key = bone_get_translation_key(bone, t);
+  Key_Vector last_key = bone->translations[key];
+  Key_Vector next_key = bone->translations[key + 1];
+
+  f64 lerp_factor = compute_bone_lerp_factor(t, last_key.time, next_key.time);
+  Vector3 lerp_vector = lerp(last_key.value, next_key.value, (f32)lerp_factor);
+  Matrix4 result = translate(lerp_vector);
+  return result;
+}
+
+internal Matrix4 bone_lerp_scale(Bone *bone, f32 t) {
+  int key = bone_get_scale_key(bone, t);
+  Key_Vector last_key = bone->scalings[key];
+  Key_Vector next_key = bone->scalings[key + 1];
+
+  f64 lerp_factor = compute_bone_lerp_factor(t, last_key.time, next_key.time);
+  Vector3 lerp_vector = lerp(last_key.value, next_key.value, (f32)lerp_factor);
+  Matrix4 result = scale(lerp_vector);
+  return result;
+}
+
+internal Matrix4 bone_lerp_rotation(Bone *bone, f32 t) {
+  int key = bone_get_rotation_key(bone, t);
+  Key_Quat last_key = bone->rotations[key];
+  Key_Quat next_key = bone->rotations[key + 1];
+
+  f64 lerp_factor = compute_bone_lerp_factor(t, last_key.time, next_key.time);
+  Quaternion quat = slerp(last_key.value, next_key.value, (f32)lerp_factor);
+  Matrix4 result = matrix_from_quaternion(quat);
+  return result;
+}
+
+internal void update_bone(Bone *bone, f32 t) {
+  Matrix4 translation = bone_lerp_translation(bone, t);
+  Matrix4 scale = bone_lerp_scale(bone, t);
+  Matrix4 rotation = bone_lerp_rotation(bone, t);
+  bone->local_transform = translation * scale * rotation;
+  // bone->local_transform = make_matrix4(1.0f);
+}
+
+internal void compute_bone_transform(Animation_State *state, Animation_Node *node, Matrix4 parent_transform) {
+  Matrix4 node_transform = node->transform;
+
+  Bone *bone = find_bone(state->animation, node->name);
+  if (bone) {
+    f32 t = (f32)(state->t * state->animation->ticks_per_second);
+    update_bone(bone, t);
+    node_transform = bone->local_transform;
+  }
+
+  Matrix4 global_transform = parent_transform * node_transform;
+
+  Animation *animation = state->animation;
+  if (animation->mesh->bone_info_map.find(node->name) != animation->mesh->bone_info_map.end()) {
+    Bone_Info bone_info = animation->mesh->bone_info_map[node->name];
+    if (bone_info.id < MAX_BONES) {
+      state->bone_transforms[bone_info.id] = global_transform * bone_info.offset_matrix;
+    }
+  }
+
+  for (int i = 0; i < node->children.count; i++) {
+    compute_bone_transform(state, node->children[i], global_transform);
+  }
+}
+
+internal void compute_bone_transform(Animation_State *state) {
+  compute_bone_transform(state, state->animation->mesh->anim_root, make_matrix4(1.0f));
+}
+
+internal void update_animation_state(Animation_State *state, f32 dt) {
+  compute_bone_transform(state);
+
+  state->t += dt;
+  if (state->t > (state->animation->duration / state->animation->ticks_per_second)) {
+    state->t = 0;
+  }
+}
+
+internal void update_guy(Guy *guy, f32 dt) {
   //@Note Move
   Camera *camera = &game_state->camera;
 
@@ -255,6 +375,17 @@ void update_guy(Guy *guy) {
   if (key_pressed(OS_KEY_SPACE)) {
     maybe_mirror_teleport(guy);
   }
+
+  //idle
+  if (!guy->animation_state) {
+    guy->animation_state = new Animation_State;
+    Matrix4 m = make_matrix4(1.0f);
+    for (int i = 0; i < MAX_BONES; i++) {
+      guy->animation_state->bone_transforms[i] = m;
+    }
+  } 
+  guy->animation_state->animation = guy->mesh->animation_map.begin()->second;
+  update_animation_state(guy->animation_state, dt);
 }
 
 internal void update_mirror(Mirror *mirror) {
@@ -337,17 +468,16 @@ internal void simulate_world(f32 dt) {
     }
     unsupported.clear();
 
-    for (Entity *entity : manager->entities) {
-      if (entity->kind != ENTITY_GUY) continue;
-      Guy *guy = static_cast<Guy*>(entity);
-      update_guy(guy);
-    }
   } else {
     game_state->world_step_dt += dt;
     if (game_state->world_step_dt > 0.2f) {
       game_state->can_world_step = true;
       game_state->world_step_dt = 0; 
     }
+  }
+
+  for (Guy *guy : manager->by_type._Guy) {
+    update_guy(guy, dt);
   }
 
   get_game_state()->bounding_box = get_world_bounds();
@@ -399,6 +529,14 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
   }
 
   simulate_world(dt);
+
+  Entity_Manager *manager = get_entity_manager();
+  for (Guy *guy : manager->by_type._Guy) {
+    // Animation_Info *animation = guy->mesh->animation_info;
+    // if (!animation) continue;
+  }
+
+
   if (!game_state->editing) {
     draw_scene();
   }

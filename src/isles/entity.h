@@ -19,6 +19,11 @@ EnumDefineFlagOperators(Entity_Flags);
 
 Entity_Flags entity_flag_array[] = { ENTITY_FLAG_PUSHABLE, ENTITY_FLAG_STATIC, };
 
+struct Animation_State {
+  f32 t = 0;
+  Animation *animation = nullptr;
+  Matrix4 bone_transforms[MAX_BONES];
+};
 
 struct Triangle_Mesh;
 
@@ -39,10 +44,14 @@ struct Entity {
   f32 theta;
   f32 theta_target;
 
-  Triangle_Mesh *mesh;
-
   b32 use_override_color;
   Vector4 override_color;
+
+  String8 mesh_name;
+  Triangle_Mesh *mesh;
+
+  // animation state
+  Animation_State *animation_state;
 
   b32 to_be_destroyed;
 
