@@ -17,6 +17,25 @@ internal String8 path_join(Arena *arena, String8 parent, String8 child) {
   return result;
 }
 
+internal String8 get_file_path_extension(String8 file_name) {
+  if (file_name.count == 0) return str8_zero();
+
+  for (u64 i = file_name.count - 1; i > 0; i--) {
+    switch (file_name.data[i]) {
+    case '.':
+    {
+      String8 result = str8_copy(str8(file_name.data + i + 1, file_name.count - i - 1));
+      return result;
+    }
+    case '/':
+    case '\\':
+      //@Note no extension
+      return str8_zero();
+    }
+  }
+  return str8_zero();
+}
+
 internal String8 path_strip_extension(Arena *arena, String8 path) {
   Assert(path.data);
   for (u64 i = path.count - 1; i > 0; i--) {
