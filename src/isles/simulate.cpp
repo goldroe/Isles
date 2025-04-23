@@ -394,6 +394,58 @@ internal void update_mirror(Mirror *mirror) {
   mirror->reflection_vectors[1] = Vector3(0, 0, direction.z / Abs(direction.z));
 }
 
+internal void emit(Particle_Source *source, int particle) {
+  Particles *particles = &source->particles;
+  particles->lifetimes[particle] = get_random_float(0.1f, 5.0f);
+  particles->positions[particle] = source->position + get_random_vec3();
+  particles->velocities[particle] = get_random_vec3(Vector3(-1, 1, -1), Vector3(1, 5, 1));
+  particles->scales[particle] = make_vec2(get_random_float(0.5f, 0.5f));
+  particles->colors[particle] = make_vec4(1.0f);
+}
+
+internal void init_particle_source(Particle_Source *source) {
+  source->initialized = true;
+
+  Particles *particles = &source->particles;
+  int particle_count = 1024;
+  particles->count = particle_count;
+
+  particles->lifetimes = new f32[particle_count];
+  particles->positions = new Vector3[particle_count];
+  particles->velocities = new Vector3[particle_count];
+  particles->scales = new Vector2[particle_count];
+  particles->colors = new Vector4[particle_count];
+
+  for (int i = 0; i < particles->count; i++) {
+    emit(source, i);
+  }
+}
+
+internal void update_particle_source(Particle_Source *source, f32 dt) {
+  if (!source->initialized) {
+    init_particle_source(source);
+  }
+
+  Particles *particles = &source->particles;
+
+  for (int i = 0; i < particles->count; i++) {
+    if (particles->lifetimes[i] < 0.001f) {
+      emit(source, i);
+    }
+    particles->lifetimes[i] -= dt;
+  }
+
+  Vector3 forces = Vector3(0.f, -9.81f, 0.f);
+
+  for (int i = 0; i < particles->count; i++) {
+    particles->velocities[i] += forces * dt;
+  }
+
+  for (int i = 0; i < particles->count; i++) {
+    particles->positions[i] += particles->velocities[i] * dt + 0.5f * forces * dt * dt;
+  }
+}
+
 internal void update_entity(Entity *e, f32 dt) {
   switch (e->kind) {
   case ENTITY_MIRROR:
@@ -407,6 +459,13 @@ internal void update_entity(Entity *e, f32 dt) {
   {
     Sun *sun = static_cast<Sun*>(e);
     update_sun(sun);
+    break;
+  }
+
+  case ENTITY_PARTICLE_SOURCE:
+  {
+    Particle_Source *particle_source = static_cast<Particle_Source*>(e);
+    update_particle_source(particle_source, dt);
     break;
   }
   }
