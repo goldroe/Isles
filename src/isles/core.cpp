@@ -467,3 +467,33 @@ internal bool in_bounds(AABB bounds, Vector3 position) {
   }
   return false;
 }
+
+internal inline f32 get_random_float() {
+  return (f32)rand() / (f32)RAND_MAX;
+}
+
+internal inline f32 get_random_float(f32 a, f32 b) {
+  return a + get_random_float() * (b - a);
+}
+
+internal Vector2 get_random_vec2() {
+  Vector2 v = Vector2(get_random_float(), get_random_float());
+  return v;
+}
+
+internal Vector3 get_random_vec3() {
+  Vector3 v = Vector3(get_random_float(), get_random_float(), get_random_float());
+  v = normalize(v);
+  return v;
+}
+
+internal Vector4 get_random_vec4() {
+  Vector4 v = Vector4(get_random_float(), get_random_float(), get_random_float(), get_random_float());
+  return v;
+}
+
+internal Vector3 get_random_vec3(Vector3 min, Vector3 max) {
+ Vector3 result = min + get_random_float() * (max - min);
+ return result;
+}
+
