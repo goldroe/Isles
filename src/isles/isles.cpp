@@ -245,6 +245,8 @@ internal void update_camera_position(Camera *camera) {
 }
 
 internal void init_game() {
+  srand((uint)time(NULL));
+
   entity_manager = new Entity_Manager();
 
   UI_State *ui_state = new UI_State();
@@ -268,18 +270,12 @@ internal void init_game() {
   icon_font = load_icon_font(temp, str8_lit("data/fonts/icons.ttf"), 24, icon_font_glyphs, ArrayCount(icon_font_glyphs));
   default_fonts[FONT_ICON] = icon_font;
 
-  logprint("START LOADING MESHES\n");
-
-  // Triangle_Mesh *guy_mesh      = load_mesh("data/meshes/Character/character.obj");
-  // Triangle_Mesh *guy_mesh    = load_mesh("data/meshes/Spongebob/Spongebob.dae");
   Triangle_Mesh *guy_mesh      = load_mesh("data/meshes/vampire/dancing_vampire.dae");
   Triangle_Mesh *block_mesh  = load_mesh("data/meshes/tile.obj");
   Triangle_Mesh *stone_mesh  = load_mesh("data/meshes/stone.obj");
   Triangle_Mesh *mirror_mesh = load_mesh("data/meshes/mirror/mirror.obj");
   Triangle_Mesh *crate_mesh  = load_mesh("data/meshes/Crate.obj");
   Triangle_Mesh *sand_mesh   = load_mesh("data/meshes/sand.obj");
-
-  logprint("DONE LOADING MESHES\n");
 
   init_editor();
 
@@ -328,6 +324,11 @@ internal void init_game() {
   sun_prototype->entity.flags = ENTITY_FLAG_STATIC;
   sun_prototype->entity.mesh = nullptr;
   sun_prototype->entity.override_color = Vector4(0.9f, 0.84f, 0.1f, 1.0f);
+
+  Entity_Prototype *particle_source_proto = entity_prototype_create("Particle_Source");
+  particle_source_proto->entity.kind = ENTITY_PARTICLE_SOURCE;
+  particle_source_proto->entity.flags = ENTITY_FLAG_STATIC;
+  particle_source_proto->entity.mesh = nullptr;
 
   game_state->camera.origin = Vector3(0, 0, 0);
   game_state->camera.up = Vector3(0, 1, 0);
