@@ -25,7 +25,7 @@ internal inline Matrix4 to_matrix4(aiMatrix4x4 m) {
 }
 
 internal Triangle_Mesh *load_mesh(std::string file_name) {
-  u32 import_flags = aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_PopulateArmatureData;
+  u32 import_flags = aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals;
 
   const aiScene *scene = assimp_importer.ReadFile(file_name.c_str(), import_flags);
   if (!scene) {
