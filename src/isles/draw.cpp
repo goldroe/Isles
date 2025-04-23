@@ -7,6 +7,7 @@ global Shader *shader_shadow_map;
 global Shader *shader_argb_texture;
 global Shader *shader_skinned;
 global Shader *shader_skinned_shadow_map;
+global Shader *shader_particle;
 
 global Shader *current_shader;
 global Vertex_List immediate_vertices;
@@ -15,12 +16,13 @@ global Shadow_Map *shadow_map;
 
 global Texture *sun_icon_texture;
 global Texture *eye_of_horus_texture;
-
-global Triangle_Mesh *water_plane_mesh;
+global Texture *flare_texture;
 
 global ID3D11RasterizerState *rasterizer_cull_back;
 global ID3D11RasterizerState *rasterizer_cull_front;
 global ID3D11RasterizerState *rasterizer_wireframe;
+
+global Blend_State *blend_state_additive;
 
 internal Shadow_Map *make_shadow_map(int width, int height) {
   R_D3D11_State *d3d = r_d3d11_state();
@@ -77,16 +79,24 @@ internal void set_shader(Shader *shader) {
 
     ID3D11VertexShader *vs = nullptr;
     ID3D11PixelShader *ps = nullptr;
+    ID3D11GeometryShader *gs = nullptr;
     ID3D11InputLayout *ilay = nullptr;
     if (shader) {
       vs = shader->vertex_shader;
       ps = shader->pixel_shader;
+      gs = shader->geometry_shader;
       ilay = shader->input_layout;
     }
     d3d->device_context->VSSetShader(vs, nullptr, 0);
     d3d->device_context->PSSetShader(ps, nullptr, 0);
+    d3d->device_context->GSSetShader(gs, nullptr, 0);
     d3d->device_context->IASetInputLayout(ilay);
   }
+}
+
+internal void reset_primitives() {
+  R_D3D11_State *d3d = r_d3d11_state();
+  d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
 internal void reset_texture(String8 name) {
@@ -110,6 +120,9 @@ internal void reset_texture(String8 name) {
   }
   if (loc->pixel != -1) {
     d3d->device_context->PSSetShaderResources(loc->pixel, 1, null_srv);
+  }
+  if (loc->geo != -1) {
+    d3d->device_context->PSSetShaderResources(loc->geo, 1, null_srv);
   }
 }
 
@@ -137,6 +150,9 @@ internal void set_texture(String8 name, Texture *texture) {
   }
   if (loc->pixel != -1) {
     d3d->device_context->PSSetShaderResources(loc->pixel, 1, &view);
+  }
+  if (loc->geo != -1) {
+    d3d->device_context->PSSetShaderResources(loc->geo, 1, &view);
   }
 }
 
@@ -172,6 +188,9 @@ internal void bind_uniform(Shader *shader, String8 name) {
   }
   if (loc->pixel != -1) {
     d3d->device_context->PSSetConstantBuffers(loc->pixel, 1, &uniform->buffer);
+  }
+  if (loc->geo != -1) {
+    d3d->device_context->GSSetConstantBuffers(loc->geo, 1, &uniform->buffer);
   }
 }
 
@@ -262,6 +281,9 @@ internal void set_sampler(String8 name, Sampler_State_Kind sampler_kind) {
   if (loc->pixel != -1) {
     d3d->device_context->PSSetSamplers(loc->pixel, 1, &sampler);
   }
+  if (loc->geo != -1) {
+    d3d->device_context->PSSetSamplers(loc->geo, 1, &sampler);
+  }
 }
 
 internal void set_rasterizer_state(Rasterizer_State_Kind rasterizer_kind) {
@@ -273,6 +295,11 @@ internal void set_rasterizer_state(Rasterizer_State_Kind rasterizer_kind) {
 internal void set_rasterizer(ID3D11RasterizerState *rasterizer) {
   R_D3D11_State *d3d = r_d3d11_state();
   d3d->device_context->RSSetState(rasterizer);
+}
+
+internal void set_blend_state(Blend_State *blend_state) {
+  R_D3D11_State *d3d = r_d3d11_state();
+  d3d->device_context->OMSetBlendState(blend_state->resource, NULL, 0xFFFFFFF);
 }
 
 internal void set_blend_state(Blend_State_Kind blend_state_kind) {
@@ -307,6 +334,10 @@ internal void set_viewport(f32 left, f32 top, f32 right, f32 bottom) {
 internal void reset_viewport() {
   R_D3D11_State *d3d = r_d3d11_state();
   set_viewport(0, 0, (f32)d3d->window_dimension.x, (f32)d3d->window_dimension.y);
+}
+
+internal void reset_blend_state() {
+  set_blend_state(BLEND_STATE_DEFAULT);
 }
 
 internal inline void grow_immediate_vertices(u64 min_capacity) {
@@ -522,7 +553,6 @@ internal void draw_scene() {
       Animation_State *animation_state = entity->animation_state;
       Triangle_Mesh *mesh = entity->mesh;
       if (!animation_state) continue;
-      logprint("anim\n");
 
       Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
       Matrix4 world_matrix = translate(entity->visual_position) * translate(entity->offset) *rotation_matrix;
@@ -549,6 +579,45 @@ internal void draw_scene() {
   if (!game_state->editing) {
     draw_mirror_reflection();
   }
+
+  set_depth_state(DEPTH_STATE_NO_WRITE);
+
+  set_blend_state(blend_state_additive);
+
+  for (Particle_Source *source : manager->by_type._Particle_Source) {
+    Particles *particles = &source->particles;
+    if (particles->count == 0) continue;
+
+    set_shader(shader_particle);
+    bind_uniform(shader_particle, str8_lit("Constants"));
+    set_texture(str8_lit("diffuse_texture"), flare_texture);
+    set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
+    d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
+
+    set_constant(str8_lit("camera_position"), camera.origin);
+    set_constant(str8_lit("to_view_projection"), camera.transform);
+    apply_constants();
+
+    Particle_Pt *points = new Particle_Pt[particles->count];
+    for (int i = 0; i < particles->count; i++) {
+      Particle_Pt *pt = points + i;
+      pt->position = particles->positions[i];
+      pt->color    = particles->colors[i];
+      pt->scale    = particles->scales[i];
+    }
+
+    ID3D11Buffer *vertex_buffer = make_vertex_buffer(points, particles->count, sizeof(Particle_Pt));
+    uint stride = sizeof(Particle_Pt), offset = 0;
+    d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+    d3d->device_context->Draw(particles->count, 0);
+    vertex_buffer->Release();
+    delete [] points;
+  }
+
+  set_depth_state(DEPTH_STATE_DEFAULT);
+
+  reset_blend_state();
+  reset_primitives();
 
   // Shadow map
   if (0) {
@@ -615,6 +684,8 @@ internal void draw_world(World *world, Camera camera) {
   for (Guy *guy : manager->by_type._Guy) {
     Animation_State *animation_state = guy->animation_state;
     Triangle_Mesh *mesh = guy->mesh;
+
+    if (!animation_state) continue;
 
     set_shader(shader_skinned);
     set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);

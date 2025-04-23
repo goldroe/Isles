@@ -66,6 +66,12 @@ struct Byte_Buffer {
   f32 get_f32();
 };
 
+struct Particle_Pt {
+  Vector3 position;
+  Vector4 color;
+  Vector2 scale;
+};
+
 struct Vertex_3D {
   Vector3 position;
   Vector4 color;
