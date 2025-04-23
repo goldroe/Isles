@@ -2,13 +2,13 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <time.h>
 
 #pragma warning(push)
 #pragma warning( disable : 4244)
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #pragma warning(pop)
-
 
 #define STB_RECT_PACK_IMPLEMENTATION
 #include <stb_rect_pack.h>
