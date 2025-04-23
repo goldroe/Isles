@@ -230,6 +230,13 @@ internal int bytes_from_format(DXGI_FORMAT fmt) {
   }
 }
 
+internal Blend_State *create_blend_state(D3D11_BLEND_DESC *desc) {
+  Blend_State *blend_state = new Blend_State;
+  R_D3D11_State *d3d = r_d3d11_state();
+  HRESULT hr = d3d->device->CreateBlendState(desc, &blend_state->resource);
+  return blend_state;
+}
+
 internal Texture *r_create_texture(u8 *data, DXGI_FORMAT format, int w, int h, int flags) {
   HRESULT hr = S_OK;
 
@@ -421,6 +428,16 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
     desc.BackFace = desc.FrontFace;
     d3d11_state->device->CreateDepthStencilState(&desc, &d3d11_state->depth_stencil_states[DEPTH_STATE_DISABLE]);
+
+    desc = {};
+    desc.DepthEnable = true;
+    desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+    desc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+    desc.StencilEnable = false;
+    desc.FrontFace.StencilFailOp = desc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+    desc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+    desc.BackFace = desc.FrontFace;
+    d3d11_state->device->CreateDepthStencilState(&desc, &d3d11_state->depth_stencil_states[DEPTH_STATE_NO_WRITE]);
   }
 
   //@Note Create rasterizer states
@@ -518,6 +535,19 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
     desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
     d3d11_state->device->CreateBlendState(&desc, &d3d11_state->blend_states[BLEND_STATE_ALPHA]);
+
+    desc = {};
+    desc.AlphaToCoverageEnable = false;
+    desc.IndependentBlendEnable = false;
+    desc.RenderTarget[0].BlendEnable = true;
+    desc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+    desc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
+    desc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+    desc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ZERO;
+    desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+    desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    blend_state_additive = create_blend_state(&desc);
   }
 
   //@Note Create Sampler states
@@ -568,13 +598,13 @@ internal void r_d3d11_initialize(HWND window_handle) {
     { "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  shader_basic = r_d3d11_make_shader(str8_lit("data/shaders/basic_3d.hlsl"), str8_lit("Basic"), basic_ilay, ArrayCount(basic_ilay));
+  shader_basic = r_d3d11_make_shader(str8_lit("data/shaders/basic_3d.hlsl"), str8_lit("Basic"), basic_ilay, ArrayCount(basic_ilay), false);
 
   D3D11_INPUT_ELEMENT_DESC mesh_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Vertex_XNCUU, position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex_XNCUU, uv),       D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  shader_mesh = r_d3d11_make_shader(str8_lit("data/shaders/mesh.hlsl"), str8_lit("Mesh"), mesh_ilay, ArrayCount(mesh_ilay));
+  shader_mesh = r_d3d11_make_shader(str8_lit("data/shaders/mesh.hlsl"), str8_lit("Mesh"), mesh_ilay, ArrayCount(mesh_ilay), false);
 
   D3D11_INPUT_ELEMENT_DESC entity_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Vertex_XNCUU, position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -582,7 +612,14 @@ internal void r_d3d11_initialize(HWND window_handle) {
     { "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(Vertex_XNCUU, color), D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex_XNCUU, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  shader_entity = r_d3d11_make_shader(str8_lit("data/shaders/entity.hlsl"), str8_lit("Entity"), entity_ilay, ArrayCount(entity_ilay));
+  shader_entity = r_d3d11_make_shader(str8_lit("data/shaders/entity.hlsl"), str8_lit("Entity"), entity_ilay, ArrayCount(entity_ilay), false);
+
+  D3D11_INPUT_ELEMENT_DESC particle_ilay[] = {
+    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Particle_Pt, position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(Particle_Pt, color),    D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "SCALE",    0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Particle_Pt, scale),    D3D11_INPUT_PER_VERTEX_DATA, 0 },
+  };
+  shader_particle = r_d3d11_make_shader(str8_lit("data/shaders/particle.hlsl"), str8_lit("Particle"), particle_ilay, ArrayCount(particle_ilay), true);
 
   D3D11_INPUT_ELEMENT_DESC skinned_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Vertex_Skinned, position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -591,16 +628,16 @@ internal void r_d3d11_initialize(HWND window_handle) {
     { "BONEIDS",  0, DXGI_FORMAT_R32G32B32A32_SINT,  0, offsetof(Vertex_Skinned, bone_ids), D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "WEIGHTS",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(Vertex_Skinned, bone_weights), D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  shader_skinned = r_d3d11_make_shader(str8_lit("data/shaders/skinned.hlsl"), str8_lit("Skinned"), skinned_ilay, ArrayCount(skinned_ilay));
+  shader_skinned = r_d3d11_make_shader(str8_lit("data/shaders/skinned.hlsl"), str8_lit("Skinned"), skinned_ilay, ArrayCount(skinned_ilay), false);
 
-  shader_skinned_shadow_map = r_d3d11_make_shader(str8_lit("data/shaders/skinned_shadow_map.hlsl"), str8_lit("Skinned ShadowMap"), skinned_ilay, ArrayCount(skinned_ilay));
+  shader_skinned_shadow_map = r_d3d11_make_shader(str8_lit("data/shaders/skinned_shadow_map.hlsl"), str8_lit("Skinned ShadowMap"), skinned_ilay, ArrayCount(skinned_ilay), false);
 
   D3D11_INPUT_ELEMENT_DESC argb_texture_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "ARGB",     0, DXGI_FORMAT_R32_UINT,     0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  shader_argb_texture = r_d3d11_make_shader(str8_lit("data/shaders/argb_texture.hlsl"), str8_lit("ARGB Texture"), argb_texture_ilay, ArrayCount(argb_texture_ilay));
+  shader_argb_texture = r_d3d11_make_shader(str8_lit("data/shaders/argb_texture.hlsl"), str8_lit("ARGB Texture"), argb_texture_ilay, ArrayCount(argb_texture_ilay), false);
 
   D3D11_INPUT_ELEMENT_DESC rect_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -608,22 +645,21 @@ internal void r_d3d11_initialize(HWND window_handle) {
     { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "STYLE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  shader_rect = r_d3d11_make_shader(str8_lit("data/shaders/rect.hlsl"), str8_lit("Rect"), rect_ilay, ArrayCount(rect_ilay));
+  shader_rect = r_d3d11_make_shader(str8_lit("data/shaders/rect.hlsl"), str8_lit("Rect"), rect_ilay, ArrayCount(rect_ilay), false);
 
   D3D11_INPUT_ELEMENT_DESC picker_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  shader_picker = r_d3d11_make_shader(str8_lit("data/shaders/picker.hlsl"), str8_lit("Picker"), picker_ilay, ArrayCount(picker_ilay));
+  shader_picker = r_d3d11_make_shader(str8_lit("data/shaders/picker.hlsl"), str8_lit("Picker"), picker_ilay, ArrayCount(picker_ilay), false);
 
   D3D11_INPUT_ELEMENT_DESC shadowmap_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Vertex_XNCUU, position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  shader_shadow_map = r_d3d11_make_shader(str8_lit("data/shaders/shadow_map.hlsl"), str8_lit("ShadowMap"), shadowmap_ilay, ArrayCount(shadowmap_ilay));
+  shader_shadow_map = r_d3d11_make_shader(str8_lit("data/shaders/shadow_map.hlsl"), str8_lit("ShadowMap"), shadowmap_ilay, ArrayCount(shadowmap_ilay), false);
 
   sun_icon_texture = r_create_texture_from_file(str8_lit("data/textures/sun_icon.bmp"), 0);
   eye_of_horus_texture = r_create_texture_from_file(str8_lit("data/textures/eye_of_horus.png"), 0);
-
-  water_plane_mesh = generate_plane_mesh(Vector2(100.0f, 100.0f));
+  flare_texture = r_create_texture_from_file(str8_lit("data/textures/flare0.png"), 0);
 }
 
 internal void r_d3d11_begin(OS_Handle window_handle) {
@@ -718,7 +754,17 @@ internal char *copy_str(const char *src) {
   return dst;
 }
 
-internal void fill_shader_bindings(Shader_Bindings *bindings, void *byte_code, size_t byte_code_size, bool is_vertex_shader) {
+internal inline void set_shader_type_loc(Shader_Loc *loc, int shader_type, int bind) {
+  int *ptr = nullptr;
+  switch (shader_type) {
+  case 0: ptr = &loc->vertex; break;
+  case 1: ptr = &loc->pixel; break;
+  case 2: ptr = &loc->geo; break;
+  }
+  *ptr = bind;
+}
+
+internal void fill_shader_bindings(Shader_Bindings *bindings, void *byte_code, size_t byte_code_size, int shader_type) {
   ID3D11ShaderReflection* reflection = nullptr;
 
   if (D3DReflect(byte_code, byte_code_size, IID_ID3D11ShaderReflection, (void**)&reflection) == S_OK) {
@@ -739,11 +785,7 @@ internal void fill_shader_bindings(Shader_Bindings *bindings, void *byte_code, s
           Shader_Loc *loc = &bindings->uniform_locations[i]; 
           if (str8_equal(loc->name, name)) {
             found = true;
-            if (is_vertex_shader) {
-              loc->vertex = bind;
-            } else {
-              loc->pixel = bind;
-            }
+            set_shader_type_loc(loc, shader_type, bind);
             break;
           }
         }
@@ -751,11 +793,7 @@ internal void fill_shader_bindings(Shader_Bindings *bindings, void *byte_code, s
         if (!found) {
           Shader_Loc loc;
           loc.name = name;
-          if (is_vertex_shader) {
-            loc.vertex = bind;
-          } else {
-            loc.pixel = bind;
-          }
+          set_shader_type_loc(&loc, shader_type, bind);
           bindings->uniform_locations.push(loc);
         }
         break;
@@ -768,11 +806,7 @@ internal void fill_shader_bindings(Shader_Bindings *bindings, void *byte_code, s
           Shader_Loc *loc = &bindings->texture_locations[i]; 
           if (str8_equal(loc->name, name)) {
             found = true;
-            if (is_vertex_shader) {
-              loc->vertex = bind;
-            } else {
-              loc->pixel = bind;
-            }
+            set_shader_type_loc(loc, shader_type, bind);
             break;
           }
         }
@@ -780,11 +814,7 @@ internal void fill_shader_bindings(Shader_Bindings *bindings, void *byte_code, s
         if (!found) {
           Shader_Loc loc;
           loc.name = name;
-          if (is_vertex_shader) {
-            loc.vertex = bind;
-          } else {
-            loc.pixel = bind;
-          }
+          set_shader_type_loc(&loc, shader_type, bind);
           bindings->texture_locations.push(loc);
         }
         break;
@@ -797,11 +827,7 @@ internal void fill_shader_bindings(Shader_Bindings *bindings, void *byte_code, s
           Shader_Loc *loc = &bindings->sampler_locations[i]; 
           if (str8_equal(loc->name, name)) {
             found = true;
-            if (is_vertex_shader) {
-              loc->vertex = bind;
-            } else {
-              loc->pixel = bind;
-            }
+            set_shader_type_loc(loc, shader_type, bind);
             break;
           }
         }
@@ -809,11 +835,7 @@ internal void fill_shader_bindings(Shader_Bindings *bindings, void *byte_code, s
         if (!found) {
           Shader_Loc loc;
           loc.name = name;
-          if (is_vertex_shader) {
-            loc.vertex = bind;
-          } else {
-            loc.pixel = bind;
-          }
+          set_shader_type_loc(&loc, shader_type, bind);
           bindings->sampler_locations.push(loc);
         }
         break;
@@ -877,10 +899,10 @@ internal void fill_shader_bindings(Shader_Bindings *bindings, void *byte_code, s
   if (reflection) reflection->Release();
 }
 
-internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, ID3D11VertexShader **vertex_shader, ID3D11PixelShader **pixel_shader, ID3D11InputLayout **input_layout, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count, Shader_Bindings *bindings) {
+internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, Shader *shader, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count) {
   R_D3D11_State *d3d11_state = r_d3d11_state();
-  ID3DBlob *vs_blob, *ps_blob;
-  ID3DBlob *vs_error, *ps_error;
+  ID3DBlob *vs_blob = nullptr, *ps_blob = nullptr, *gs_blob = nullptr;
+  ID3DBlob *vs_error = nullptr, *ps_error = nullptr, *gs_error = nullptr;
 
   OS_Handle file_handle = os_open_file(file_name, OS_AccessFlag_Read);
   String8 contents = {};
@@ -911,28 +933,42 @@ internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, ID
     logprint("%s\n", ps_error->GetBufferPointer());
   }
 
+  if (shader->use_geometry_shader) {
+    hr = D3DCompile(contents.data, contents.count, (LPCSTR)program_name.data, NULL, NULL, "gs_main", "gs_5_0", compile_flags, 0, &gs_blob, &gs_error);
+    if (hr != S_OK) {
+      compilation_success = false;
+      logprint("Error compiling geometry shader %S\n", program_name);
+      logprint("%s\n", gs_error->GetBufferPointer());
+    }
+  }
+
   if (compilation_success) {
-    hr = d3d11_state->device->CreateVertexShader(vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), NULL, vertex_shader);
+    hr = d3d11_state->device->CreateVertexShader(vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), NULL, &shader->vertex_shader);
 
-    hr = d3d11_state->device->CreatePixelShader(ps_blob->GetBufferPointer(), ps_blob->GetBufferSize(), NULL, pixel_shader);
+    hr = d3d11_state->device->CreatePixelShader(ps_blob->GetBufferPointer(), ps_blob->GetBufferSize(), NULL, &shader->pixel_shader);
 
-    hr = d3d11_state->device->CreateInputLayout(input_elements, elements_count, vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), input_layout);
+    if (shader->use_geometry_shader) hr = d3d11_state->device->CreateGeometryShader(gs_blob->GetBufferPointer(), gs_blob->GetBufferSize(), NULL, &shader->geometry_shader);
+
+    hr = d3d11_state->device->CreateInputLayout(input_elements, elements_count, vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), &shader->input_layout);
 
     if (hr != S_OK) {
       logprint("Error creating input layout.\n");
     }
   }
 
-  fill_shader_bindings(bindings, vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), true);
-  fill_shader_bindings(bindings, ps_blob->GetBufferPointer(), ps_blob->GetBufferSize(), false);
+  fill_shader_bindings(shader->bindings, vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), 0);
+  fill_shader_bindings(shader->bindings, ps_blob->GetBufferPointer(), ps_blob->GetBufferSize(), 1);
+  if (shader->use_geometry_shader) fill_shader_bindings(shader->bindings, gs_blob->GetBufferPointer(), gs_blob->GetBufferSize(), 2);
 
   if (vs_blob)  vs_blob->Release();
   if (ps_blob)  ps_blob->Release();
+  if (gs_blob)  gs_blob->Release();
   if (vs_error) vs_error->Release();
   if (ps_error) ps_error->Release();
+  if (gs_error) gs_error->Release();
 }
 
-internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count) {
+internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count, bool use_geometry_shader) {
   R_D3D11_State *d3d11_state = r_d3d11_state();
 
   Shader *shader = new Shader();
@@ -940,8 +976,9 @@ internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, D3
 
   shader->name = str8_copy(d3d11_state->arena, program_name);
   shader->file_name = str8_copy(d3d11_state->arena, file_name);
+  shader->use_geometry_shader = use_geometry_shader;
 
-  r_d3d11_compile_shader(file_name, program_name, &shader->vertex_shader, &shader->pixel_shader, &shader->input_layout, input_elements, elements_count, shader->bindings);
+  r_d3d11_compile_shader(file_name, program_name, shader, input_elements, elements_count);
 
   OS_Handle file_handle = os_open_file(file_name, OS_AccessFlag_Read);
   if (os_valid_handle(file_handle)) {
