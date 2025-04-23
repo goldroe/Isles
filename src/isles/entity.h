@@ -3,10 +3,11 @@
 
 enum Entity_Kind : u16 {
   ENTITY_NIL,
-  ENTITY_GUY,
-  ENTITY_INANIMATE,
-  ENTITY_MIRROR,
-  ENTITY_SUN,
+  ENTITY_GUY = 1,
+  ENTITY_INANIMATE = 2,
+  ENTITY_MIRROR = 3,
+  ENTITY_SUN = 4,
+  ENTITY_PARTICLE_SOURCE = 5,
   ENTITY_COUNT
 };
 
@@ -14,6 +15,7 @@ enum Entity_Flags : u64 {
   ENTITY_FLAG_NIL = 0,
   ENTITY_FLAG_STATIC   = (1<<0),
   ENTITY_FLAG_PUSHABLE = (1<<1),
+  ENTITY_FLAG_INVISLBE = (1<<2),
 };
 EnumDefineFlagOperators(Entity_Flags);
 
@@ -50,7 +52,6 @@ struct Entity {
   String8 mesh_name;
   Triangle_Mesh *mesh;
 
-  // animation state
   Animation_State *animation_state;
 
   b32 to_be_destroyed;
@@ -89,6 +90,20 @@ struct Sun : Entity {
   Matrix4 light_view;
   Matrix4 light_projection;
   Matrix4 light_space_matrix;
+};
+
+struct Particles {
+  f32     *lifetimes;
+  Vector3 *positions;
+  Vector3 *velocities;
+  Vector2 *scales;
+  Vector4 *colors;
+  int count;
+};
+
+struct Particle_Source : Entity {
+  b32 initialized;
+  Particles particles;
 };
 
 #endif // ENTITY_H

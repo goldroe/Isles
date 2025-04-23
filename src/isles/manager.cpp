@@ -26,6 +26,7 @@ internal void reset_manager() {
   manager->by_type._Guy.clear();
   manager->by_type._Mirror.clear();
   manager->by_type._Sun.clear();
+  manager->by_type._Particle_Source.clear();
   manager->entities.clear();
   manager->next_pid = 1;
 }
@@ -42,6 +43,9 @@ internal void entity_push(Entity_Manager *manager, Entity *entity) {
     break;
   case ENTITY_SUN:
     manager->by_type._Sun.push(static_cast<Sun*>(entity));
+    break;
+  case ENTITY_PARTICLE_SOURCE:
+    manager->by_type._Particle_Source.push(static_cast<Particle_Source*>(entity));
     break;
   }
   manager->entities.push(entity);
@@ -64,6 +68,7 @@ internal void remove_entities_to_be_destroyed() {
   ENTITY_REMOVE(manager->by_type._Guy);
   ENTITY_REMOVE(manager->by_type._Mirror);
   ENTITY_REMOVE(manager->by_type._Sun);
+  ENTITY_REMOVE(manager->by_type._Particle_Source);
 
   for (int i = 0; i < manager->entities.count; i++) {
     Entity *entity = manager->entities[i];   
@@ -77,7 +82,6 @@ internal void remove_entities_to_be_destroyed() {
 #undef ENTITY_REMOVE
 }
 
- 
 internal Entity *entity_make(Entity_Kind kind) {
   Entity_Manager *manager = get_entity_manager();
   Entity *e = nullptr;
@@ -93,6 +97,9 @@ internal Entity *entity_make(Entity_Kind kind) {
     break;
   case ENTITY_SUN:
     e = (Entity *)entity_alloc(sizeof(Sun));
+    break;
+  case ENTITY_PARTICLE_SOURCE:
+    e = (Entity *)entity_alloc(sizeof(Particle_Source));
     break;
   }
   e->kind = kind;

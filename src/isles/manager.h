@@ -7,6 +7,7 @@ struct Entity_Manager {
     Auto_Array<Guy*>    _Guy;
     Auto_Array<Mirror*> _Mirror;
     Auto_Array<Sun*>    _Sun;
+    Auto_Array<Particle_Source*> _Particle_Source;
   } by_type;
   Auto_Array<Entity*> entities;
 
