@@ -170,3 +170,51 @@ internal UI_Signal ui_line_editf(UI_Line_Edit *edit, const char *fmt, ...) {
   UI_Signal signal = ui_line_edit(edit, string);
   return signal;
 }
+
+struct UI_Draw_Slider {
+  f32 min;
+  f32 max;
+  f32 value;
+  Vector4 slider_color;
+};
+
+internal UI_BOX_DRAW(ui_draw_slider) {
+  UI_Draw_Slider *draw_data = (UI_Draw_Slider *)user_data;
+
+  UI_Draw_Batch *batch = ui_top_draw_batch();
+
+  f32 r = (draw_data->value - draw_data->min) / (draw_data->max - draw_data->min);
+
+  f32 w = 8.0f; 
+
+  f32 x = box->rect.left + (box->rect.right - box->rect.left - w) * r;
+
+  UI_Rect slider_rect = ui_rect(x, box->rect.top, x + w, box->rect.bottom);
+
+  draw_ui_rect(batch, slider_rect, draw_data->slider_color);
+}
+
+internal void ui_slider(f32 *value, f32 min, f32 max, Vector4 slider_color, String8 name) {
+  UI_Box *box = ui_box_create(UI_BOX_FLAG_TEXT_ELEMENT | UI_BOX_FLAG_DRAW_BACKGROUND | UI_BOX_FLAG_CLICKABLE, name);
+  UI_Signal sig = ui_signal_from_box(box);
+
+  if (ui_active_key_match(box->key)) {
+    f32 w = box->rect.right - box->rect.left;
+    f32 p = ui_mouse().x - box->rect.left;
+    f32 v = p / w;
+    *value = min + (max - min) * v;
+
+    if (sig.flags & UI_SIGNAL_FLAG_RELEASED) {
+      ui_set_active_key(0);
+    }
+  }
+
+  *value = Clamp(*value, min, max);
+
+  UI_Draw_Slider *draw_data = push_array(ui_build_arena(), UI_Draw_Slider, 1);
+  draw_data->min = min;
+  draw_data->max = max;
+  draw_data->value = *value;
+  draw_data->slider_color = slider_color;
+  ui_box_equip_draw_proc(box, ui_draw_slider, draw_data);
+}
