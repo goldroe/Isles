@@ -129,6 +129,7 @@ internal inline void select_entity(Editor *editor, Entity *e) {
   editor->selections.push(e);
   editor->active_selection = e;
   editor->entity_panel->dirty = true;
+  editor->entity_panel->override_color = e->override_color;
 }
 
 internal inline void single_select_entity(Editor *editor, Entity *e) {
@@ -560,9 +561,9 @@ internal void r_picker_render_gizmo(Picker *picker) {
 
   Editor *editor = g_editor;
 
-  set_blend_state(BLEND_STATE_DEFAULT);
-  set_depth_state(DEPTH_STATE_DISABLE);
-  set_rasterizer_state(RASTERIZER_STATE_NO_CULL);
+  set_blend_state(blend_state_default);
+  set_depth_state(depth_state_disable);
+  set_rasterizer(rasterizer_no_cull);
 
   d3d->device_context->OMSetRenderTargets(1, (ID3D11RenderTargetView **)&render_target->render_target_view, (ID3D11DepthStencilView*)render_target->depth_stencil_view);
 
@@ -615,8 +616,8 @@ internal void picker_render(Picker *picker) {
 
   Editor *editor = g_editor;
 
-  set_blend_state(BLEND_STATE_DEFAULT);
-  set_depth_state(DEPTH_STATE_DEFAULT);
+  set_blend_state(blend_state_default);
+  set_depth_state(depth_state_default);
 
   Render_Target *render_target = picker->render_target;
   d3d->device_context->OMSetRenderTargets(1, (ID3D11RenderTargetView **)&render_target->render_target_view, (ID3D11DepthStencilView *)render_target->depth_stencil_view);
@@ -892,9 +893,9 @@ internal void update_editor(OS_Event_List *events) {
   set_shader(shader_mesh);
   bind_uniform(shader_mesh, str8_lit("Constants"));
 
-  set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
+  set_sampler(str8_lit("diffuse_sampler"), sampler_linear);
   set_texture(str8_lit("diffuse_texture"), sun_icon_texture);
-  set_blend_state(BLEND_STATE_ALPHA);
+  set_blend_state(blend_state_alpha);
 
   for (Sun *sun : manager->by_type._Sun) {
     Matrix4 rotation_matrix = rotate_rh(sun->theta, editor->camera.up);
@@ -928,13 +929,13 @@ internal void update_editor(OS_Event_List *events) {
     vertex_buffer->Release();
   }
 
-  set_blend_state(BLEND_STATE_DEFAULT);
+  set_blend_state(blend_state_default);
 
   // Draw selection
   set_shader(shader_mesh);
   bind_uniform(shader_mesh, str8_lit("Constants"));
   set_rasterizer(rasterizer_wireframe);
-  set_depth_state(DEPTH_STATE_DEFAULT);
+  set_depth_state(depth_state_default);
   set_texture(str8_lit("diffuse_texture"), d3d->fallback_tex);
 
   Vector4 strobe_color = lerp(Vector4(0.8f, 0.f, 0.8f, 1.f), Vector4(1.f, 0.5f, 1.f, 1.f), editor->select_strobe_t / editor->select_strobe_max);
@@ -950,20 +951,20 @@ internal void update_editor(OS_Event_List *events) {
 
     draw_wireframe_mesh(e->mesh);
   }
-  set_rasterizer(rasterizer_cull_back);
+  set_rasterizer(rasterizer_default);
 
   //@Note Draw Gizmos
   if (editor->active_selection) {
     R_D3D11_State *d3d = r_d3d11_state();
 
-    set_depth_state(DEPTH_STATE_DEFAULT);
+    set_depth_state(depth_state_default);
 
-    set_rasterizer_state(RASTERIZER_STATE_NO_CULL);
+    set_rasterizer(rasterizer_no_cull);
 
     set_shader(shader_mesh);
     bind_uniform(shader_mesh, str8_lit("Constants"));
 
-    set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
+    set_sampler(str8_lit("diffuse_sampler"), sampler_linear);
 
     f32 gizmo_scale_factor = Abs(length(editor->camera.origin - editor->active_selection->position) * 0.5f);
     gizmo_scale_factor = ClampBot(gizmo_scale_factor, 1.0f);
@@ -1119,7 +1120,7 @@ internal void editor_present_ui() {
     Entity *e = editor->active_selection;
     Entity_Panel *panel = editor->entity_panel;
 
-    f32 field_height = 26.0f;
+    f32 field_height = 20.0f;
     f32 panel_width = 280.0f;
     f32 panel_x = g_viewport->dimension.x - panel_width;
     f32 panel_y = 0;
@@ -1220,63 +1221,60 @@ internal void editor_present_ui() {
       }
 
       if (e && panel->active_tab == ENTITY_TAB_FIRST) {
-        if (e->kind == ENTITY_SUN) {
-          Sun *sun = static_cast<Sun*>(e);
-          Auto_Array<Entity_Field*> &fields = panel->entity_fields[ENTITY_SUN];
-          for (int i = 0; i < fields.count; i++) {
-            Entity_Field *field = fields[i];
-            bool is_compound = field->fields.count > 1;
+        Auto_Array<Entity_Field*> &fields = panel->entity_fields[e->kind];
+        for (int i = 0; i < fields.count; i++) {
+          Entity_Field *field = fields[i];
+          bool is_compound = field->fields.count > 1;
 
-            ui_set_next_pref_width(ui_pct(1.0f));
-            ui_set_next_pref_height(ui_pixels(field_height));
-            ui_set_next_child_layout_axis(AXIS_X);
-            int flags = UI_BOX_FLAG_CLICKABLE | UI_BOX_FLAG_DRAW_BORDER;
-            if (is_compound) flags |= UI_BOX_FLAG_CLICKABLE;
-            UI_Box *field_container = ui_box_create_format(flags, "##field_%d", i);
-            UI_Signal field_cont_sig = ui_signal_from_box(field_container);
+          ui_set_next_pref_width(ui_pct(1.0f));
+          ui_set_next_pref_height(ui_pixels(field_height));
+          ui_set_next_child_layout_axis(AXIS_X);
+          int flags = UI_BOX_FLAG_CLICKABLE | UI_BOX_FLAG_DRAW_BORDER;
+          if (is_compound) flags |= UI_BOX_FLAG_CLICKABLE;
+          UI_Box *field_container = ui_box_create_format(flags, "##field_%d", i);
+          UI_Signal field_cont_sig = ui_signal_from_box(field_container);
 
-            UI_Parent(field_container)
-              UI_PrefWidth(ui_pct(0.5f))
-              UI_PrefHeight(ui_pct(1.0f))
-            {
-              ui_text(field->name);
+          UI_Parent(field_container)
+            UI_PrefWidth(ui_pct(0.5f))
+            UI_PrefHeight(ui_pct(1.0f))
+          {
+            ui_text(field->name);
 
-              if (is_compound) {
-                ui_textf("(%s)", string_from_field_kind(field->kind));
-                if (ui_clicked(field_cont_sig)) {
-                  field->expand = !field->expand;
-                }
-              } else {
-                UI_Line_Edit *line_edit = field->fields[0];
-                // ui_set_next_text_padding(4.0f);
-                UI_Signal sig = ui_line_edit(line_edit, str8_lit("##edit"));
-                if (ui_pressed(sig) && sig.key == OS_KEY_ENTER) {
-                  printf("ENTER\n");
-                  field->dirty = true;
-                  editor->entity_panel->dirty = true;
-                }
+            if (is_compound) {
+              ui_textf("(%s)", string_from_field_kind(field->kind));
+              if (ui_clicked(field_cont_sig)) {
+                field->expand = !field->expand;
+              }
+            } else {
+              UI_Line_Edit *line_edit = field->fields[0];
+              // ui_set_next_text_padding(4.0f);
+              UI_Signal sig = ui_line_edit(line_edit, str8_lit("##edit"));
+              if (ui_pressed(sig) && sig.key == OS_KEY_ENTER) {
+                printf("ENTER\n");
+                field->dirty = true;
+                editor->entity_panel->dirty = true;
               }
             }
-            if (is_compound && field->expand) {
-              for (int j = 0; j < field->fields.count; j++) {
-                ui_set_next_pref_width(ui_pct(1.0f));
-                ui_set_next_pref_height(ui_pixels(field_height));
-                ui_set_next_child_layout_axis(AXIS_X);
-                UI_Box *cont = ui_box_create(UI_BOX_FLAG_DRAW_BORDER, 0);
+          }
+          if (is_compound && field->expand) {
+            for (int j = 0; j < field->fields.count; j++) {
+              ui_set_next_pref_width(ui_pct(1.0f));
+              ui_set_next_pref_height(ui_pixels(field_height));
+              ui_set_next_child_layout_axis(AXIS_X);
+              UI_Box *cont = ui_box_create(UI_BOX_FLAG_DRAW_BORDER, 0);
 
-                UI_Parent(cont)
-                  UI_PrefWidth(ui_pct(0.5f))
-                  UI_PrefHeight(ui_pixels(field_height))
-                {
-                  UI_Line_Edit *line_edit = field->fields[j];
-                  ui_text(line_edit->name);
+              UI_Parent(cont)
+                UI_PrefWidth(ui_pct(0.5f))
+                UI_PrefHeight(ui_pixels(field_height))
+              {
+                UI_Line_Edit *line_edit = field->fields[j];
+                ui_text(line_edit->name);
               
-                  // ui_set_next_text_padding(4.0f);
-                  UI_Signal sig = ui_line_editf(line_edit, "##edit_%d%d", i, j);
-                  if (ui_pressed(sig) && sig.key == OS_KEY_ENTER) {
-                    field->dirty = true;
-                    editor->entity_panel->dirty = true;
-                  }
+                // ui_set_next_text_padding(4.0f);
+                UI_Signal sig = ui_line_editf(line_edit, "##edit_%d%d", i, j);
+                if (ui_pressed(sig) && sig.key == OS_KEY_ENTER) {
+                  field->dirty = true;
+                  editor->entity_panel->dirty = true;
                 }
               }
             }
@@ -1340,6 +1338,50 @@ internal void editor_present_ui() {
                   editor->entity_panel->dirty = true;
                 }
               }
+            }
+          }
+        }
+
+        // Override Color
+        {
+          Vector4 last_color = panel->override_color;
+          UI_PrefWidth(ui_pct(1.0f))
+            UI_PrefHeight(ui_pixels(field_height))
+            UI_BackgroundColor(Vector4(1, 1, 1, 1))
+            UI_TextColor(Vector4(0, 0, 0, 1))
+          {
+            Vector4 slider_color = Vector4(0.0f, 0.0f, 0.0f, 1.0f);
+
+            UI_Box *cont;
+            cont = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, 0);
+            ui_set_next_fixed_x(0);
+            ui_set_next_fixed_y(0);
+            ui_set_next_parent(cont);
+            ui_slider(&panel->override_color.x, 0.0f, 1.0f, slider_color, str8_lit("R##color_r"));
+
+            cont = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, 0);
+            ui_set_next_fixed_x(0);
+            ui_set_next_fixed_y(0);
+            ui_set_next_parent(cont);
+            ui_slider(&panel->override_color.y, 0.0f, 1.0f, slider_color, str8_lit("G##color_g"));
+
+            cont = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, 0);
+            ui_set_next_fixed_x(0);
+            ui_set_next_fixed_y(0);
+            ui_set_next_parent(cont);
+            ui_slider(&panel->override_color.z, 0.0f, 1.0f, slider_color, str8_lit("B##color_b"));
+
+            cont = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, 0);
+            ui_set_next_fixed_x(0);
+            ui_set_next_fixed_y(0);
+            ui_set_next_parent(cont);
+            ui_slider(&panel->override_color.w, 0.0f, 1.0f, slider_color, str8_lit("A##color_a"));
+          }
+
+          if (last_color != panel->override_color) {
+            for (int i = 0; i < editor->selections.count; i++) {
+              Entity *e = editor->selections[i];
+              e->override_color = panel->override_color;
             }
           }
         }
@@ -1426,5 +1468,25 @@ internal void editor_present_ui() {
         sun->light_direction.z = strtof((char *)panel->sun_dir_field->fields[2]->buffer, nullptr); 
       }
     }
+
+    if (e->kind == ENTITY_SUN && key_down(OS_KEY_CONTROL) && key_pressed(OS_KEY_L)) {
+      Sun *sun = static_cast<Sun*>(e);
+      sun->light_direction = editor->camera.forward;
+    }
+  }
+
+  // Color Wheel
+  {
+    f32 widget_width = 200.0f;
+    f32 widget_height = 200.0f;
+    f32 x = g_viewport->dimension.x - widget_width;
+    f32 y = 600.0f;
+    ui_set_next_fixed_x(x);
+    ui_set_next_fixed_y(y);
+    ui_set_next_fixed_width(widget_width);
+    ui_set_next_fixed_height(widget_height);
+    ui_set_next_background_color(Vector4(0.0f, 0.0f, 0.0f, 1.0f));
+    UI_Box *widget = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND | UI_BOX_FLAG_CLICKABLE, str8_lit("##colorwheel"));
+    UI_Signal sig = ui_signal_from_box(widget);
   }
 }

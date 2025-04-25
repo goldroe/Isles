@@ -87,6 +87,8 @@ struct Entity_Panel {
   Entity_Field *color_field = nullptr;
   Entity_Field *theta_field = nullptr;
 
+  Vector4 override_color;
+
   //sun
   Entity_Field *sun_dir_field = nullptr;
 };
