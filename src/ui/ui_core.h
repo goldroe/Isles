@@ -181,7 +181,7 @@ struct UI_Vertex {
 
 struct UI_Draw_Batch {
   Font *font = nullptr;
-  Auto_Array<UI_Vertex> vertices = {};
+  Auto_Array<UI_Vertex> vertices;
 };
 
 struct UI_Draw_Bucket {

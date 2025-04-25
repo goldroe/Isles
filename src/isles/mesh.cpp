@@ -98,7 +98,7 @@ internal Triangle_Mesh *load_mesh(std::string file_name) {
           material_file_name = str8((u8 *)material_path.data(), material_path.size());
         }
 
-        Texture *texture = r_create_texture_from_file(material_file_name, TEXTURE_FLAG_GENERATE_MIPS);
+        Texture *texture = create_texture_from_file(material_file_name, TEXTURE_FLAG_GENERATE_MIPS);
         material->texture = texture;
       } else {
         logprint("Failed to load diffuse texture '%s'.\n", name.data);

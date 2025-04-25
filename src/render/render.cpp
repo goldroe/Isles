@@ -237,7 +237,28 @@ internal Blend_State *create_blend_state(D3D11_BLEND_DESC *desc) {
   return blend_state;
 }
 
-internal Texture *r_create_texture(u8 *data, DXGI_FORMAT format, int w, int h, int flags) {
+internal Depth_State *create_depth_state(D3D11_DEPTH_STENCIL_DESC *desc) {
+  Depth_State *depth_state = new Depth_State;
+  R_D3D11_State *d3d = r_d3d11_state();
+  HRESULT hr = d3d->device->CreateDepthStencilState(desc, &depth_state->resource);
+  return depth_state;
+}
+
+internal Rasterizer *create_rasterizer(D3D11_RASTERIZER_DESC *desc) {
+  Rasterizer *rasterizer = new Rasterizer;
+  R_D3D11_State *d3d = r_d3d11_state();
+  HRESULT hr = d3d->device->CreateRasterizerState(desc, &rasterizer->resource);
+  return rasterizer;
+}
+
+internal Sampler *create_sampler(D3D11_SAMPLER_DESC *desc) {
+  Sampler *sampler = new Sampler;
+  R_D3D11_State *d3d = r_d3d11_state();
+  HRESULT hr = d3d->device->CreateSamplerState(desc, &sampler->resource);
+  return sampler;
+}
+
+internal Texture *create_texture(u8 *data, DXGI_FORMAT format, int w, int h, int flags) {
   HRESULT hr = S_OK;
 
   UINT mip_levels = 1;
@@ -286,14 +307,14 @@ internal Texture *r_create_texture(u8 *data, DXGI_FORMAT format, int w, int h, i
   return texture;
 }
 
-internal Texture *r_create_texture_from_file(String8 file_name, int flags) {
+internal Texture *create_texture_from_file(String8 file_name, int flags) {
   int x, y, n;
   u8 *data = stbi_load((char *)file_name.data, &x, &y, &n, 4);
   if (!data) {
     logprint("Cannot load '%S'\n", file_name);
     return nullptr;
   }
-  Texture *texture = r_create_texture(data, DXGI_FORMAT_R8G8B8A8_UNORM, x, y, flags);
+  Texture *texture = create_texture(data, DXGI_FORMAT_R8G8B8A8_UNORM, x, y, flags);
   return texture;
 }
 
@@ -417,7 +438,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.FrontFace.StencilFailOp = desc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
     desc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
     desc.BackFace = desc.FrontFace;
-    d3d11_state->device->CreateDepthStencilState(&desc, &d3d11_state->depth_stencil_states[DEPTH_STATE_DEFAULT]);
+    depth_state_default = create_depth_state(&desc);
 
     desc = {};
     desc.DepthEnable = false;
@@ -427,7 +448,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.FrontFace.StencilFailOp = desc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
     desc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
     desc.BackFace = desc.FrontFace;
-    d3d11_state->device->CreateDepthStencilState(&desc, &d3d11_state->depth_stencil_states[DEPTH_STATE_DISABLE]);
+    depth_state_disable = create_depth_state(&desc);
 
     desc = {};
     desc.DepthEnable = true;
@@ -437,7 +458,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.FrontFace.StencilFailOp = desc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
     desc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
     desc.BackFace = desc.FrontFace;
-    d3d11_state->device->CreateDepthStencilState(&desc, &d3d11_state->depth_stencil_states[DEPTH_STATE_NO_WRITE]);
+    depth_state_no_write = create_depth_state(&desc);
   }
 
   //@Note Create rasterizer states
@@ -451,8 +472,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.ScissorEnable = false;
     desc.MultisampleEnable = true;
     desc.AntialiasedLineEnable = false;
-    d3d11_state->device->CreateRasterizerState(&desc, &d3d11_state->rasterizer_states[RASTERIZER_STATE_DEFAULT]);
-    rasterizer_cull_back = d3d11_state->rasterizer_states[RASTERIZER_STATE_DEFAULT];
+    rasterizer_default = create_rasterizer(&desc);
 
     desc = {};
     desc.FillMode = D3D11_FILL_SOLID;
@@ -463,7 +483,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.ScissorEnable = false;
     desc.MultisampleEnable = false;
     desc.AntialiasedLineEnable = false;
-    d3d11_state->device->CreateRasterizerState(&desc, &d3d11_state->rasterizer_states[RASTERIZER_STATE_NO_CULL]);
+    rasterizer_no_cull = create_rasterizer(&desc);
 
     desc = {};
     desc.FillMode = D3D11_FILL_SOLID;
@@ -474,18 +494,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.ScissorEnable = false;
     desc.MultisampleEnable = false;
     desc.AntialiasedLineEnable = false;
-    d3d11_state->device->CreateRasterizerState(&desc, &rasterizer_cull_front);
-
-    desc = {};
-    desc.FillMode = D3D11_FILL_SOLID;
-    desc.CullMode = D3D11_CULL_NONE;
-    desc.FrontCounterClockwise = true;
-    desc.DepthBias = 0;
-    desc.DepthClipEnable = false;
-    desc.ScissorEnable = false;
-    desc.MultisampleEnable = false;
-    desc.AntialiasedLineEnable = false;
-    d3d11_state->device->CreateRasterizerState(&desc, &d3d11_state->rasterizer_states[RASTERIZER_STATE_NO_CULL]);
+    rasterizer_cull_front = create_rasterizer(&desc);
 
     desc = {};
     desc.FillMode = D3D11_FILL_SOLID;
@@ -494,7 +503,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.DepthClipEnable = false;
     desc.FrontCounterClockwise = true;
     desc.MultisampleEnable = true;
-    d3d11_state->device->CreateRasterizerState(&desc, &d3d11_state->rasterizer_states[RASTERIZER_STATE_TEXT]);
+    rasterizer_text = create_rasterizer(&desc);
 
     desc = {};
     desc.FillMode = D3D11_FILL_WIREFRAME;
@@ -505,7 +514,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.FrontCounterClockwise = true;
     desc.MultisampleEnable = true;
     desc.AntialiasedLineEnable = false;
-    d3d11_state->device->CreateRasterizerState(&desc, &rasterizer_wireframe);
+    rasterizer_wireframe = create_rasterizer(&desc);
   }
 
   {
@@ -520,7 +529,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
     desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
     desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-    d3d11_state->device->CreateBlendState(&desc, &d3d11_state->blend_states[BLEND_STATE_DEFAULT]);
+    blend_state_default = create_blend_state(&desc);
 
     desc = {};
     desc.AlphaToCoverageEnable = false;
@@ -534,7 +543,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     // desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
     desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
     desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-    d3d11_state->device->CreateBlendState(&desc, &d3d11_state->blend_states[BLEND_STATE_ALPHA]);
+    blend_state_alpha = create_blend_state(&desc);
 
     desc = {};
     desc.AlphaToCoverageEnable = false;
@@ -561,6 +570,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.MaxLOD = D3D11_FLOAT32_MAX;
     desc.MipLODBias = 0;
     desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    sampler_linear = create_sampler(&desc);
 
     desc.Filter = D3D11_FILTER_ANISOTROPIC;
     desc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
@@ -571,8 +581,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.MaxLOD = D3D11_FLOAT32_MAX;
     desc.MipLODBias = 0;
     desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-
-    d3d11_state->device->CreateSamplerState(&desc, &d3d11_state->sampler_states[SAMPLER_STATE_LINEAR]);
+    sampler_anisotropic = create_sampler(&desc);
 
     desc = {};
     desc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
@@ -581,7 +590,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
     desc.MipLODBias = 0;
     desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-    d3d11_state->device->CreateSamplerState(&desc, &d3d11_state->sampler_states[SAMPLER_STATE_POINT]);
+    sampler_point = create_sampler(&desc);
   }
 
   {
@@ -589,7 +598,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
       0xFFFFFFFF, 0xFFFFFFFF,
       0xFFFFFFFF, 0xFFFFFFFF
     };
-    d3d11_state->fallback_tex = r_create_texture((u8 *)white_bitmap, DXGI_FORMAT_R8G8B8A8_UNORM, 2, 2, 0);
+    d3d11_state->fallback_tex = create_texture((u8 *)white_bitmap, DXGI_FORMAT_R8G8B8A8_UNORM, 2, 2, 0);
   }
 
   //@Note Compile shaders
@@ -639,13 +648,13 @@ internal void r_d3d11_initialize(HWND window_handle) {
   };
   shader_argb_texture = r_d3d11_make_shader(str8_lit("data/shaders/argb_texture.hlsl"), str8_lit("ARGB Texture"), argb_texture_ilay, ArrayCount(argb_texture_ilay), false);
 
-  D3D11_INPUT_ELEMENT_DESC rect_ilay[] = {
+  D3D11_INPUT_ELEMENT_DESC ui_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     { "STYLE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
-  shader_rect = r_d3d11_make_shader(str8_lit("data/shaders/rect.hlsl"), str8_lit("Rect"), rect_ilay, ArrayCount(rect_ilay), false);
+  shader_ui = r_d3d11_make_shader(str8_lit("data/shaders/rect.hlsl"), str8_lit("UI"), ui_ilay, ArrayCount(ui_ilay), false);
 
   D3D11_INPUT_ELEMENT_DESC picker_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -657,9 +666,14 @@ internal void r_d3d11_initialize(HWND window_handle) {
   };
   shader_shadow_map = r_d3d11_make_shader(str8_lit("data/shaders/shadow_map.hlsl"), str8_lit("ShadowMap"), shadowmap_ilay, ArrayCount(shadowmap_ilay), false);
 
-  sun_icon_texture = r_create_texture_from_file(str8_lit("data/textures/sun_icon.bmp"), 0);
-  eye_of_horus_texture = r_create_texture_from_file(str8_lit("data/textures/eye_of_horus.png"), 0);
-  flare_texture = r_create_texture_from_file(str8_lit("data/textures/flare0.png"), 0);
+  D3D11_INPUT_ELEMENT_DESC color_wheel_ilay[] = {
+    { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,  0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+  };
+  shader_color_wheel = r_d3d11_make_shader(str8_lit("data/shaders/color_wheel.hlsl"), str8_lit("Color Wheel"), color_wheel_ilay, ArrayCount(color_wheel_ilay), false);
+
+  sun_icon_texture = create_texture_from_file(str8_lit("data/textures/sun_icon.bmp"), 0);
+  eye_of_horus_texture = create_texture_from_file(str8_lit("data/textures/eye_of_horus.png"), 0);
+  flare_texture = create_texture_from_file(str8_lit("data/textures/flare0.png"), 0);
 }
 
 internal void r_d3d11_begin(OS_Handle window_handle) {
@@ -676,8 +690,7 @@ internal void r_d3d11_begin(OS_Handle window_handle) {
   viewport.MaxDepth = 1.0f;
   d3d11_state->device_context->RSSetViewports(1, &viewport);
 
-  d3d11_state->device_context->RSSetState(d3d11_state->rasterizer_states[RASTERIZER_STATE_DEFAULT]);
-
+  set_rasterizer(rasterizer_default);
   d3d11_state->device_context->ClearDepthStencilView((ID3D11DepthStencilView*)d3d11_state->default_render_target->depth_stencil_view, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
 
   d3d11_state->device_context->OMSetBlendState(nullptr, NULL, 0xffffffff);
@@ -919,14 +932,14 @@ internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, Sh
   compile_flags |= D3DCOMPILE_DEBUG;
   // #endif
 
-  hr = D3DCompile(contents.data, contents.count, (LPCSTR)program_name.data, NULL, NULL, "vs_main", "vs_5_0", compile_flags, 0, &vs_blob, &vs_error);
+  hr = D3DCompile(contents.data, contents.count, (LPCSTR)file_name.data, NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs_main", "vs_5_0", compile_flags, 0, &vs_blob, &vs_error);
   if (hr != S_OK) {
     compilation_success = false;
     logprint("Error compiling vertex shader %S\n", program_name);
     logprint("%s\n", vs_error->GetBufferPointer());
   }
     
-  hr = D3DCompile(contents.data, contents.count, (LPCSTR)program_name.data, NULL, NULL, "ps_main", "ps_5_0", compile_flags, 0, &ps_blob, &ps_error);
+  hr = D3DCompile(contents.data, contents.count, (LPCSTR)file_name.data, NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_main", "ps_5_0", compile_flags, 0, &ps_blob, &ps_error);
   if (hr != S_OK) {
     compilation_success = false;
     logprint("Error compiling pixel shader %S\n", program_name);
@@ -934,7 +947,7 @@ internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, Sh
   }
 
   if (shader->use_geometry_shader) {
-    hr = D3DCompile(contents.data, contents.count, (LPCSTR)program_name.data, NULL, NULL, "gs_main", "gs_5_0", compile_flags, 0, &gs_blob, &gs_error);
+    hr = D3DCompile(contents.data, contents.count, (LPCSTR)file_name.data, NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "gs_main", "gs_5_0", compile_flags, 0, &gs_blob, &gs_error);
     if (hr != S_OK) {
       compilation_success = false;
       logprint("Error compiling geometry shader %S\n", program_name);

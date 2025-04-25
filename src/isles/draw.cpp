@@ -1,13 +1,14 @@
 global Shader *shader_basic;
 global Shader *shader_mesh;
 global Shader *shader_entity;
-global Shader *shader_rect;
+global Shader *shader_ui;
 global Shader *shader_picker;
 global Shader *shader_shadow_map;
 global Shader *shader_argb_texture;
 global Shader *shader_skinned;
 global Shader *shader_skinned_shadow_map;
 global Shader *shader_particle;
+global Shader *shader_color_wheel;
 
 global Shader *current_shader;
 global Vertex_List immediate_vertices;
@@ -18,11 +19,25 @@ global Texture *sun_icon_texture;
 global Texture *eye_of_horus_texture;
 global Texture *flare_texture;
 
-global ID3D11RasterizerState *rasterizer_cull_back;
-global ID3D11RasterizerState *rasterizer_cull_front;
-global ID3D11RasterizerState *rasterizer_wireframe;
+global Depth_State *depth_state_default;
+global Depth_State *depth_state_disable;
+global Depth_State *depth_state_no_write;
 
+global Rasterizer *rasterizer_default;
+global Rasterizer *rasterizer_text;
+global Rasterizer *rasterizer_no_cull;
+global Rasterizer *rasterizer_cull_front;
+global Rasterizer *rasterizer_wireframe;
+
+global Blend_State *blend_state_default;
+global Blend_State *blend_state_alpha;
 global Blend_State *blend_state_additive;
+
+global Sampler *sampler_linear;
+global Sampler *sampler_point;
+global Sampler *sampler_anisotropic;
+
+global bool display_shadow_map;
 
 internal Shadow_Map *make_shadow_map(int width, int height) {
   R_D3D11_State *d3d = r_d3d11_state();
@@ -255,10 +270,8 @@ internal void set_constant(String8 name, f32 v) {
   write_shader_constant(current_shader, name, &v, sizeof(v));
 }
 
-internal void set_sampler(String8 name, Sampler_State_Kind sampler_kind) {
+internal void set_sampler(String8 name, Sampler *sampler) {
   R_D3D11_State *d3d = r_d3d11_state();
-
-  ID3D11SamplerState *sampler = d3d->sampler_states[sampler_kind];
 
   Shader_Bindings *bindings = current_shader->bindings;
   Shader_Loc *loc = nullptr;
@@ -276,25 +289,19 @@ internal void set_sampler(String8 name, Sampler_State_Kind sampler_kind) {
   }
 
   if (loc->vertex != -1) {
-    d3d->device_context->VSSetSamplers(loc->vertex, 1, &sampler);
+    d3d->device_context->VSSetSamplers(loc->vertex, 1, &sampler->resource);
   }
   if (loc->pixel != -1) {
-    d3d->device_context->PSSetSamplers(loc->pixel, 1, &sampler);
+    d3d->device_context->PSSetSamplers(loc->pixel, 1, &sampler->resource);
   }
   if (loc->geo != -1) {
-    d3d->device_context->PSSetSamplers(loc->geo, 1, &sampler);
+    d3d->device_context->PSSetSamplers(loc->geo, 1, &sampler->resource);
   }
 }
 
-internal void set_rasterizer_state(Rasterizer_State_Kind rasterizer_kind) {
+internal void set_rasterizer(Rasterizer *rasterizer) {
   R_D3D11_State *d3d = r_d3d11_state();
-  ID3D11RasterizerState *rasterizer_state = d3d->rasterizer_states[rasterizer_kind];
-  d3d->device_context->RSSetState(rasterizer_state);
-}
-
-internal void set_rasterizer(ID3D11RasterizerState *rasterizer) {
-  R_D3D11_State *d3d = r_d3d11_state();
-  d3d->device_context->RSSetState(rasterizer);
+  d3d->device_context->RSSetState(rasterizer->resource);
 }
 
 internal void set_blend_state(Blend_State *blend_state) {
@@ -302,16 +309,13 @@ internal void set_blend_state(Blend_State *blend_state) {
   d3d->device_context->OMSetBlendState(blend_state->resource, NULL, 0xFFFFFFF);
 }
 
-internal void set_blend_state(Blend_State_Kind blend_state_kind) {
-  R_D3D11_State *d3d = r_d3d11_state();
-  ID3D11BlendState *blend_state = d3d->blend_states[blend_state_kind];
-  d3d->device_context->OMSetBlendState(blend_state, NULL, 0xFFFFFFF);
+internal void reset_blend_state() {
+  set_blend_state(blend_state_default);
 }
 
-internal void set_depth_state(Depth_State_Kind depth_state_kind) {
+internal void set_depth_state(Depth_State *depth_state) {
   R_D3D11_State *d3d = r_d3d11_state();
-  ID3D11DepthStencilState *depth_state = d3d->depth_stencil_states[depth_state_kind];
-  d3d->device_context->OMSetDepthStencilState(depth_state, 0);
+  d3d->device_context->OMSetDepthStencilState(depth_state->resource, 0);
 }
 
 internal void set_render_target(Render_Target *render_target) {
@@ -334,10 +338,6 @@ internal void set_viewport(f32 left, f32 top, f32 right, f32 bottom) {
 internal void reset_viewport() {
   R_D3D11_State *d3d = r_d3d11_state();
   set_viewport(0, 0, (f32)d3d->window_dimension.x, (f32)d3d->window_dimension.y);
-}
-
-internal void reset_blend_state() {
-  set_blend_state(BLEND_STATE_DEFAULT);
 }
 
 internal inline void grow_immediate_vertices(u64 min_capacity) {
@@ -431,7 +431,6 @@ internal void draw_mesh(Triangle_Mesh *mesh) {
   }
 }
 
-
 internal void draw_mirror_reflection() {
   Entity_Manager *manager = get_entity_manager();
   Guy *guy = manager->by_type._Guy[0];
@@ -444,7 +443,7 @@ internal void draw_mirror_reflection() {
 
   // set_shader(shader_mesh);
 
-  // set_blend_state(BLEND_STATE_ALPHA);
+  // set_blend_state(blend_state_alpha);
   // set_depth_state(DEPTH_STATE_DEFAULT);
 
   f32 dist = Abs(distance(mirror->position, guy->position));
@@ -489,7 +488,6 @@ internal void draw_mirror_reflection() {
 
   //   draw_mesh(guy->mesh);
   // }
-
 }
 
 internal void draw_scene() {
@@ -514,19 +512,20 @@ internal void draw_scene() {
     camera = game_state->camera;
   }
 
+  Matrix4 projection = ortho_rh_zo(0.0f, (f32)d3d->window_dimension.x, 0.f, (f32)d3d->window_dimension.y);
+
   // @Note Shadow mapping
   Sun *sun = manager->by_type._Sun.count ? manager->by_type._Sun[0] : 0;
   if (sun) {
     set_viewport(0, 0, (f32)shadow_map->texture->width, (f32)shadow_map->texture->height);
-    set_depth_state(DEPTH_STATE_DEFAULT);
-    set_rasterizer(rasterizer_cull_front);
+    set_depth_state(depth_state_default);
+    set_rasterizer(rasterizer_default);
     d3d->device_context->OMSetRenderTargets(0, nullptr, shadow_map->depth_stencil_view);
     d3d->device_context->ClearDepthStencilView(shadow_map->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     set_shader(shader_shadow_map);
 
     bind_uniform(shader_shadow_map, str8_lit("Constants"));
-    // Shader_Uniform *shadow_map_uniform = shader_shadow_map->bindings->lookup_uniform(str8_lit("Constants"));
 
     for (Entity *entity : manager->entities) {
       Triangle_Mesh *mesh = entity->mesh;
@@ -569,9 +568,9 @@ internal void draw_scene() {
     reset_viewport();
   }
 
-  set_depth_state(DEPTH_STATE_DEFAULT);
-  set_blend_state(BLEND_STATE_DEFAULT);
-  set_rasterizer_state(RASTERIZER_STATE_DEFAULT);
+  set_depth_state(depth_state_default);
+  set_blend_state(blend_state_default);
+  set_rasterizer(rasterizer_default);
   set_render_target(d3d->default_render_target);
 
   draw_world(world, camera);
@@ -580,7 +579,7 @@ internal void draw_scene() {
     draw_mirror_reflection();
   }
 
-  set_depth_state(DEPTH_STATE_NO_WRITE);
+  set_depth_state(depth_state_no_write);
 
   set_blend_state(blend_state_additive);
 
@@ -590,8 +589,8 @@ internal void draw_scene() {
 
     set_shader(shader_particle);
     bind_uniform(shader_particle, str8_lit("Constants"));
-    set_texture(str8_lit("diffuse_texture"), flare_texture);
-    set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
+    set_texture(str8_lit("diffuse_texture"), sun_icon_texture);
+    set_sampler(str8_lit("diffuse_sampler"), sampler_linear);
     d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
 
     set_constant(str8_lit("camera_position"), camera.origin);
@@ -614,26 +613,49 @@ internal void draw_scene() {
     delete [] points;
   }
 
-  set_depth_state(DEPTH_STATE_DEFAULT);
+  set_depth_state(depth_state_default);
 
   reset_blend_state();
   reset_primitives();
 
-  // Shadow map
   if (0) {
+    set_shader(shader_color_wheel);
+    bind_uniform(shader_color_wheel, str8_lit("Constants"));
+    set_constant(str8_lit("projection"), projection);
+    set_constant(str8_lit("radius"), 250.0f);
+    set_constant(str8_lit("center"), Vector2(400.0f, 400.0f));
+    apply_constants();
+
+    Rect rect = make_rect(-0.5f, -0.5f, 1.0f, 1.0f);
+    Vector2 vertices[6];
+    vertices[0] = Vector2(rect.x0, rect.y0);
+    vertices[1] = Vector2(rect.x1, rect.y0);
+    vertices[2] = Vector2(rect.x1, rect.y1);
+    vertices[3] = Vector2(rect.x0, rect.y0);
+    vertices[4] = Vector2(rect.x1, rect.y1);
+    vertices[5] = Vector2(rect.x0, rect.y1);
+    ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices, 6, sizeof(Vector2));
+    uint stride = sizeof(Vector2), offset = 0;
+    d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+    d3d->device_context->Draw(6, 0);
+    vertex_buffer->Release();
+  }
+
+  // Shadow map
+  if (display_shadow_map) {
     Vector2 dim = get_viewport()->dimension;
     immediate_begin();
     set_shader(shader_argb_texture);
-    set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_POINT);
-    set_depth_state(DEPTH_STATE_DISABLE);
-    set_blend_state(BLEND_STATE_ALPHA);
-    set_rasterizer_state(RASTERIZER_STATE_TEXT);
+    set_sampler(str8_lit("diffuse_sampler"), sampler_point);
+    set_depth_state(depth_state_disable);
+    set_blend_state(blend_state_alpha);
+    set_rasterizer(rasterizer_text);
 
     bind_uniform(shader_argb_texture, str8_lit("Constants"));
     immediate_quad(shadow_map->texture,
       Vector2(0.0f, 0.0f), Vector2(dim.x, 0.0f), Vector2(dim.x, dim.y), Vector2(0.0f, dim.y),
       Vector2(0.0f, 1.0f), Vector2(1.0f, 1.0f), Vector2(1.0f, 0.0f), Vector2(0.0f, 0.0f),
-      Vector4(1.0f, 1.0f, 1.0f, 0.4f));
+      Vector4(1.0f, 1.0f, 1.0f, 1.0f));
     reset_texture(str8_lit("diffuse_texture"));
   }
 }
@@ -650,15 +672,17 @@ internal void draw_world(World *world, Camera camera) {
 
   set_shader(shader_entity);
 
-  // Shader_Uniform *uniform = shader_entity->bindings->lookup_uniform(str8_lit("Constants"));
   bind_uniform(shader_entity, str8_lit("Constants"));
 
   set_texture(str8_lit("shadow_map"), shadow_map->texture);
-  set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
-  set_sampler(str8_lit("point_sampler"), SAMPLER_STATE_POINT);
+  set_sampler(str8_lit("diffuse_sampler"), sampler_anisotropic);
+  set_sampler(str8_lit("shadow_sampler"), sampler_point);
   set_constant(str8_lit("light_direction"), light_direction);
   set_constant(str8_lit("light_view_projection"), light_space);
   set_constant(str8_lit("light_color"), light_color);
+
+  Matrix4 depth_bias = translate(0.5f, 0.5f, 0.0f) * scale(0.5, -0.5, 1.0);
+  // set_constant(str8_lit("depth_bias_wvp"), depth_bias);
 
   for (Entity *entity : manager->entities) {
     if (entity->kind == ENTITY_GUY) continue; //temp
@@ -688,17 +712,28 @@ internal void draw_world(World *world, Camera camera) {
     if (!animation_state) continue;
 
     set_shader(shader_skinned);
-    set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
-
     bind_uniform(shader_skinned, str8_lit("Constants"));
+
+    set_sampler(str8_lit("diffuse_sampler"), sampler_linear);
+    set_sampler(str8_lit("shadow_sampler"), sampler_linear);
+    set_texture(str8_lit("shadow_map"), shadow_map->texture);
 
     Matrix4 rotation_matrix = rotate_rh(guy->theta, camera.up);
     Matrix4 world_matrix = translate(guy->visual_position) * translate(guy->offset) * rotation_matrix;
     Matrix4 xform = camera.transform * world_matrix;
 
+    Sun *sun = manager->by_type._Sun.count ? manager->by_type._Sun[0] : 0;
+    Matrix4 light_space = sun ? sun->light_space_matrix : make_matrix4(1.0f);
+    Vector3 light_direction = sun ? sun->light_direction : Vector3(0, 0, 0);
+    Vector4 light_color = sun ? sun->override_color : make_vec4(1.0f);
+
     Vector4 color = guy->use_override_color ? make_vec4(1.0f) : guy->override_color;
-    set_constant(str8_lit("color"), color);
     set_constant(str8_lit("xform"), xform);
+    set_constant(str8_lit("world"), world_matrix);
+    set_constant(str8_lit("color"), color);
+    set_constant(str8_lit("light_color"), light_color);
+    set_constant(str8_lit("light_direction"), light_direction);
+    set_constant(str8_lit("light_view_projection"), light_space);
     set_constant_array(str8_lit("bone_matrices"), animation_state->bone_transforms, sizeof(Matrix4), MAX_BONES);
     apply_constants();
 
@@ -714,7 +749,6 @@ internal void draw_world(World *world, Camera camera) {
       d3d->device_context->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
     }
   }
-
 }
 
 internal inline ARGB argb_from_vector(Vector4 color) {
@@ -724,7 +758,7 @@ internal inline ARGB argb_from_vector(Vector4 color) {
   argb |= (u32)(color.y*255) << 16;
   argb |= (u32)(color.z*255) << 24;
   return argb;
-} 
+}
 
 internal void imm_quad_vertex(Vector2 p, Vector2 uv, ARGB argb) {
   Vertex_ARGB v;

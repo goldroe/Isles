@@ -844,13 +844,10 @@ internal void draw_ui_box(UI_Box *box) {
   UI_Draw_Batch *batch = nullptr;
   if (bucket->batches.count) {
     batch = bucket->batches.back();
-  } else {
-    batch = draw_ui_new_batch();
-    batch->font = box->font;
   }
 
-  if (batch->font != box->font) {
-    batch = draw_ui_new_batch();
+  if (bucket->batches.count == 0 || batch->font != box->font) {
+    batch = draw_ui_new_batch(); 
     batch->font = box->font;
   }
 
@@ -863,7 +860,6 @@ internal void draw_ui_box(UI_Box *box) {
     draw_ui_rect(batch, box->rect, hot_color);
   }
 
-
   if (box->flags & UI_BOX_FLAG_DRAW_BORDER) {
     draw_ui_border(batch, box->rect, box->border_color);
   }
@@ -871,11 +867,9 @@ internal void draw_ui_box(UI_Box *box) {
   Vector2 text_position = ui_box_text_position(box);
   if (box->font) draw_ui_text(batch, box->text, box->font, box->text_color, text_position, box->rect.br);
 
-
   if (box->custom_draw_proc) {
     box->custom_draw_proc(box, box->custom_draw_data);
   }
-
 
   for (UI_Box *child = box->first; child; child = child->next) {
     draw_ui_box(child);
@@ -892,7 +886,7 @@ internal void draw_ui_layout() {
 
   UI_Draw_Bucket *bucket = ui_g_state->draw_bucket;
 
-  set_shader(shader_rect);
+  set_shader(shader_ui);
   d3d11_state->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
   bind_uniform(current_shader, str8_lit("Constants"));
@@ -903,11 +897,11 @@ internal void draw_ui_layout() {
   set_constant(str8_lit("xform"), projection);
   apply_constants();
   
-  set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_POINT);
+  set_sampler(str8_lit("diffuse_sampler"), sampler_point);
 
-  set_depth_state(DEPTH_STATE_DISABLE);
-  set_blend_state(BLEND_STATE_ALPHA);
-  set_rasterizer_state(RASTERIZER_STATE_TEXT);
+  set_depth_state(depth_state_disable);
+  set_blend_state(blend_state_alpha);
+  set_rasterizer(rasterizer_text);
 
   for (int i = 0; i < bucket->batches.count; i++) {
     UI_Draw_Batch *batch = bucket->batches[i];
