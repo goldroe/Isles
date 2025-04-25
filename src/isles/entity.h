@@ -15,11 +15,11 @@ enum Entity_Flags : u64 {
   ENTITY_FLAG_NIL = 0,
   ENTITY_FLAG_STATIC   = (1<<0),
   ENTITY_FLAG_PUSHABLE = (1<<1),
-  ENTITY_FLAG_INVISLBE = (1<<2),
+  ENTITY_FLAG_INVISIBLE = (1<<2),
 };
 EnumDefineFlagOperators(Entity_Flags);
 
-Entity_Flags entity_flag_array[] = { ENTITY_FLAG_PUSHABLE, ENTITY_FLAG_STATIC, };
+Entity_Flags entity_flag_array[] = { ENTITY_FLAG_PUSHABLE, ENTITY_FLAG_STATIC, ENTITY_FLAG_INVISIBLE, };
 
 struct Animation_State {
   f32 t = 0;

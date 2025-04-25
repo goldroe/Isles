@@ -596,6 +596,10 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
   }
 
 
+  if (key_pressed(OS_KEY_F9)) {
+    display_shadow_map = !display_shadow_map;
+  }
+
   if (!game_state->editing) {
     draw_scene();
   }

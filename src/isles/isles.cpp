@@ -60,6 +60,8 @@ internal char *string_from_entity_kind(Entity_Kind kind) {
     return "Mirror";
   case ENTITY_SUN:
     return "Sun";
+  case ENTITY_PARTICLE_SOURCE:
+    return "Particle_Source";
   } 
 }
 
@@ -71,6 +73,8 @@ internal char *string_from_entity_flag(Entity_Flags flags) {
     return "PUSHABLE";
   case ENTITY_FLAG_STATIC:
     return "STATIC";
+  case ENTITY_FLAG_INVISIBLE:
+    return "INVISIBLE";
   }
 }
 
@@ -260,7 +264,7 @@ internal void init_game() {
   game_state->editing = false;
 
   Arena *temp = make_arena(get_malloc_allocator());
-  default_font = load_font(temp, str8_lit("data/fonts/seguisb.ttf"), 18);
+  default_font = load_font(temp, str8_lit("data/fonts/seguisb.ttf"), 16);
   default_fonts[FONT_DEFAULT] = default_font;
 
   Font *icon_font;
@@ -340,7 +344,7 @@ internal void init_game() {
 
   game_state->camera.update_euler_angles(-PI * 0.5f, 0.0f);
 
-  load_world(str8_lit("test.lvl"));
+  load_world(str8_lit("1.lvl"));
 
   g_viewport = new Viewport();
   g_viewport->dimension.x = 1;
