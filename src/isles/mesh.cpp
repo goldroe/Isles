@@ -24,6 +24,20 @@ internal inline Matrix4 to_matrix4(aiMatrix4x4 m) {
   return M;
 }
 
+internal void mesh_gen_vertex_buffer(Triangle_Mesh *mesh) {
+  Auto_Array<Vertex_XNCUU> vertices;
+  vertices.reserve(mesh->vertices.count);
+  for (int i = 0; i < mesh->vertices.count; i++) {
+    Vertex_XNCUU vertex;
+    vertex.position = mesh->vertices[i];
+    vertex.normal = mesh->normals[i];
+    vertex.color = Vector4(1, 1, 1, 1);
+    vertex.uv = mesh->uvs[i];
+    vertices.push(vertex);
+  }
+  mesh->vertex_buffer = make_vertex_buffer(vertices.data, vertices.count, sizeof(Vertex_XNCUU));
+}
+
 internal Triangle_Mesh *load_mesh(std::string file_name) {
   u32 import_flags = aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals;
 
@@ -108,17 +122,19 @@ internal Triangle_Mesh *load_mesh(std::string file_name) {
     mesh->materials.push(material);
   }
 
-  Auto_Array<Vertex_XNCUU> vertices;
-  vertices.reserve(mesh->vertices.count);
-  for (int i = 0; i < mesh->vertices.count; i++) {
-    Vertex_XNCUU vertex;
-    vertex.position = mesh->vertices[i];
-    vertex.normal = mesh->normals[i];
-    vertex.color = Vector4(1, 1, 1, 1);
-    vertex.uv = mesh->uvs[i];
-    vertices.push(vertex);
-  }
-  mesh->vertex_buffer = make_vertex_buffer(vertices.data, vertices.count, sizeof(Vertex_XNCUU));
+  mesh_gen_vertex_buffer(mesh);
+
+  // Auto_Array<Vertex_XNCUU> vertices;
+  // vertices.reserve(mesh->vertices.count);
+  // for (int i = 0; i < mesh->vertices.count; i++) {
+  //   Vertex_XNCUU vertex;
+  //   vertex.position = mesh->vertices[i];
+  //   vertex.normal = mesh->normals[i];
+  //   vertex.color = Vector4(1, 1, 1, 1);
+  //   vertex.uv = mesh->uvs[i];
+  //   vertices.push(vertex);
+  // }
+  // mesh->vertex_buffer = make_vertex_buffer(vertices.data, vertices.count, sizeof(Vertex_XNCUU));
 
   //@Note Animation
 
@@ -276,17 +292,17 @@ internal void set_vertex_bone_data(Vertex_Skinned *vertex, int bone_id, f32 weig
   }
 }
 
-internal Triangle_Mesh *generate_plane_mesh(Vector2 size) {
+internal Triangle_Mesh *gen_plane_mesh(Vector2 size) {
   Vector2 half_size = 0.5f * size;
 
   Triangle_Mesh *mesh = new Triangle_Mesh();
 
-  mesh->vertices.push(Vector3(-half_size.x,  0.0f, -half_size.y));
-  mesh->vertices.push(Vector3(half_size.x,   0.0f, -half_size.y));
-  mesh->vertices.push(Vector3(half_size.x,   0.0f, half_size.y));
-  mesh->vertices.push(Vector3(-half_size.x,  0.0f, -half_size.y));
-  mesh->vertices.push(Vector3(half_size.x,   0.0f, half_size.y));
   mesh->vertices.push(Vector3(-half_size.x,  0.0f, half_size.y));
+  mesh->vertices.push(Vector3(half_size.x,   0.0f, half_size.y));
+  mesh->vertices.push(Vector3(half_size.x,   0.0f, -half_size.y));
+  mesh->vertices.push(Vector3(-half_size.x,  0.0f, half_size.y));
+  mesh->vertices.push(Vector3(half_size.x,   0.0f, -half_size.y));
+  mesh->vertices.push(Vector3(-half_size.x,  0.0f, -half_size.y));
 
   mesh->normals.push(Vector3(0.0f, 1.0f, 0.0f));
   mesh->normals.push(Vector3(0.0f, 1.0f, 0.0f));
@@ -295,12 +311,74 @@ internal Triangle_Mesh *generate_plane_mesh(Vector2 size) {
   mesh->normals.push(Vector3(0.0f, 1.0f, 0.0f));
   mesh->normals.push(Vector3(0.0f, 1.0f, 0.0f));
 
-  mesh->uvs.push((Vector2(0.0f, 0.0f)));
-  mesh->uvs.push((Vector2(1.0f, 0.0f)));
-  mesh->uvs.push((Vector2(1.0f, 1.0f)));
-  mesh->uvs.push((Vector2(0.0f, 0.0f)));
-  mesh->uvs.push((Vector2(1.0f, 1.0f)));
   mesh->uvs.push((Vector2(0.0f, 1.0f)));
+  mesh->uvs.push((Vector2(1.0f, 1.0f)));
+  mesh->uvs.push((Vector2(1.0f, 0.0f)));
+  mesh->uvs.push((Vector2(0.0f, 1.0f)));
+  mesh->uvs.push((Vector2(1.0f, 0.0f)));
+  mesh->uvs.push((Vector2(0.0f, 0.0f)));
+
+  mesh_gen_vertex_buffer(mesh);
+
+  return mesh;
+}
+
+internal Triangle_Mesh *gen_cube_mesh() {
+  Triangle_Mesh *mesh = new Triangle_Mesh;
+
+  f32 vertices[] = {
+    // positions          
+    -1.0f,  1.0f, -1.0f,
+    -1.0f, -1.0f, -1.0f,
+    1.0f, -1.0f, -1.0f,
+    1.0f, -1.0f, -1.0f,
+    1.0f,  1.0f, -1.0f,
+    -1.0f,  1.0f, -1.0f,
+
+    -1.0f, -1.0f,  1.0f,
+    -1.0f, -1.0f, -1.0f,
+    -1.0f,  1.0f, -1.0f,
+    -1.0f,  1.0f, -1.0f,
+    -1.0f,  1.0f,  1.0f,
+    -1.0f, -1.0f,  1.0f,
+
+    1.0f, -1.0f, -1.0f,
+    1.0f, -1.0f,  1.0f,
+    1.0f,  1.0f,  1.0f,
+    1.0f,  1.0f,  1.0f,
+    1.0f,  1.0f, -1.0f,
+    1.0f, -1.0f, -1.0f,
+
+    -1.0f, -1.0f,  1.0f,
+    -1.0f,  1.0f,  1.0f,
+    1.0f,  1.0f,  1.0f,
+    1.0f,  1.0f,  1.0f,
+    1.0f, -1.0f,  1.0f,
+    -1.0f, -1.0f,  1.0f,
+
+    -1.0f,  1.0f, -1.0f,
+    1.0f,  1.0f, -1.0f,
+    1.0f,  1.0f,  1.0f,
+    1.0f,  1.0f,  1.0f,
+    -1.0f,  1.0f,  1.0f,
+    -1.0f,  1.0f, -1.0f,
+
+    -1.0f, -1.0f, -1.0f,
+    -1.0f, -1.0f,  1.0f,
+    1.0f, -1.0f, -1.0f,
+    1.0f, -1.0f, -1.0f,
+    -1.0f, -1.0f,  1.0f,
+    1.0f, -1.0f,  1.0f
+  };
+
+  for (int i = 0; i < ArrayCount(vertices); i += 3) {
+    Vector3 v = Vector3(vertices[i], vertices[i + 1], vertices[i + 2]);
+    mesh->vertices.push(v);
+    mesh->normals.push(v);
+    mesh->uvs.push(Vector2());
+  }
+
+  mesh_gen_vertex_buffer(mesh);
 
   return mesh;
 }

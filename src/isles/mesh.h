@@ -100,6 +100,7 @@ internal void set_vertex_bone_data(Vertex_Skinned *vertex, int bone_id, f32 weig
 internal void read_animation(const aiScene *scene, Triangle_Mesh *mesh);
 internal void read_animation_node(aiNode *node, Animation_Node *anim_node);
 
-internal Triangle_Mesh *generate_plane_mesh(Vector2 size);
+internal Triangle_Mesh *gen_plane_mesh(Vector2 size);
+internal Triangle_Mesh *gen_cube_mesh();
 
 #endif // MESH_H
