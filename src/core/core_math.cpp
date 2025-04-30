@@ -44,6 +44,30 @@ internal inline Vector3Int to_vec3i(Vector3 v) {
   return result;
 }
 
+internal inline Vector3 vec3_up() {
+  return Vector3(0, 1, 0);
+}
+
+internal inline Vector3 vec3_down() {
+  return Vector3(0, -1, 0);
+}
+
+internal inline Vector3 vec3_left() {
+  return Vector3(-1, 0, 0);
+}
+
+internal inline Vector3 vec3_right() {
+  return Vector3(1, 0, 0);
+}
+
+internal inline Vector3 vec3_forward() {
+  return Vector3(0, 1, 0);
+}
+
+internal inline Vector3 vec3_backward() {
+  return Vector3(0, -1, 0);
+}
+
 internal inline bool operator==(Vector2 a, Vector2 b) {
   return a.x == b.x &&
       a.y == b.y;
@@ -832,16 +856,16 @@ internal inline Matrix4 ortho_rh_zo(f32 left, f32 right, f32 bottom, f32 top, f3
   Matrix4 result = make_matrix4(1.0f);
   result._00 = static_cast<f32>(2) / (right - left);
   result._11 = static_cast<f32>(2) / (top - bottom);
-  result._30 = -(right + left) / (right - left);
-  result._31 = -(top + bottom) / (top - bottom);
 // #if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
 #if 1
-  result._22 = -1.0f / (far - near);
-  result._32 = -near / (far - near);
+  result._22 = -1.0f / (far-near);
+  result._32 = -near / (far-near);
 #else
-  result._22 = -2.0f / (far - near);
-  result._32 = -(far + near) / (far - near);
+  result._22 = -2.0f / (far-near);
+  result._32 = -(far+near) / (far-near);
 #endif
+  // result._30 = -(right+left) / (right-left);
+  // result._31 = -(top+bottom) / (top-bottom);
   return result;
 }
 
