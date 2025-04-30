@@ -9,11 +9,13 @@ global Shader *shader_skinned;
 global Shader *shader_skinned_shadow_map;
 global Shader *shader_particle;
 global Shader *shader_color_wheel;
+global Shader *shader_water;
+global Shader *shader_skybox;
 
 global Shader *current_shader;
 global Vertex_List immediate_vertices;
 
-global Shadow_Map *shadow_map;
+global Depth_Map *shadow_map;
 
 global Texture *sun_icon_texture;
 global Texture *eye_of_horus_texture;
@@ -22,8 +24,10 @@ global Texture *flare_texture;
 global Depth_State *depth_state_default;
 global Depth_State *depth_state_disable;
 global Depth_State *depth_state_no_write;
+global Depth_State *depth_state_skybox;
 
 global Rasterizer *rasterizer_default;
+global Rasterizer *rasterizer_shadow_map;
 global Rasterizer *rasterizer_text;
 global Rasterizer *rasterizer_no_cull;
 global Rasterizer *rasterizer_cull_front;
@@ -36,10 +40,25 @@ global Blend_State *blend_state_additive;
 global Sampler *sampler_linear;
 global Sampler *sampler_point;
 global Sampler *sampler_anisotropic;
+global Sampler *sampler_skybox;
 
 global bool display_shadow_map;
 
-internal Shadow_Map *make_shadow_map(int width, int height) {
+global Triangle_Mesh *water_plane_mesh;
+
+global Render_Target *reflection_render_target;
+global Render_Target *refraction_render_target;
+
+global Depth_Map *refraction_depth_map;
+
+global Triangle_Mesh *skybox_mesh;
+global Texture *skybox_texture;
+
+global Texture *water_dudv_texture;
+global Texture *water_normal_map;
+global f32 move_factor;
+
+internal Depth_Map *make_depth_map(int width, int height) {
   R_D3D11_State *d3d = r_d3d11_state();
 
   D3D11_TEXTURE2D_DESC desc = {};
@@ -80,8 +99,7 @@ internal Shadow_Map *make_shadow_map(int width, int height) {
   texture->format = desc.Format;
   texture->view = srv;
 
-  Shadow_Map *map = new Shadow_Map();
-  map->tex2d = tex2d;
+  Depth_Map *map = new Depth_Map();
   map->depth_stencil_view = depth_stencil_view;
   map->texture = texture;
   return map;
@@ -89,23 +107,28 @@ internal Shadow_Map *make_shadow_map(int width, int height) {
 
 internal void set_shader(Shader *shader) {
   R_D3D11_State *d3d = r_d3d11_state();
+
   if (shader != current_shader) {
     current_shader = shader;
 
-    ID3D11VertexShader *vs = nullptr;
-    ID3D11PixelShader *ps = nullptr;
-    ID3D11GeometryShader *gs = nullptr;
-    ID3D11InputLayout *ilay = nullptr;
-    if (shader) {
-      vs = shader->vertex_shader;
-      ps = shader->pixel_shader;
-      gs = shader->geometry_shader;
-      ilay = shader->input_layout;
+    d3d->device_context->VSSetShader(shader->vertex_shader, nullptr, 0);
+    d3d->device_context->PSSetShader(shader->pixel_shader, nullptr, 0);
+    d3d->device_context->GSSetShader(shader->geometry_shader, nullptr, 0);
+    d3d->device_context->IASetInputLayout(shader->input_layout);
+
+    for (int i = 0; i < shader->bindings->uniforms.count; i++) {
+      Shader_Uniform *uniform = shader->bindings->uniforms[i];
+      Shader_Loc *loc = &shader->bindings->uniform_locations[i];
+      if (loc->vertex != -1) {
+        d3d->device_context->VSSetConstantBuffers(loc->vertex, 1, &uniform->buffer);
+      }
+      if (loc->pixel != -1) {
+        d3d->device_context->PSSetConstantBuffers(loc->pixel, 1, &uniform->buffer);
+      }
+      if (loc->geo != -1) {
+        d3d->device_context->GSSetConstantBuffers(loc->geo, 1, &uniform->buffer);
+      }
     }
-    d3d->device_context->VSSetShader(vs, nullptr, 0);
-    d3d->device_context->PSSetShader(ps, nullptr, 0);
-    d3d->device_context->GSSetShader(gs, nullptr, 0);
-    d3d->device_context->IASetInputLayout(ilay);
   }
 }
 
@@ -116,101 +139,103 @@ internal void reset_primitives() {
 
 internal void reset_texture(String8 name) {
   R_D3D11_State *d3d = r_d3d11_state();
-
-  Shader_Bindings *bindings = current_shader->bindings;
-  Shader_Loc *loc = nullptr;
-  for (int i = 0; i < bindings->texture_locations.count; i++) {
-    loc = &bindings->texture_locations[i];
-    if (str8_equal(name, loc->name)) {
-      break;
-    }
-    loc = nullptr;
-  }
-
-  if (!loc) return;
-
-  ID3D11ShaderResourceView *null_srv[1] = {nullptr};
-  if (loc->vertex != -1) {
-    d3d->device_context->VSSetShaderResources(loc->vertex, 1, null_srv);
-  }
-  if (loc->pixel != -1) {
-    d3d->device_context->PSSetShaderResources(loc->pixel, 1, null_srv);
-  }
-  if (loc->geo != -1) {
-    d3d->device_context->PSSetShaderResources(loc->geo, 1, null_srv);
-  }
-}
-
-internal void set_texture(String8 name, Texture *texture) {
-  R_D3D11_State *d3d = r_d3d11_state();
-
-  Shader_Bindings *bindings = current_shader->bindings;
-  Shader_Loc *loc = nullptr;
-  for (int i = 0; i < bindings->texture_locations.count; i++) {
-    loc = &bindings->texture_locations[i];
-    if (str8_equal(name, loc->name)) {
-      break;
-    }
-    loc = nullptr;
-  }
-
-  if (!loc) {
-    logprint("Could not find texture '%S'\n", name);
-    return;
-  }
-
-  ID3D11ShaderResourceView *view = texture ? (ID3D11ShaderResourceView *)texture->view : (ID3D11ShaderResourceView *)d3d->fallback_tex->view;
-  if (loc->vertex != -1) {
-    d3d->device_context->VSSetShaderResources(loc->vertex, 1, &view);
-  }
-  if (loc->pixel != -1) {
-    d3d->device_context->PSSetShaderResources(loc->pixel, 1, &view);
-  }
-  if (loc->geo != -1) {
-    d3d->device_context->PSSetShaderResources(loc->geo, 1, &view);
-  }
-}
-
-internal void bind_uniform(Shader *shader, String8 name) {
-  R_D3D11_State *d3d = r_d3d11_state();
-
+  Shader *shader = current_shader;
   Shader_Bindings *bindings = shader->bindings;
   Shader_Loc *loc = nullptr;
-  for (int i = 0; i < bindings->uniform_locations.count; i++) {
-    loc = &bindings->uniform_locations[i];
+  for (int i = 0; i < bindings->texture_locations.count; i++) {
+    loc = &bindings->texture_locations[i];
     if (str8_equal(name, loc->name)) {
       break;
     }
     loc = nullptr;
   }
 
-  Shader_Uniform *uniform = nullptr;
-  for (int i = 0; i < bindings->uniforms.count; i++) {
-    uniform = bindings->uniforms[i];
-    if (str8_equal(name, uniform->name)) {
-      break;
+  if (loc) {
+    ID3D11ShaderResourceView *null_srv[1] = {nullptr};
+    if (loc->vertex != -1) {
+      d3d->device_context->VSSetShaderResources(loc->vertex, 1, null_srv);
     }
-    uniform = nullptr;
-  }
-
-  if (!uniform || !loc) {
-    logprint("Could not find uniform '%S'\n", name);
-    return;
-  }
-
-  if (loc->vertex != -1) {
-    d3d->device_context->VSSetConstantBuffers(loc->vertex, 1, &uniform->buffer);
-  }
-  if (loc->pixel != -1) {
-    d3d->device_context->PSSetConstantBuffers(loc->pixel, 1, &uniform->buffer);
-  }
-  if (loc->geo != -1) {
-    d3d->device_context->GSSetConstantBuffers(loc->geo, 1, &uniform->buffer);
+    if (loc->pixel != -1) {
+      d3d->device_context->PSSetShaderResources(loc->pixel, 1, null_srv);
+    }
+    if (loc->geo != -1) {
+      d3d->device_context->PSSetShaderResources(loc->geo, 1, null_srv);
+    }
+  } else {
+    logprint("Texture '%S' not found in shader '%S'\n", name, shader->file_name);
   }
 }
 
-internal void apply_constants() {
+internal void set_sampler(String8 name, Sampler *sampler) {
+  R_D3D11_State *d3d = r_d3d11_state();
   Shader *shader = current_shader;
+  Shader_Bindings *bindings = shader->bindings;
+  Shader_Loc *loc = nullptr;
+  for (int i = 0; i < bindings->sampler_locations.count; i++) {
+    loc = &bindings->sampler_locations[i];
+    if (str8_equal(loc->name, name)) {
+      break;
+    }
+    loc = nullptr;
+  }
+
+  if (loc) {
+    if (loc->vertex != -1) {
+      d3d->device_context->VSSetSamplers(loc->vertex, 1, &sampler->resource);
+    }
+    if (loc->pixel != -1) {
+      d3d->device_context->PSSetSamplers(loc->pixel, 1, &sampler->resource);
+    }
+    if (loc->geo != -1) {
+      d3d->device_context->PSSetSamplers(loc->geo, 1, &sampler->resource);
+    }
+  } else {
+    logprint("Sampler '%S' not found in shader '%S'\n", name, shader->file_name);
+  }
+}
+
+internal Shader_Loc *find_shader_texture(Shader *shader, String8 name) {
+  Shader_Loc *result = nullptr;
+  Shader_Bindings *bindings = shader->bindings;
+  Shader_Loc *loc = nullptr;
+  for (int i = 0; i < bindings->texture_locations.count; i++) {
+    Shader_Loc *loc = &bindings->texture_locations[i];
+    if (str8_equal(name, loc->name)) {
+      result = loc;
+      break;
+    }
+  }
+  return result;
+}
+
+internal inline void set_texture(Shader_Loc *loc, Texture *texture) {
+  if (loc) {
+    R_D3D11_State *d3d = r_d3d11_state();
+    ID3D11ShaderResourceView *view = texture ? texture->view : d3d->fallback_tex->view;
+    if (loc->vertex != -1) {
+      d3d->device_context->VSSetShaderResources(loc->vertex, 1, &view);
+    }
+    if (loc->pixel != -1) {
+      d3d->device_context->PSSetShaderResources(loc->pixel, 1, &view);
+    }
+    if (loc->geo != -1) {
+      d3d->device_context->PSSetShaderResources(loc->geo, 1, &view);
+    }
+  }
+}
+
+internal inline void set_texture(String8 name, Texture *texture) {
+  R_D3D11_State *d3d = r_d3d11_state();
+  Shader *shader = current_shader;
+  Shader_Loc *loc = find_shader_texture(shader, name);
+  if (loc) {
+    set_texture(loc, texture);
+  } else {
+    logprint("Texture '%S' not found in shader '%S'\n", name, shader->file_name);
+  }
+}
+
+internal inline void apply_constants(Shader *shader = current_shader) {
   Shader_Bindings *bindings = shader->bindings;
   for (int i = 0; i < bindings->uniforms.count; i++) {
     Shader_Uniform *uniform = bindings->uniforms[i];
@@ -221,7 +246,7 @@ internal void apply_constants() {
   }
 }
 
-internal Shader_Constant *get_shader_constant(Shader *shader, String8 name) {
+internal inline Shader_Constant *find_shader_constant(Shader *shader, String8 name) {
   Shader_Constant *constant = nullptr;
   Shader_Bindings *bindings = shader->bindings;
   for (int i = 0; i < bindings->constants.count; i++) {
@@ -231,72 +256,86 @@ internal Shader_Constant *get_shader_constant(Shader *shader, String8 name) {
     }
     constant = nullptr;
   }
+
+  if (!constant) {
+    logprint("Constant '%S' not found in shader: '%S'\n", name, shader->file_name); 
+  }
   return constant;
 }
 
-internal void write_shader_constant(Shader *shader, String8 name, void *ptr, u32 size) {
-  Shader_Constant *constant = get_shader_constant(shader, name);
+internal inline void write_shader_constant(Shader *shader, String8 name, void *ptr, u32 size) {
+  Shader_Constant *constant = find_shader_constant(shader, name);
+  if (constant) {
+    Shader_Uniform *uniform = constant->uniform;
+    MemoryCopy((void *)((uintptr_t)uniform->memory + constant->offset), ptr, size);
+    uniform->dirty = 1;
+  }
+}
+
+internal inline void write_shader_constant(Shader_Constant *constant, void *ptr, u32 size) {
+  if (constant) {
+    Shader_Uniform *uniform = constant->uniform;
+    MemoryCopy((void *)((uintptr_t)uniform->memory + constant->offset), ptr, size);
+    uniform->dirty = 1;
+  }
+}
+
+internal inline void set_constant(Shader_Constant *constant, Matrix4 v) {
+  if (!constant) return;
   Shader_Uniform *uniform = constant->uniform;
-  MemoryCopy((void *)((uintptr_t)uniform->memory + constant->offset), ptr, size);
-  uniform->dirty = 1;
+  write_shader_constant(constant, &v, sizeof(v));
 }
 
-internal void set_constant_array(String8 name, void *elems, uint size, uint count) {
-  Shader *shader = current_shader;
-  uint bytes = size * count;
-  Shader_Constant *constant = get_shader_constant(shader, name);
+internal inline void set_constant(Shader_Constant *constant, f32 v) {
+  if (!constant) return;
   Shader_Uniform *uniform = constant->uniform;
-  MemoryCopy((void *)((uintptr_t)uniform->memory + constant->offset), elems, bytes);
-  uniform->dirty = 1;
+  write_shader_constant(constant, &v, sizeof(v));
 }
 
-internal void set_constant(String8 name, Matrix4 v) {
-  write_shader_constant(current_shader, name, &v, sizeof(v));
+internal inline void set_constant(Shader_Constant *constant, Vector2 v) {
+  if (!constant) return;
+  Shader_Uniform *uniform = constant->uniform;
+  write_shader_constant(constant, &v, sizeof(v));
 }
 
-internal void set_constant(String8 name, Vector4 v) {
-  write_shader_constant(current_shader, name, &v, sizeof(v));
+internal inline void set_constant(Shader_Constant *constant, Vector3 v) {
+  if (!constant) return;
+  Shader_Uniform *uniform = constant->uniform;
+  write_shader_constant(constant, &v, sizeof(v));
 }
 
-internal void set_constant(String8 name, Vector3 v) {
-  write_shader_constant(current_shader, name, &v, sizeof(v));
+internal inline void set_constant(Shader_Constant *constant, Vector4 v) {
+  if (!constant) return;
+  Shader_Uniform *uniform = constant->uniform;
+  write_shader_constant(constant, &v, sizeof(v));
 }
 
-internal void set_constant(String8 name, Vector2 v) {
-  write_shader_constant(current_shader, name, &v, sizeof(v));
+internal inline void set_constant_array(String8 name, void *elems, uint size, uint count, Shader *shader = current_shader) {
+  write_shader_constant(shader, name, elems, size * count);
 }
 
-internal void set_constant(String8 name, f32 v) {
-  write_shader_constant(current_shader, name, &v, sizeof(v));
+internal inline void set_constant(String8 name, Matrix4 v, Shader *shader = current_shader) {
+  write_shader_constant(shader, name, &v, sizeof(v));
 }
 
-internal void set_sampler(String8 name, Sampler *sampler) {
-  R_D3D11_State *d3d = r_d3d11_state();
+internal inline void set_constant(String8 name, Vector4 v, Shader *shader = current_shader) {
+  write_shader_constant(shader, name, &v, sizeof(v));
+}
 
-  Shader_Bindings *bindings = current_shader->bindings;
-  Shader_Loc *loc = nullptr;
-  for (int i = 0; i < bindings->sampler_locations.count; i++) {
-    loc = &bindings->sampler_locations[i];
-    if (str8_equal(loc->name, name)) {
-      break;
-    }
-    loc = nullptr;
-  }
+internal inline void set_constant(String8 name, Vector3 v, Shader *shader = current_shader) {
+  write_shader_constant(shader, name, &v, sizeof(v));
+}
 
-  if (!loc) {
-    logprint("Could not find sampler '%S'\n", name);
-    return;
-  }
+internal inline void set_constant(String8 name, Vector2 v, Shader *shader = current_shader) {
+  write_shader_constant(shader, name, &v, sizeof(v));
+}
 
-  if (loc->vertex != -1) {
-    d3d->device_context->VSSetSamplers(loc->vertex, 1, &sampler->resource);
-  }
-  if (loc->pixel != -1) {
-    d3d->device_context->PSSetSamplers(loc->pixel, 1, &sampler->resource);
-  }
-  if (loc->geo != -1) {
-    d3d->device_context->PSSetSamplers(loc->geo, 1, &sampler->resource);
-  }
+internal inline void set_constant(String8 name, f32 v, Shader *shader = current_shader) {
+  write_shader_constant(shader, name, &v, sizeof(v));
+}
+
+internal inline void set_constant(String8 name, int v, Shader *shader = current_shader) {
+  write_shader_constant(shader, name, &v, sizeof(v));
 }
 
 internal void set_rasterizer(Rasterizer *rasterizer) {
@@ -321,6 +360,11 @@ internal void set_depth_state(Depth_State *depth_state) {
 internal void set_render_target(Render_Target *render_target) {
   R_D3D11_State *d3d = r_d3d11_state();
   d3d->device_context->OMSetRenderTargets(1, (ID3D11RenderTargetView **)&render_target->render_target_view, (ID3D11DepthStencilView *)render_target->depth_stencil_view);
+}
+
+internal void reset_render_target() {
+  R_D3D11_State *d3d = r_d3d11_state();
+  set_render_target(d3d->default_render_target);
 }
 
 internal void set_viewport(f32 left, f32 top, f32 right, f32 bottom) {
@@ -425,7 +469,8 @@ internal void draw_mesh(Triangle_Mesh *mesh) {
     Triangle_List_Info triangle_list_info = mesh->triangle_list_info[i];
 
     Material *material = mesh->materials[triangle_list_info.material_index];
-    set_texture(str8_lit("diffuse_texture"), material->texture);
+
+    set_texture(current_shader->bindings->diffuse_texture, material->texture);
 
     d3d->device_context->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
   }
@@ -478,28 +523,60 @@ internal void draw_mirror_reflection() {
 
   //   set_shader(shader_mesh);
 
-  //   bind_uniform(shader_mesh, str8_lit("Constants"));
 
-  //   set_constant(str8_lit("xform"), xform);
-  //   set_constant(str8_lit("color"), Vector4(.4f, .4f, .4f, 1.f));
+  //   set_constant(str_lit("xform"), xform);
+  //   set_constant(str_lit("color"), Vector4(.4f, .4f, .4f, 1.f));
   //   apply_constants(); 
 
-  //   set_sampler(str8_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
+  //   set_sampler(str_lit("diffuse_sampler"), SAMPLER_STATE_LINEAR);
 
   //   draw_mesh(guy->mesh);
   // }
+}
+
+internal void init_draw() {
+  R_D3D11_State *d3d = r_d3d11_state();
+  shadow_map = make_depth_map(2048, 2048);
+
+  water_plane_mesh = gen_plane_mesh(Vector2(100.0f, 100.0f));
+
+  reflection_render_target = make_render_target(d3d->window_dimension.x, d3d->window_dimension.y, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D24_UNORM_S8_UINT);
+  refraction_render_target = make_render_target(d3d->window_dimension.x, d3d->window_dimension.y, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D24_UNORM_S8_UINT);
+  refraction_depth_map = make_depth_map(d3d->window_dimension.x, d3d->window_dimension.y);
+
+  String8 skybox_file_names[6] = {
+    str_lit("data/textures/interstellar_skybox/xpos.png"),
+    str_lit("data/textures/interstellar_skybox/xneg.png"),
+    str_lit("data/textures/interstellar_skybox/ypos.png"),
+    str_lit("data/textures/interstellar_skybox/yneg.png"),
+    str_lit("data/textures/interstellar_skybox/zpos.png"),
+    str_lit("data/textures/interstellar_skybox/zneg.png"),
+    // str_lit("data/textures/skybox2/right.png"),
+    // str_lit("data/textures/skybox2/left.png"),
+    // str_lit("data/textures/skybox2/top.png"),
+    // str_lit("data/textures/skybox2/bottom.png"),
+    // str_lit("data/textures/skybox2/front.png"),
+    // str_lit("data/textures/skybox2/back.png"),
+  };
+  skybox_texture = create_texture_cube(skybox_file_names);
+  skybox_mesh = gen_cube_mesh();
+
+  water_dudv_texture = create_texture_from_file(str_lit("data/textures/waterDUDV.png"), 0);
+
+  water_normal_map = create_texture_from_file(str_lit("data/textures/normalMap.png"), 0);
 }
 
 internal void draw_scene() {
   local_persist bool first_call = true;
   if (first_call) {
     first_call = false;
-    shadow_map = make_shadow_map(2048, 2048);
+    init_draw();
   }
+
+  R_D3D11_State *d3d = r_d3d11_state();
 
   Entity_Manager *manager = get_entity_manager();
 
-  R_D3D11_State *d3d = r_d3d11_state();
 
   Game_State *game_state = get_game_state();
   Editor *editor = get_editor();
@@ -519,13 +596,16 @@ internal void draw_scene() {
   if (sun) {
     set_viewport(0, 0, (f32)shadow_map->texture->width, (f32)shadow_map->texture->height);
     set_depth_state(depth_state_default);
-    set_rasterizer(rasterizer_default);
+    set_rasterizer(rasterizer_shadow_map);
     d3d->device_context->OMSetRenderTargets(0, nullptr, shadow_map->depth_stencil_view);
     d3d->device_context->ClearDepthStencilView(shadow_map->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     set_shader(shader_shadow_map);
 
-    bind_uniform(shader_shadow_map, str8_lit("Constants"));
+    Shader_Constant *c_world = find_shader_constant(shader_shadow_map, str_lit("world"));
+    Shader_Constant *c_light_vp = find_shader_constant(shader_shadow_map, str_lit("light_view_projection"));
+
+    set_constant(c_light_vp, sun->light_space_matrix);
 
     for (Entity *entity : manager->entities) {
       Triangle_Mesh *mesh = entity->mesh;
@@ -536,8 +616,7 @@ internal void draw_scene() {
       Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
       Matrix4 world_matrix = translate(entity->visual_position) * translate(entity->offset) *rotation_matrix;
 
-      set_constant(str8_lit("world"), world_matrix);
-      set_constant(str8_lit("light_view_projection"), sun->light_space_matrix);
+      set_constant(c_world, world_matrix);
       apply_constants();
 
       UINT stride = sizeof(Vertex_XNCUU), offset = 0;
@@ -546,7 +625,6 @@ internal void draw_scene() {
     }
 
     set_shader(shader_skinned_shadow_map);
-    bind_uniform(shader_skinned_shadow_map, str8_lit("Constants"));
 
     for (Entity *entity : manager->entities) {
       Animation_State *animation_state = entity->animation_state;
@@ -555,9 +633,9 @@ internal void draw_scene() {
 
       Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
       Matrix4 world_matrix = translate(entity->visual_position) * translate(entity->offset) *rotation_matrix;
-      set_constant(str8_lit("world"), world_matrix);
-      set_constant_array(str8_lit("bone_matrices"), animation_state->bone_transforms, sizeof(Matrix4), MAX_BONES);
-      set_constant(str8_lit("light_view_projection"), sun->light_space_matrix);
+      set_constant(str_lit("world"), world_matrix);
+      set_constant_array(str_lit("bone_matrices"), animation_state->bone_transforms, sizeof(Matrix4), MAX_BONES);
+      set_constant(str_lit("light_view_projection"), sun->light_space_matrix);
       apply_constants();
 
       uint stride = sizeof(Vertex_Skinned), offset = 0;
@@ -588,13 +666,12 @@ internal void draw_scene() {
     if (particles->count == 0) continue;
 
     set_shader(shader_particle);
-    bind_uniform(shader_particle, str8_lit("Constants"));
-    set_texture(str8_lit("diffuse_texture"), sun_icon_texture);
-    set_sampler(str8_lit("diffuse_sampler"), sampler_linear);
+    set_texture(str_lit("diffuse_texture"), sun_icon_texture);
+    set_sampler(str_lit("diffuse_sampler"), sampler_linear);
     d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
 
-    set_constant(str8_lit("camera_position"), camera.origin);
-    set_constant(str8_lit("to_view_projection"), camera.transform);
+    set_constant(str_lit("camera_position"), camera.origin);
+    set_constant(str_lit("to_view_projection"), camera.transform);
     apply_constants();
 
     Particle_Pt *points = new Particle_Pt[particles->count];
@@ -620,10 +697,9 @@ internal void draw_scene() {
 
   if (0) {
     set_shader(shader_color_wheel);
-    bind_uniform(shader_color_wheel, str8_lit("Constants"));
-    set_constant(str8_lit("projection"), projection);
-    set_constant(str8_lit("radius"), 250.0f);
-    set_constant(str8_lit("center"), Vector2(400.0f, 400.0f));
+    set_constant(str_lit("projection"), projection);
+    set_constant(str_lit("radius"), 250.0f);
+    set_constant(str_lit("center"), Vector2(400.0f, 400.0f));
     apply_constants();
 
     Rect rect = make_rect(-0.5f, -0.5f, 1.0f, 1.0f);
@@ -646,18 +722,42 @@ internal void draw_scene() {
     Vector2 dim = get_viewport()->dimension;
     immediate_begin();
     set_shader(shader_argb_texture);
-    set_sampler(str8_lit("diffuse_sampler"), sampler_point);
+    set_sampler(str_lit("diffuse_sampler"), sampler_point);
     set_depth_state(depth_state_disable);
-    set_blend_state(blend_state_alpha);
+    // set_blend_state(blend_state_alpha);
     set_rasterizer(rasterizer_text);
 
-    bind_uniform(shader_argb_texture, str8_lit("Constants"));
     immediate_quad(shadow_map->texture,
       Vector2(0.0f, 0.0f), Vector2(dim.x, 0.0f), Vector2(dim.x, dim.y), Vector2(0.0f, dim.y),
       Vector2(0.0f, 1.0f), Vector2(1.0f, 1.0f), Vector2(1.0f, 0.0f), Vector2(0.0f, 0.0f),
       Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-    reset_texture(str8_lit("diffuse_texture"));
+    reset_texture(str_lit("diffuse_texture"));
   }
+}
+
+internal void draw_skybox(Camera *camera) {
+  R_D3D11_State *d3d = r_d3d11_state();
+  set_shader(shader_skybox);
+
+  set_rasterizer(rasterizer_default);
+  set_depth_state(depth_state_skybox);
+
+  Matrix4 skybox_view = camera->view_matrix;
+  skybox_view.columns[3] = Vector4();
+  Matrix4 xform = camera->projection_matrix * skybox_view;
+
+  set_texture(str_lit("skybox_texture"), skybox_texture);
+  set_sampler(str_lit("skybox_sampler"), sampler_skybox);
+
+  set_constant(str_lit("xform"), xform);
+  apply_constants();
+
+  uint stride = sizeof(Vertex_XNCUU), offset = 0;
+  d3d->device_context->IASetVertexBuffers(0, 1, &skybox_mesh->vertex_buffer, &stride, &offset);
+  d3d->device_context->Draw((uint)skybox_mesh->vertices.count, 0);
+
+  set_depth_state(depth_state_default);
+  set_rasterizer(rasterizer_default);
 }
 
 internal void draw_world(World *world, Camera camera) {
@@ -670,19 +770,44 @@ internal void draw_world(World *world, Camera camera) {
   Vector3 light_direction = sun ? sun->light_direction : Vector3(0, 0, 0);
   Vector4 light_color = sun ? sun->override_color : make_vec4(1.0f);
 
+  set_constant(str_lit("light_direction"), light_direction, shader_entity);
+  set_constant(str_lit("light_view_projection"), light_space, shader_entity);
+  set_constant(str_lit("light_color"), light_color, shader_entity);
+  set_constant(str_lit("clip_plane"), Vector4(0, -1, 0, 10000), shader_entity);
+  apply_constants(shader_entity);
+
+  set_constant(str_lit("light_direction"), light_direction, shader_skinned);
+  set_constant(str_lit("light_view_projection"), light_space, shader_skinned);
+  set_constant(str_lit("light_color"), light_color, shader_skinned);
+  apply_constants(shader_skinned);
+
+
+  Auto_Array<R_Point_Light> point_lights;
+  point_lights.reserve(manager->by_type._Point_Light.count);
+  for (int i = 0; i < manager->by_type._Point_Light.count; i++) {
+    Point_Light *point_light = manager->by_type._Point_Light[i];
+    R_Point_Light pt;
+    pt.position = point_light->position;
+    pt.range = point_light->range;
+    pt.color = point_light->override_color;
+    pt.att = point_light->attenuation;
+    point_lights.push(pt);
+  }
+
+  set_constant(str_lit("point_light_count"), (int)point_lights.count, shader_entity);
+  if (point_lights.count) {
+    set_constant_array(str_lit("point_lights"), point_lights.data, sizeof(R_Point_Light), (int)point_lights.count, shader_entity);
+  }
+  apply_constants(shader_entity);
+
   set_shader(shader_entity);
+  set_texture(str_lit("shadow_map"), shadow_map->texture);
+  set_sampler(str_lit("diffuse_sampler"), sampler_anisotropic);
+  set_sampler(str_lit("shadow_sampler"), sampler_point);
 
-  bind_uniform(shader_entity, str8_lit("Constants"));
-
-  set_texture(str8_lit("shadow_map"), shadow_map->texture);
-  set_sampler(str8_lit("diffuse_sampler"), sampler_anisotropic);
-  set_sampler(str8_lit("shadow_sampler"), sampler_point);
-  set_constant(str8_lit("light_direction"), light_direction);
-  set_constant(str8_lit("light_view_projection"), light_space);
-  set_constant(str8_lit("light_color"), light_color);
-
-  Matrix4 depth_bias = translate(0.5f, 0.5f, 0.0f) * scale(0.5, -0.5, 1.0);
-  // set_constant(str8_lit("depth_bias_wvp"), depth_bias);
+  Shader_Constant *c_eye_pos = find_shader_constant(shader_entity, str_lit("eye_pos"));
+  Shader_Constant *c_use_tint = find_shader_constant(shader_entity, str_lit("use_override_color"));
+  Shader_Constant *c_tint = find_shader_constant(shader_entity, str_lit("override_color"));
 
   for (Entity *entity : manager->entities) {
     if (entity->kind == ENTITY_GUY) continue; //temp
@@ -693,17 +818,15 @@ internal void draw_world(World *world, Camera camera) {
     Matrix4 rotation_matrix = rotate_rh(entity->theta, camera.up);
     Matrix4 world_matrix = translate(entity->visual_position) * translate(entity->offset) *rotation_matrix;
     Matrix4 xform = camera.transform * world_matrix;
-
-    set_constant(str8_lit("xform"), xform);
-    set_constant(str8_lit("world"), world_matrix);
-    set_constant(str8_lit("use_override_color"), (float)entity->use_override_color);
-    set_constant(str8_lit("override_color"), entity->override_color);
+    set_constant(shader_entity->bindings->xform, xform);
+    set_constant(shader_entity->bindings->world, world_matrix);
+    set_constant(c_eye_pos, camera.origin);
+    set_constant(c_use_tint, (float)entity->use_override_color);
+    set_constant(c_tint, entity->override_color);
     apply_constants();
 
     draw_mesh(mesh);
   }
-
-  reset_texture(str8_lit("shadow_map"));
 
   for (Guy *guy : manager->by_type._Guy) {
     Animation_State *animation_state = guy->animation_state;
@@ -712,29 +835,20 @@ internal void draw_world(World *world, Camera camera) {
     if (!animation_state) continue;
 
     set_shader(shader_skinned);
-    bind_uniform(shader_skinned, str8_lit("Constants"));
 
-    set_sampler(str8_lit("diffuse_sampler"), sampler_linear);
-    set_sampler(str8_lit("shadow_sampler"), sampler_linear);
-    set_texture(str8_lit("shadow_map"), shadow_map->texture);
+    set_sampler(str_lit("diffuse_sampler"), sampler_linear);
+    set_sampler(str_lit("shadow_sampler"), sampler_linear);
+    set_texture(str_lit("shadow_map"), shadow_map->texture);
 
     Matrix4 rotation_matrix = rotate_rh(guy->theta, camera.up);
     Matrix4 world_matrix = translate(guy->visual_position) * translate(guy->offset) * rotation_matrix;
     Matrix4 xform = camera.transform * world_matrix;
 
-    Sun *sun = manager->by_type._Sun.count ? manager->by_type._Sun[0] : 0;
-    Matrix4 light_space = sun ? sun->light_space_matrix : make_matrix4(1.0f);
-    Vector3 light_direction = sun ? sun->light_direction : Vector3(0, 0, 0);
-    Vector4 light_color = sun ? sun->override_color : make_vec4(1.0f);
-
     Vector4 color = guy->use_override_color ? make_vec4(1.0f) : guy->override_color;
-    set_constant(str8_lit("xform"), xform);
-    set_constant(str8_lit("world"), world_matrix);
-    set_constant(str8_lit("color"), color);
-    set_constant(str8_lit("light_color"), light_color);
-    set_constant(str8_lit("light_direction"), light_direction);
-    set_constant(str8_lit("light_view_projection"), light_space);
-    set_constant_array(str8_lit("bone_matrices"), animation_state->bone_transforms, sizeof(Matrix4), MAX_BONES);
+    set_constant(str_lit("xform"), xform);
+    set_constant(str_lit("world"), world_matrix);
+    set_constant(str_lit("color"), color);
+    set_constant_array(str_lit("bone_matrices"), animation_state->bone_transforms, sizeof(Matrix4), MAX_BONES);
     apply_constants();
 
     uint stride = sizeof(Vertex_Skinned), offset = 0;
@@ -744,11 +858,153 @@ internal void draw_world(World *world, Camera camera) {
       Triangle_List_Info triangle_list_info = mesh->triangle_list_info[i];
 
       Material *material = mesh->materials[triangle_list_info.material_index];
-      set_texture(str8_lit("diffuse_texture"), material->texture);
+      set_texture(str_lit("diffuse_texture"), material->texture);
 
       d3d->device_context->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
     }
   }
+
+  reset_texture(str_lit("shadow_map"));
+
+
+  // Water Render
+  {
+    f32 wave_speed = 0.03f;
+    move_factor += wave_speed * get_frame_delta();
+    move_factor = fmodf(move_factor, 1.0f);
+
+    Vector3 water_position = Vector3(0, 0.01f, 0);
+
+    Camera mirrored = camera;
+    f32 distance = 2.0f * (camera.origin.y - water_position.y);
+    mirrored.origin.y -= distance;
+    mirrored.update_euler_angles(camera.yaw, -camera.pitch);
+    update_camera_matrix(&mirrored);
+
+    set_render_target(reflection_render_target);
+    clear_render_target(reflection_render_target, 0, 0, 0, 1);
+    d3d->device_context->ClearDepthStencilView(reflection_render_target->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
+
+    set_rasterizer(rasterizer_default);
+
+    set_shader(shader_entity);
+
+    Shader_Constant *c_eye_pos = find_shader_constant(shader_entity, str_lit("eye_pos"));
+    Shader_Constant *c_use_tint = find_shader_constant(shader_entity, str_lit("use_override_color"));
+    Shader_Constant *c_tint = find_shader_constant(shader_entity, str_lit("override_color"));
+
+    // reflection
+    set_constant(str_lit("clip_plane"), Vector4(0, 1, 0, -water_position.y + 0.1f));
+
+    for (Entity *e : manager->entities) {
+      if (e->kind == ENTITY_GUY) continue; //temp
+      Triangle_Mesh *mesh = e->mesh;
+      if (!mesh) continue;
+
+      Matrix4 world_matrix = translate(e->visual_position) * translate(e->offset) * rotate_rh(e->theta, vec3_up());
+      Matrix4 xform = mirrored.transform * world_matrix;
+      set_constant(shader_entity->bindings->xform, xform);
+      set_constant(shader_entity->bindings->world, world_matrix);
+      set_constant(c_eye_pos, mirrored.origin);
+      set_constant(c_use_tint, (f32)e->use_override_color);
+      set_constant(c_tint, e->override_color);
+      apply_constants();
+      draw_mesh(mesh);
+    }
+
+    set_shader(shader_skinned);
+    for (Guy *guy : manager->by_type._Guy) {
+      Animation_State *animation_state = guy->animation_state;
+      if (!animation_state) continue;
+      Triangle_Mesh *mesh = guy->mesh;
+
+      set_sampler(str_lit("diffuse_sampler"), sampler_linear);
+      set_sampler(str_lit("shadow_sampler"), sampler_linear);
+      set_texture(str_lit("shadow_map"), shadow_map->texture);
+
+      Matrix4 world_matrix = translate(guy->visual_position) * translate(guy->offset) * rotate_rh(guy->theta, vec3_up());
+      Matrix4 xform = mirrored.transform * world_matrix;
+      Vector4 color = guy->use_override_color ? make_vec4(1.0f) : guy->override_color;
+      set_constant(str_lit("xform"), xform);
+      set_constant(str_lit("world"), world_matrix);
+      set_constant(str_lit("color"), color);
+      set_constant_array(str_lit("bone_matrices"), animation_state->bone_transforms, sizeof(Matrix4), MAX_BONES);
+      apply_constants();
+
+      uint stride = sizeof(Vertex_Skinned), offset = 0;
+      d3d->device_context->IASetVertexBuffers(0, 1, &mesh->skinned_vertex_buffer, &stride, &offset);
+
+      for (int i = 0; i < mesh->triangle_list_info.count; i++) {
+        Triangle_List_Info triangle_list_info = mesh->triangle_list_info[i];
+        Material *material = mesh->materials[triangle_list_info.material_index];
+        set_texture(str_lit("diffuse_texture"), material->texture);
+        d3d->device_context->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
+      }
+    }
+
+    // draw_skybox(&mirrored);
+
+    set_shader(shader_entity);
+
+    // set_render_target(refraction_render_target);
+    d3d->device_context->OMSetRenderTargets(1, &refraction_render_target->render_target_view, refraction_depth_map->depth_stencil_view);
+    clear_render_target(refraction_render_target, 0, 0, 0, 1);
+
+    set_constant(str_lit("clip_plane"), Vector4(0, -1, 0, water_position.y));
+    d3d->device_context->ClearDepthStencilView(refraction_depth_map->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
+
+    for (Entity *e : manager->by_type._Inanimate) {
+      Triangle_Mesh *mesh = e->mesh;
+
+      Matrix4 world_matrix = translate(e->visual_position) * translate(e->offset) * rotate_rh(e->theta, vec3_up());
+      Matrix4 xform = camera.transform * world_matrix;
+      set_constant(str_lit("eye_pos"), mirrored.origin);
+      set_constant(str_lit("xform"), xform);
+      set_constant(str_lit("world"), world_matrix);
+      set_constant(str_lit("use_override_color"), (f32)e->use_override_color);
+      set_constant(str_lit("override_color"), e->override_color);
+      apply_constants();
+
+      draw_mesh(mesh);
+    }
+
+    reset_render_target();
+
+    // draw water
+    set_shader(shader_water);
+    set_rasterizer(rasterizer_default);
+    set_blend_state(blend_state_alpha);
+
+    set_sampler(str_lit("main_sampler"), sampler_linear);
+    set_texture(str_lit("reflection_texture"), reflection_render_target->texture);
+    set_texture(str_lit("refraction_texture"), refraction_render_target->texture);
+    set_texture(str_lit("dudv_map"), water_dudv_texture);
+    set_texture(str_lit("normal_map"), water_normal_map);
+    set_texture(str_lit("depth_map"), refraction_depth_map->texture);
+
+    Matrix4 world_matrix = translate(water_position);
+    Matrix4 xform = camera.transform * world_matrix;
+    set_constant(str_lit("xform"), xform);
+    set_constant(str_lit("world"), world_matrix);
+    set_constant(str_lit("eye_position"), camera.origin);
+    set_constant(str_lit("tiling"), 0.18f);
+    set_constant(str_lit("wave_strength"), 0.02f);
+    set_constant(str_lit("move_factor"), move_factor);
+    apply_constants();
+
+    uint stride = sizeof(Vertex_XNCUU), offset = 0;
+    d3d->device_context->IASetVertexBuffers(0, 1, &water_plane_mesh->vertex_buffer, &stride, &offset);
+    d3d->device_context->Draw((uint)water_plane_mesh->vertices.count, 0);
+
+    reset_texture(str_lit("reflection_texture"));
+    reset_texture(str_lit("refraction_texture"));
+    reset_texture(str_lit("depth_map"));
+    set_rasterizer(rasterizer_default);
+    set_blend_state(blend_state_default);
+  }
+
+
+  // draw_skybox(&camera);
 }
 
 internal inline ARGB argb_from_vector(Vector4 color) {
@@ -769,7 +1025,7 @@ internal void imm_quad_vertex(Vector2 p, Vector2 uv, ARGB argb) {
 }
 
 internal void immediate_quad(Texture *texture, Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector2 uv3, Vector4 color) {
-  set_texture(str8_lit("diffuse_texture"), texture);
+  set_texture(str_lit("diffuse_texture"), texture);
 
   ARGB argb = argb_from_vector(color);
   imm_quad_vertex(p0, uv0, argb);
