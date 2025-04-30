@@ -136,6 +136,18 @@ internal LRESULT CALLBACK win32_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
         break;
     }
 
+    case WM_ERASEBKGND:
+    {
+      HDC hdc = (HDC)wParam;
+      RECT rect;
+      GetClientRect(hWnd, &rect);
+      HBRUSH brush = CreateSolidBrush(RGB(39, 57, 61));
+      FillRect(hdc, &rect, brush);
+      DeleteObject(brush);
+      result = 1;
+      break;
+    }
+   
     // case WM_SIZING:
     // {
     //     win32_resizing = true;
