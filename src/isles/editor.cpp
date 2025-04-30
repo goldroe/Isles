@@ -111,6 +111,28 @@ internal inline Editor *get_editor() {
   return g_editor;
 }
 
+internal f32 read_float(Entity_Field *field) {
+  f32 result = strtof((char *)field->fields[0]->buffer, NULL);
+  return result;
+}
+
+internal Vector3 read_vec3(Entity_Field *field) {
+  Vector3 result;
+  result.x = strtof((char *)field->fields[0]->buffer, NULL);
+  result.y = strtof((char *)field->fields[1]->buffer, NULL);
+  result.z = strtof((char *)field->fields[2]->buffer, NULL);
+  return result;
+}
+
+internal Vector4 read_vec4(Entity_Field *field) {
+  Vector4 result;
+  result.x = strtof((char *)field->fields[0]->buffer, NULL);
+  result.y = strtof((char *)field->fields[1]->buffer, NULL);
+  result.z = strtof((char *)field->fields[2]->buffer, NULL);
+  result.w = strtof((char *)field->fields[3]->buffer, NULL);
+  return result;
+}
+
 internal inline bool is_selected(Editor *editor, Entity *e) {
   for (int i = 0; i < editor->selections.count; i++) {
     if (editor->selections[i] == e) {
@@ -503,9 +525,35 @@ internal void init_editor() {
   editor->entity_panel->sun_dir_field = sun_dir;
   editor->entity_panel->entity_fields[ENTITY_SUN].push(sun_dir);
 
+  Entity_Field *point_range_field = new Entity_Field();
+  point_range_field->name = str8_lit("range");
+  point_range_field->expand = 0;
+  point_range_field->kind = FIELD_FLOAT;
+  point_range_field->fields.push(ui_line_edit_create(str8_lit("Range")));
+  editor->entity_panel->point_range_field = point_range_field;
+  editor->entity_panel->entity_fields[ENTITY_POINT_LIGHT].push(point_range_field);
+
+  Entity_Field *point_att_field = new Entity_Field();
+  point_att_field->name = str8_lit("att");
+  point_att_field->expand = 0;
+  point_att_field->kind = FIELD_VEC3;
+  point_att_field->fields.push(ui_line_edit_create(str8_lit("a0")));
+  point_att_field->fields.push(ui_line_edit_create(str8_lit("a1")));
+  point_att_field->fields.push(ui_line_edit_create(str8_lit("a2")));
+  editor->entity_panel->point_att_field = point_att_field;
+  editor->entity_panel->entity_fields[ENTITY_POINT_LIGHT].push(point_att_field);
+
   editor->select_strobe_t = 0;
   editor->select_strobe_max = 0.8f;
   editor->select_strobe_target = editor->select_strobe_max;
+}
+
+internal void ui_line_edit_write(UI_Line_Edit *edit, const char *fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  int n = stbsp_vsnprintf((char *)edit->buffer, edit->buffer_capacity, fmt, args);
+  edit->buffer_pos = edit->buffer_len = n;
+  va_end(args);
 }
 
 internal void update_entity_panel(Editor *editor) {
@@ -514,42 +562,26 @@ internal void update_entity_panel(Editor *editor) {
 
   Entity *entity = editor->active_selection;
   if (entity) {
-    int n = 0;
+    ui_line_edit_write(panel->position_field->fields[0], "%g", entity->position.x);
+    ui_line_edit_write(panel->position_field->fields[1], "%g", entity->position.y);
+    ui_line_edit_write(panel->position_field->fields[2], "%g", entity->position.z);
 
-    n = snprintf((char *)panel->position_field->fields[0]->buffer, panel->position_field->fields[0]->buffer_capacity, "%g", entity->position.x);
-    panel->position_field->fields[0]->buffer_pos = panel->position_field->fields[0]->buffer_len = n;
+    ui_line_edit_write(panel->color_field->fields[0], "%g", entity->override_color.x);
+    ui_line_edit_write(panel->color_field->fields[1], "%g", entity->override_color.y);
+    ui_line_edit_write(panel->color_field->fields[2], "%g", entity->override_color.z);
 
-    n = snprintf((char *)panel->position_field->fields[1]->buffer, panel->position_field->fields[1]->buffer_capacity, "%g", entity->position.y);
-    panel->position_field->fields[1]->buffer_pos = panel->position_field->fields[1]->buffer_len = n;
-
-    n = snprintf((char *)panel->position_field->fields[2]->buffer, panel->position_field->fields[2]->buffer_capacity, "%g", entity->position.z);
-    panel->position_field->fields[2]->buffer_pos = panel->position_field->fields[2]->buffer_len = n;
-
-    n = snprintf((char *)panel->color_field->fields[0]->buffer, panel->color_field->fields[0]->buffer_capacity, "%g", entity->override_color.x);
-    panel->color_field->fields[0]->buffer_pos = panel->color_field->fields[0]->buffer_len = n;
-
-    n = snprintf((char *)panel->color_field->fields[1]->buffer, panel->color_field->fields[1]->buffer_capacity, "%g", entity->override_color.y);
-    panel->color_field->fields[1]->buffer_pos = panel->color_field->fields[1]->buffer_len = n;
-
-    n = snprintf((char *)panel->color_field->fields[2]->buffer, panel->color_field->fields[2]->buffer_capacity, "%g", entity->override_color.z);
-    panel->color_field->fields[2]->buffer_pos = panel->color_field->fields[2]->buffer_len = n;
-
-    n = snprintf((char *)panel->color_field->fields[3]->buffer, panel->color_field->fields[3]->buffer_capacity, "%g", entity->override_color.w);
-    panel->color_field->fields[3]->buffer_pos = panel->color_field->fields[3]->buffer_len = n;
-
-    n = snprintf((char *)panel->theta_field->fields[0]->buffer, panel->theta_field->fields[0]->buffer_capacity, "%g", RadToDeg(entity->theta));
-    panel->theta_field->fields[0]->buffer_pos = panel->theta_field->fields[0]->buffer_len = n;
+    ui_line_edit_write(panel->theta_field->fields[0], "%g", RadToDeg(entity->theta));
 
     if (entity->kind == ENTITY_SUN) {
       Sun *sun = static_cast<Sun*>(entity);
-      n = snprintf((char *)panel->sun_dir_field->fields[0]->buffer, panel->sun_dir_field->fields[0]->buffer_capacity, "%g", sun->light_direction.x);
-      panel->sun_dir_field->fields[0]->buffer_pos = panel->sun_dir_field->fields[0]->buffer_len = n;
+      ui_line_edit_write(panel->sun_dir_field->fields[0], "%g", sun->light_direction.x);
+      ui_line_edit_write(panel->sun_dir_field->fields[1], "%g", sun->light_direction.y);
+      ui_line_edit_write(panel->sun_dir_field->fields[2], "%g", sun->light_direction.z);
+    }
 
-      n = snprintf((char *)panel->sun_dir_field->fields[1]->buffer, panel->sun_dir_field->fields[1]->buffer_capacity, "%g", sun->light_direction.y);
-      panel->sun_dir_field->fields[1]->buffer_pos = panel->sun_dir_field->fields[1]->buffer_len = n;
-
-      n = snprintf((char *)panel->sun_dir_field->fields[2]->buffer, panel->sun_dir_field->fields[2]->buffer_capacity, "%g", sun->light_direction.z);
-      panel->sun_dir_field->fields[2]->buffer_pos = panel->sun_dir_field->fields[2]->buffer_len = n;
+    if (entity->kind == ENTITY_POINT_LIGHT) {
+      Point_Light *light = static_cast<Point_Light*>(entity);
+      ui_line_edit_write(panel->point_range_field->fields[0], "%g", light->range);
     }
   }
 }
@@ -573,7 +605,6 @@ internal void r_picker_render_gizmo(Picker *picker) {
 
   set_shader(shader_picker);
 
-  bind_uniform(shader_picker, str8_lit("Constants"));
 
   Entity *e = editor->active_selection;
 
@@ -627,9 +658,6 @@ internal void picker_render(Picker *picker) {
   d3d->device_context->ClearDepthStencilView((ID3D11DepthStencilView *)render_target->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
   set_shader(shader_picker);
-
-  bind_uniform(shader_picker, str8_lit("Constants"));
-
 
   Game_State *game_state = get_game_state();
   World *world = get_world();
@@ -891,7 +919,6 @@ internal void update_editor(OS_Event_List *events) {
   draw_scene();
 
   set_shader(shader_mesh);
-  bind_uniform(shader_mesh, str8_lit("Constants"));
 
   set_sampler(str8_lit("diffuse_sampler"), sampler_linear);
   set_texture(str8_lit("diffuse_texture"), sun_icon_texture);
@@ -933,7 +960,6 @@ internal void update_editor(OS_Event_List *events) {
 
   // Draw selection
   set_shader(shader_mesh);
-  bind_uniform(shader_mesh, str8_lit("Constants"));
   set_rasterizer(rasterizer_wireframe);
   set_depth_state(depth_state_default);
   set_texture(str8_lit("diffuse_texture"), d3d->fallback_tex);
@@ -962,7 +988,6 @@ internal void update_editor(OS_Event_List *events) {
     set_rasterizer(rasterizer_no_cull);
 
     set_shader(shader_mesh);
-    bind_uniform(shader_mesh, str8_lit("Constants"));
 
     set_sampler(str8_lit("diffuse_sampler"), sampler_linear);
 
@@ -1250,7 +1275,6 @@ internal void editor_present_ui() {
               // ui_set_next_text_padding(4.0f);
               UI_Signal sig = ui_line_edit(line_edit, str8_lit("##edit"));
               if (ui_pressed(sig) && sig.key == OS_KEY_ENTER) {
-                printf("ENTER\n");
                 field->dirty = true;
                 editor->entity_panel->dirty = true;
               }
@@ -1435,37 +1459,38 @@ internal void editor_present_ui() {
     Entity *e = editor->active_selection;
 
     if (panel->position_field->dirty) {
-      panel->position_field->dirty = false;
-      Vector3 p;
-      p.x = strtof((char *)panel->position_field->fields[0]->buffer, nullptr); 
-      p.y = strtof((char *)panel->position_field->fields[1]->buffer, nullptr); 
-      p.z = strtof((char *)panel->position_field->fields[2]->buffer, nullptr); 
+      panel->position_field->dirty = 0;
+      Vector3 p = read_vec3(panel->position_field);
       e->set_position(p);
     }
 
     if (panel->color_field->dirty) {
-      panel->color_field->dirty = false;
-      e->override_color.x = strtof((char *)panel->color_field->fields[0]->buffer, nullptr); 
-      e->override_color.y = strtof((char *)panel->color_field->fields[1]->buffer, nullptr); 
-      e->override_color.z = strtof((char *)panel->color_field->fields[2]->buffer, nullptr); 
-      e->override_color.w = strtof((char *)panel->color_field->fields[3]->buffer, nullptr); 
+      panel->color_field->dirty = 0;
+      e->override_color = read_vec4(panel->color_field);
     }
 
     if (panel->theta_field->dirty) {
-      panel->theta_field->dirty = false;
-      f32 theta = strtof((char *)panel->theta_field->fields[0]->buffer, nullptr);
+      panel->theta_field->dirty = 0;
+      f32 theta = read_float(panel->theta_field);
       theta = DegToRad(theta);
       e->set_theta(theta);
     }
 
     if (e->kind == ENTITY_SUN) {
       Sun *sun = static_cast<Sun*>(e);
-
       if (panel->sun_dir_field->dirty) {
-        panel->sun_dir_field->dirty = false;
-        sun->light_direction.x = strtof((char *)panel->sun_dir_field->fields[0]->buffer, nullptr); 
-        sun->light_direction.y = strtof((char *)panel->sun_dir_field->fields[1]->buffer, nullptr); 
-        sun->light_direction.z = strtof((char *)panel->sun_dir_field->fields[2]->buffer, nullptr); 
+        panel->sun_dir_field->dirty = 0;
+        sun->light_direction = read_vec3(panel->sun_dir_field);
+      }
+    } else if (e->kind == ENTITY_POINT_LIGHT) {
+      Point_Light *point_light = static_cast<Point_Light*>(e);
+      if (panel->point_range_field->dirty) {
+        panel->point_range_field->dirty = 0;
+        point_light->range = read_float(panel->point_range_field);
+      }
+      if (panel->point_att_field->dirty) {
+        panel->point_att_field->dirty = 0;
+        point_light->attenuation = read_vec3(panel->point_att_field); 
       }
     }
 
@@ -1475,18 +1500,18 @@ internal void editor_present_ui() {
     }
   }
 
-  // Color Wheel
-  {
-    f32 widget_width = 200.0f;
-    f32 widget_height = 200.0f;
-    f32 x = g_viewport->dimension.x - widget_width;
-    f32 y = 600.0f;
-    ui_set_next_fixed_x(x);
-    ui_set_next_fixed_y(y);
-    ui_set_next_fixed_width(widget_width);
-    ui_set_next_fixed_height(widget_height);
-    ui_set_next_background_color(Vector4(0.0f, 0.0f, 0.0f, 1.0f));
-    UI_Box *widget = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND | UI_BOX_FLAG_CLICKABLE, str8_lit("##colorwheel"));
-    UI_Signal sig = ui_signal_from_box(widget);
-  }
+//   // Color Wheel
+//   {
+//     f32 widget_width = 200.0f;
+//     f32 widget_height = 200.0f;
+//     f32 x = g_viewport->dimension.x - widget_width;
+//     f32 y = 600.0f;
+//     ui_set_next_fixed_x(x);
+//     ui_set_next_fixed_y(y);
+//     ui_set_next_fixed_width(widget_width);
+//     ui_set_next_fixed_height(widget_height);
+//     ui_set_next_background_color(Vector4(0.0f, 0.0f, 0.0f, 1.0f));
+//     UI_Box *widget = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND | UI_BOX_FLAG_CLICKABLE, str8_lit("##colorwheel"));
+//     UI_Signal sig = ui_signal_from_box(widget);
+//   }
 }

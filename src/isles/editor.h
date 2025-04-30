@@ -82,15 +82,17 @@ struct Entity_Panel {
   Auto_Array<Entity_Field*> common_fields;
   Auto_Array<Entity_Field*> entity_fields[ENTITY_COUNT];
 
-  // common
+  // Common
   Entity_Field *position_field = nullptr;
   Entity_Field *color_field = nullptr;
   Entity_Field *theta_field = nullptr;
+  // Sun
+  Entity_Field *sun_dir_field = nullptr;
+  // Point_Light
+  Entity_Field *point_range_field = nullptr;
+  Entity_Field *point_att_field = nullptr;
 
   Vector4 override_color;
-
-  //sun
-  Entity_Field *sun_dir_field = nullptr;
 };
 
 struct Editor {
