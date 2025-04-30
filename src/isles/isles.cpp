@@ -62,7 +62,9 @@ internal char *string_from_entity_kind(Entity_Kind kind) {
     return "Sun";
   case ENTITY_PARTICLE_SOURCE:
     return "Particle_Source";
-  } 
+  case ENTITY_POINT_LIGHT:
+    return "Point_Light";
+  }
 }
 
 internal char *string_from_entity_flag(Entity_Flags flags) {
@@ -156,6 +158,20 @@ internal World *load_world(String8 name) {
       sun->light_direction.z = buffer->get_f32();
       break;
     }
+
+    case ENTITY_POINT_LIGHT:
+    {
+      Point_Light *light = static_cast<Point_Light*>(entity);
+      light->color.x = buffer->get_f32();
+      light->color.y = buffer->get_f32();
+      light->color.z = buffer->get_f32();
+      light->color.w = buffer->get_f32();
+      light->attenuation.x = buffer->get_f32();
+      light->attenuation.y = buffer->get_f32();
+      light->attenuation.z = buffer->get_f32();
+      light->range = buffer->get_f32();
+      break;
+    }
     }
   }
 
@@ -190,6 +206,26 @@ internal void serialize_entity(Byte_Buffer *buffer, Entity *e) {
     buffer->put_f32(sun->light_direction.x);
     buffer->put_f32(sun->light_direction.y);
     buffer->put_f32(sun->light_direction.z);
+    break;
+  }
+
+  case ENTITY_PARTICLE_SOURCE:
+  {
+    Particle_Source *particle_source = static_cast<Particle_Source*>(e);
+    break;
+  }
+
+  case ENTITY_POINT_LIGHT:
+  {
+    Point_Light *light = static_cast<Point_Light*>(e);
+    buffer->put_f32(light->color.x);
+    buffer->put_f32(light->color.y);
+    buffer->put_f32(light->color.z);
+    buffer->put_f32(light->color.w);
+    buffer->put_f32(light->attenuation.x);
+    buffer->put_f32(light->attenuation.y);
+    buffer->put_f32(light->attenuation.z);
+    buffer->put_f32(light->range);
     break;
   }
   }
@@ -334,6 +370,11 @@ internal void init_game() {
   particle_source_proto->entity.flags = ENTITY_FLAG_STATIC;
   particle_source_proto->entity.mesh = nullptr;
 
+  Entity_Prototype *point_light_proto = entity_prototype_create("Point_Light");
+  point_light_proto->entity.kind = ENTITY_POINT_LIGHT;
+  point_light_proto->entity.flags = ENTITY_FLAG_STATIC;
+  point_light_proto->entity.mesh = nullptr;
+
   game_state->camera.origin = Vector3(0, 0, 0);
   game_state->camera.up = Vector3(0, 1, 0);
   game_state->camera.forward = Vector3(0, 0, -1);
@@ -344,7 +385,7 @@ internal void init_game() {
 
   game_state->camera.update_euler_angles(-PI * 0.5f, 0.0f);
 
-  load_world(str8_lit("1.lvl"));
+  load_world(str8_lit("test.lvl"));
 
   g_viewport = new Viewport();
   g_viewport->dimension.x = 1;

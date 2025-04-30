@@ -7,10 +7,17 @@ struct Vertex_List {
   u64 byte_capacity = 0;
 };
 
-struct Shadow_Map {
+struct Depth_Map {
   Texture *texture = nullptr;
-  ID3D11Texture2D *tex2d = nullptr;
   ID3D11DepthStencilView *depth_stencil_view = nullptr;
+};
+
+struct R_Point_Light {
+  Vector3 position;
+  float range;
+  Vector4 color;
+  Vector3 att;
+  float pad;
 };
 
 internal void draw_world(World *world, Camera camera);
