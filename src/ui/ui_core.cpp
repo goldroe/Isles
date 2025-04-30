@@ -889,8 +889,6 @@ internal void draw_ui_layout() {
   set_shader(shader_ui);
   d3d11_state->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-  bind_uniform(current_shader, str8_lit("Constants"));
-
   Vector2Int window_dim = ui_g_state->window_dimension;
   Matrix4 projection = ortho_rh_zo(0.0f, (f32)window_dim.x, (f32)window_dim.y, 0.0f);
 
