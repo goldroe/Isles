@@ -327,6 +327,21 @@ internal void update_camera_matrix(Camera *camera) {
   camera->transform = camera->projection_matrix * camera->view_matrix;
 }
 
+internal Camera mirror_camera(Camera camera, Vector3 target, Axis axis) {
+  Camera mirrored = camera;
+  Vector3 to_camera = camera.origin - target;
+  Vector3 to_camera_flip = to_camera;
+  to_camera_flip[axis] *= -1;
+
+  mirrored.origin = target + to_camera_flip;
+  f32 yaw   = camera.yaw;
+  f32 pitch = -camera.pitch;
+
+  mirrored.update_euler_angles(yaw, pitch);
+
+  return mirrored;
+}
+
 void Camera::update_euler_angles(f32 Yaw, f32 Pitch) {
   yaw = Yaw;
   pitch = Pitch;
