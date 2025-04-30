@@ -3,15 +3,32 @@
 // Specular strength
 #define SPEC_AMOUNT 0.5
 
-cbuffer Constants : register(b0) {
-  matrix xform;
-  matrix world;
+#define MAX_POINT_LIGHTS 4
+
+struct Point_Light {
+  float3 position;
+  float range;
+  float4 color;
+  float3 att;
+  float pad;
+};
+
+cbuffer Per_Frame : register(b0) {
   matrix light_view_projection;
   float4 light_color;
   float3 light_direction;
+  int point_light_count;
+  Point_Light point_lights[MAX_POINT_LIGHTS];
+
+  float4 clip_plane;
+  float3 eye_pos;
+};
+
+cbuffer Per_Object : register(b1) {
+  matrix xform;
+  matrix world;
   float use_override_color;
   float4 override_color;
-  float3 eye;
 };
 
 struct Vertex_Input {
@@ -28,6 +45,7 @@ struct Vertex_Output {
   float4 color : COLOR;
   float2 uv : TEXCOORD;
   float4 shadow_coords : TEXCOORD1;
+  float clip_distance : SV_ClipDistance;
 };
 
 SamplerState diffuse_sampler : register(s0);
@@ -40,8 +58,9 @@ Texture2D shadow_map      : register(t1);
 
 Vertex_Output vs_main(Vertex_Input input) {
   Vertex_Output output;
+  float4 pos_w = mul(world, float4(input.pos_l, 1.0));
   output.pos_h = mul(xform, float4(input.pos_l, 1.0));
-  output.pos_w = mul(world, float4(input.pos_l, 1.0)).xyz;
+  output.pos_w = pos_w;
   output.normal = mul((float3x3)world, input.normal);
   output.color = input.color;
   if (use_override_color) {
@@ -51,14 +70,36 @@ Vertex_Output vs_main(Vertex_Input input) {
   float4 light_view_position = mul(light_view_projection, float4(output.pos_w, 1.0));
   output.shadow_coords = light_view_position * float4(0.5, -0.5, 1.0, 1.0) + (float4(0.5, 0.5, 0.0, 0.0) * light_view_position.w);
   // output.shadow_coords = mul(light_view_projection, float4(output.pos_w, 1.0));
+  output.clip_distance = dot(pos_w, clip_plane);
   return output;
+}
+
+float3 compute_point_light(float3 position, float3 normal, float3 to_eye) {
+  float3 value = 0;
+  for (int i = 0; i < point_light_count; i++) {
+    Point_Light L = point_lights[i];
+    float3 light_dir = L.position - position;
+    float d = length(light_dir);
+
+    if (d > L.range) continue;
+
+    light_dir /= d;
+
+    float att = 1.0f / dot(L.att, float3(1.0f, d, d*d));
+    value += att * L.color;
+  }
+  return value;
 }
 
 float4 ps_main(Vertex_Output input) : SV_TARGET {
   float4 diffuse_color = float4(1, 1, 1, 1);
   float4 texture_color = diffuse_texture.Sample(diffuse_sampler, input.uv);
 
-  float4 ambient = 0.15 * light_color;
+  float3 to_eye = eye_pos - input.pos_w;
+
+  float3 P = compute_point_light(input.pos_w, input.normal, to_eye);
+
+  float4 ambient = 0.1 * light_color;
   float2 suv = input.shadow_coords.xy;
   float depth = input.shadow_coords.z;
 
@@ -84,20 +125,19 @@ float4 ps_main(Vertex_Output input) : SV_TARGET {
 
   float d = max(dot(-light_direction, input.normal), 0.0);
 
-  float shadow = 0.8;
+  float shadow = 0.5;
   for (int i = 0; i < 4; i++) {
     int p = i;
     float shadow_depth = shadow_map.Sample(shadow_sampler, suv + poisson_disk[p] * 0.001).r;
     if (shadow_depth < depth - bias) {
-      shadow -= 0.2;
+      shadow -= 0.1;
     }
   }
 
-  float4 color = ambient + shadow * diffuse_color * d;
+  float4 color = ambient + float4(P, 0) + shadow * diffuse_color * d;
   color = saturate(color);
   color = color * texture_color * input.color;
   // color = float4(shadow, shadow, shadow, 1.0);
-
   return color;
 }
 
