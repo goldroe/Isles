@@ -8,6 +8,7 @@ enum Entity_Kind : u16 {
   ENTITY_MIRROR = 3,
   ENTITY_SUN = 4,
   ENTITY_PARTICLE_SOURCE = 5,
+  ENTITY_POINT_LIGHT = 6,
   ENTITY_COUNT
 };
 
@@ -104,6 +105,12 @@ struct Particles {
 struct Particle_Source : Entity {
   b32 initialized;
   Particles particles;
+};
+
+struct Point_Light : Entity {
+  Vector4 color;
+  Vector3 attenuation;
+  f32 range;
 };
 
 #endif // ENTITY_H

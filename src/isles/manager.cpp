@@ -23,10 +23,12 @@ internal void reset_manager() {
     entity_free(entity);
   }
 
+  manager->by_type._Inanimate.clear();
   manager->by_type._Guy.clear();
   manager->by_type._Mirror.clear();
   manager->by_type._Sun.clear();
   manager->by_type._Particle_Source.clear();
+  manager->by_type._Point_Light.clear();
   manager->entities.clear();
   manager->next_pid = 1;
 }
@@ -34,6 +36,9 @@ internal void reset_manager() {
 internal void entity_push(Entity_Manager *manager, Entity *entity) {
   switch (entity->kind) {
   default:
+    break;
+  case ENTITY_INANIMATE:
+    manager->by_type._Inanimate.push(entity);
     break;
   case ENTITY_GUY:
     manager->by_type._Guy.push(static_cast<Guy*>(entity));
@@ -46,6 +51,9 @@ internal void entity_push(Entity_Manager *manager, Entity *entity) {
     break;
   case ENTITY_PARTICLE_SOURCE:
     manager->by_type._Particle_Source.push(static_cast<Particle_Source*>(entity));
+    break;
+  case ENTITY_POINT_LIGHT:
+    manager->by_type._Point_Light.push(static_cast<Point_Light*>(entity));
     break;
   }
   manager->entities.push(entity);
@@ -65,6 +73,7 @@ internal void remove_entities_to_be_destroyed() {
     } \
   } \
 
+  ENTITY_REMOVE(manager->by_type._Inanimate);
   ENTITY_REMOVE(manager->by_type._Guy);
   ENTITY_REMOVE(manager->by_type._Mirror);
   ENTITY_REMOVE(manager->by_type._Sun);
@@ -100,6 +109,9 @@ internal Entity *entity_make(Entity_Kind kind) {
     break;
   case ENTITY_PARTICLE_SOURCE:
     e = (Entity *)entity_alloc(sizeof(Particle_Source));
+    break;
+  case ENTITY_POINT_LIGHT:
+    e = (Entity *)entity_alloc(sizeof(Point_Light));
     break;
   }
   e->kind = kind;
