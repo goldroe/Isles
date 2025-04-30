@@ -5,11 +5,14 @@
 cbuffer Constants : register(b0) {
   matrix xform;
   matrix world;
-  matrix light_view_projection;
   float4 color;
+  matrix bone_matrices[MAX_BONES];
+};
+
+cbuffer Light_Params : register(b1) {
+  matrix light_view_projection;
   float4 light_color;
   float3 light_direction;
-  matrix bone_matrices[MAX_BONES];
 };
 
 struct Vertex_Input {
