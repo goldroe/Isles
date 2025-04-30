@@ -258,6 +258,61 @@ internal Sampler *create_sampler(D3D11_SAMPLER_DESC *desc) {
   return sampler;
 }
 
+internal Texture *create_texture_cube(String8 file_names[6]) {
+  R_D3D11_State *d3d = r_d3d11_state();
+
+  DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+  int x, y, n;
+  D3D11_SUBRESOURCE_DATA data[6] = {};
+  for (int i = 0; i < 6; i++) {
+    u8 *mem = stbi_load((char *)file_names[i].data, &x, &y, &n, 4);
+    data[i].pSysMem = mem;
+    data[i].SysMemPitch = x * 4;
+    data[i].SysMemSlicePitch = 0;
+  }
+
+  D3D11_TEXTURE2D_DESC desc = {};
+  desc.Width = x;
+  desc.Height = y;
+  desc.MipLevels = 1;
+  desc.ArraySize = 6;
+  desc.Format = format;
+  desc.SampleDesc.Count = 1;
+  desc.SampleDesc.Quality = 0;
+  desc.Usage = D3D11_USAGE_DEFAULT;
+  desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+  desc.CPUAccessFlags = 0;
+  desc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+
+  ID3D11Texture2D *tex2d = NULL;
+  ID3D11ShaderResourceView *view = NULL;
+  HRESULT hr = d3d->device->CreateTexture2D(&desc, data, &tex2d);
+  if (FAILED(hr)) {
+    printf("Failed to create shader resource view\n");
+    return nullptr;
+  }
+
+  D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
+  srv_desc.Format = desc.Format;
+  srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+  srv_desc.Texture2D.MostDetailedMip = 0;
+  srv_desc.Texture2D.MipLevels = 1;
+  hr = d3d->device->CreateShaderResourceView(tex2d, &srv_desc, &view);
+  if (FAILED(hr)) {
+    printf("Failed to create texture2d\n");
+    return nullptr; 
+  }
+
+  Texture *texture = new Texture;
+  texture->width = x;
+  texture->height = y;
+  texture->format = format;
+  texture->view = view;
+
+  return texture;
+}
+
 internal Texture *create_texture(u8 *data, DXGI_FORMAT format, int w, int h, int flags) {
   HRESULT hr = S_OK;
 
@@ -303,7 +358,7 @@ internal Texture *create_texture(u8 *data, DXGI_FORMAT format, int w, int h, int
     d3d11_state->device_context->GenerateMips(view); 
   }
 
-  texture->view = (void *)view;
+  texture->view = view;
   return texture;
 }
 
@@ -356,7 +411,7 @@ internal void r_resize_render_target(Vector2Int dimension) {
 
   hr = d3d11_state->device->CreateRenderTargetView(backbuffer, NULL, (ID3D11RenderTargetView **)&render_target->render_target_view);
 
-  render_target->texture = backbuffer;
+  // render_target->texture = backbuffer;
 
   if (render_target->depth_stencil_view) ((ID3D11DepthStencilView *)render_target->depth_stencil_view)->Release();
 
@@ -392,7 +447,9 @@ internal void r_d3d11_initialize(HWND window_handle) {
   HRESULT hr;
 
   UINT device_flags = 0;
+#if _DEBUG
   device_flags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
 
   D3D_FEATURE_LEVEL feature_levels[] = { D3D_FEATURE_LEVEL_11_0 };
 
@@ -433,7 +490,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
     D3D11_DEPTH_STENCIL_DESC desc = {};
     desc.DepthEnable = true;
     desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
-    desc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+    desc.DepthFunc = D3D11_COMPARISON_LESS;
     desc.StencilEnable = false;
     desc.FrontFace.StencilFailOp = desc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
     desc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
@@ -453,12 +510,23 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc = {};
     desc.DepthEnable = true;
     desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
-    desc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+    desc.DepthFunc = D3D11_COMPARISON_LESS;
     desc.StencilEnable = false;
     desc.FrontFace.StencilFailOp = desc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
     desc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
     desc.BackFace = desc.FrontFace;
     depth_state_no_write = create_depth_state(&desc);
+
+    desc = {};
+    desc.DepthEnable = true;
+    desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+    desc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+    desc.StencilEnable = false;
+    desc.FrontFace.StencilFailOp = desc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+    desc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+    desc.BackFace = desc.FrontFace;
+    depth_state_skybox = create_depth_state(&desc);
+
   }
 
   //@Note Create rasterizer states
@@ -515,6 +583,19 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.MultisampleEnable = true;
     desc.AntialiasedLineEnable = false;
     rasterizer_wireframe = create_rasterizer(&desc);
+
+    desc = {};
+    desc.FillMode = D3D11_FILL_SOLID;
+    desc.CullMode = D3D11_CULL_BACK;
+    desc.ScissorEnable = false;
+    desc.DepthClipEnable = false;
+    desc.DepthBias = 100000;
+    desc.DepthBiasClamp = 0.0f;
+    desc.SlopeScaledDepthBias = 1.0f;
+    desc.FrontCounterClockwise = true;
+    desc.MultisampleEnable = false;
+    desc.AntialiasedLineEnable = false;
+    rasterizer_shadow_map = create_rasterizer(&desc);
   }
 
   {
@@ -591,6 +672,17 @@ internal void r_d3d11_initialize(HWND window_handle) {
     desc.MipLODBias = 0;
     desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
     sampler_point = create_sampler(&desc);
+
+    desc = {};
+    desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    desc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+    desc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+    desc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    desc.MinLOD = 0;
+    desc.MaxLOD = D3D11_FLOAT32_MAX;
+    desc.MipLODBias = 0;
+    desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    sampler_skybox = create_sampler(&desc);
   }
 
   {
@@ -622,6 +714,9 @@ internal void r_d3d11_initialize(HWND window_handle) {
     { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex_XNCUU, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 },
   };
   shader_entity = r_d3d11_make_shader(str8_lit("data/shaders/entity.hlsl"), str8_lit("Entity"), entity_ilay, ArrayCount(entity_ilay), false);
+  shader_entity->bindings->xform = find_shader_constant(shader_entity, str8_lit("xform"));
+  shader_entity->bindings->world = find_shader_constant(shader_entity, str8_lit("world"));
+  shader_entity->bindings->diffuse_texture = find_shader_texture(shader_entity, str8_lit("diffuse_texture"));
 
   D3D11_INPUT_ELEMENT_DESC particle_ilay[] = {
     { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Particle_Pt, position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -671,6 +766,17 @@ internal void r_d3d11_initialize(HWND window_handle) {
   };
   shader_color_wheel = r_d3d11_make_shader(str8_lit("data/shaders/color_wheel.hlsl"), str8_lit("Color Wheel"), color_wheel_ilay, ArrayCount(color_wheel_ilay), false);
 
+  D3D11_INPUT_ELEMENT_DESC water_ilay[] = {
+    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Vertex_XNCUU, position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Vertex_XNCUU, normal),   D3D11_INPUT_PER_VERTEX_DATA, 0 },
+  };
+  shader_water = r_d3d11_make_shader(str8_lit("data/shaders/water.hlsl"), str8_lit("Water"), water_ilay, ArrayCount(water_ilay), false);
+
+  D3D11_INPUT_ELEMENT_DESC skybox_ilay[] = {
+    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+  };
+  shader_skybox = r_d3d11_make_shader(str8_lit("data/shaders/skybox.hlsl"), str8_lit("Skybox"), skybox_ilay, ArrayCount(skybox_ilay), false);
+
   sun_icon_texture = create_texture_from_file(str8_lit("data/textures/sun_icon.bmp"), 0);
   eye_of_horus_texture = create_texture_from_file(str8_lit("data/textures/eye_of_horus.png"), 0);
   flare_texture = create_texture_from_file(str8_lit("data/textures/flare0.png"), 0);
@@ -704,8 +810,6 @@ internal void r_d3d11_begin(OS_Handle window_handle) {
   set_shader(shader_argb_texture);
   set_constant(str8_lit("projection"), screen_projection);
   apply_constants();
-
-  set_shader(nullptr);
 }
 
 internal void r_d3d11_recompile_shader(Shader *shader) {
@@ -758,6 +862,8 @@ internal void r_d3d11_recompile_shader(Shader *shader) {
 
   shader->vertex_shader = vertex_shader;
   shader->pixel_shader = pixel_shader;
+
+  if (contents.data) free(contents.data);
 }
 
 internal char *copy_str(const char *src) {
@@ -928,9 +1034,9 @@ internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, Sh
   int compilation_success = true;
 
   UINT compile_flags = D3DCOMPILE_ENABLE_STRICTNESS;
-  // #ifdef _DEBUG
+#ifdef _DEBUG
   compile_flags |= D3DCOMPILE_DEBUG;
-  // #endif
+#endif
 
   hr = D3DCompile(contents.data, contents.count, (LPCSTR)file_name.data, NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs_main", "vs_5_0", compile_flags, 0, &vs_blob, &vs_error);
   if (hr != S_OK) {
@@ -979,6 +1085,8 @@ internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, Sh
   if (vs_error) vs_error->Release();
   if (ps_error) ps_error->Release();
   if (gs_error) gs_error->Release();
+
+  if (contents.data) free(contents.data);
 }
 
 internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count, bool use_geometry_shader) {
@@ -1019,12 +1127,3 @@ internal void r_d3d11_update_dirty_shaders() {
 }
 
 
-Shader_Uniform* Shader_Bindings::lookup_uniform(String8 name) {
-  for (int i = 0; i < uniforms.count; i++) {
-    Shader_Uniform *uniform = uniforms[i];
-    if (str8_equal(name, uniform->name)) {
-      return uniform;
-    }
-  }
-  return nullptr;
-}

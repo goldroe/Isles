@@ -34,7 +34,10 @@ struct Shader_Bindings {
   Auto_Array<Shader_Loc> uniform_locations;
   Auto_Array<Shader_Uniform*> uniforms;
 
-  Shader_Uniform *lookup_uniform(String8 name);
+  Shader_Constant *xform = nullptr;
+  Shader_Constant *world = nullptr;
+
+  Shader_Loc *diffuse_texture;
 };
 
 struct Shader {
@@ -60,7 +63,7 @@ struct Texture {
   int height;
   DXGI_FORMAT format;
   union {
-    void *view;
+    ID3D11ShaderResourceView *view;
   };
 };
 
@@ -109,4 +112,5 @@ internal Texture *create_texture(u8 *data, DXGI_FORMAT format, int w, int h, int
 internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count, bool use_geometry_shader);
 internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, ID3D11VertexShader **vertex_shader, ID3D11PixelShader **pixel_shader, ID3D11InputLayout **input_layout, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count);
 
+internal Texture *create_texture_cube(String8 file_names[6]);
 #endif // RENDER_H
