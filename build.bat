@@ -20,7 +20,7 @@ if %MODE%==release (
   exit /B 2
 )
 
-set LIBS=/LIBPATH:ext\freetype\libs\x64\Release\ /LIBPATH:ext\assimp\lib\x64\ /LIBPATH:ext\FMOD\lib\ D3D11.lib D3DCompiler.lib dxgi.lib dxguid.lib user32.lib shell32.lib kernel32.lib winmm.lib shlwapi.lib freetype.lib assimp-vc143-mt.lib fmod_vc.lib fmodstudio_vc.lib
+set LIBS=/LIBPATH:ext\freetype\libs\x64\Release\ /LIBPATH:ext\assimp\lib\x64\ /LIBPATH:ext\FMOD\lib\ D3D11.lib D3DCompiler.lib dxgi.lib dxguid.lib gdi32.lib user32.lib shell32.lib kernel32.lib winmm.lib shlwapi.lib freetype.lib assimp-vc143-mt.lib fmod_vc.lib fmodstudio_vc.lib
 set COMMON_LINKER_FLAGS=/INCREMENTAL:NO /OPT:REF
 set LINKER_FLAGS=%COMMON_LINKER_FLAGS% %LIBS%
 
