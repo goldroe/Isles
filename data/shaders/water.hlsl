@@ -55,13 +55,9 @@ float4 ps_main(Vertex_Output input) : SV_TARGET {
   float water_distance = 2.0 * near * far / (far + near - (2.0 * input.position.z - 1.0) * (far - near));
   float water_depth = (floor_distance - water_distance);
 
-  // float2 distortion1 = (dudv_map.Sample(main_sampler, float2(input.dudv.x + move_factor, input.dudv.y)).xy * 2.0 - 1.0) * wave_strength;
-  // float2 distortion2 = (dudv_map.Sample(main_sampler, float2(-input.dudv.x + move_factor, input.dudv.y + move_factor)).xy * 2.0 - 1.0) * wave_strength;
-  // float2 distortion = distortion1 + distortion2;
-
   float2 distort_uv = dudv_map.Sample(main_sampler, float2(input.dudv.x + move_factor, input.dudv.y)).xy * 0.1;
   distort_uv = input.dudv + float2(distort_uv.x, distort_uv.y + move_factor);
-  float2 distortion = (dudv_map.Sample(main_sampler, distort_uv).xy * 2.0 - 1.0) * wave_strength * clamp(water_depth * 20, 0.0, 1.0);
+  float2 distortion = (dudv_map.Sample(main_sampler, distort_uv).xy * 2.0 - 1.0) * wave_strength * clamp(water_depth / 20, 0.0, 1.0);
 
   refract_uv += distortion;
   refract_uv = clamp(refract_uv, 0.001, 0.999);
@@ -76,14 +72,13 @@ float4 ps_main(Vertex_Output input) : SV_TARGET {
 
   float3 view_vector = normalize(input.to_eye);
   float refract_factor = dot(view_vector, normal);
-  refract_factor = pow(refract_factor, 2.0);
-  
+  refract_factor = pow(refract_factor, 6.0);
+  refract_factor = clamp(refract_factor, 0.0, 0.9);
+
   float4 reflect_color = reflection_texture.Sample(main_sampler, reflect_uv);
   float4 refract_color = refraction_texture.Sample(main_sampler, refract_uv);
   float4 final_color = lerp(reflect_color, refract_color, refract_factor);
+  final_color.a = clamp(water_depth * 10.0, 0.0, 1.0);
   // final_color = lerp(final_color, float4(0.0, 0.3, 0.5, 1.0), 0.2);
-
-  final_color.a = clamp(water_depth * 2.0, 0.0, 1.0);
-
   return final_color;
 }
