@@ -28,30 +28,34 @@ struct Shader_Loc {
 };
 
 struct Shader_Bindings {
+  Auto_Array<Shader_Uniform*> uniforms;
   Auto_Array<Shader_Constant> constants;
   Auto_Array<Shader_Loc> texture_locations;
   Auto_Array<Shader_Loc> sampler_locations;
   Auto_Array<Shader_Loc> uniform_locations;
-  Auto_Array<Shader_Uniform*> uniforms;
 
   Shader_Constant *xform = nullptr;
   Shader_Constant *world = nullptr;
 
-  Shader_Loc *diffuse_texture;
+  Shader_Loc *diffuse_texture = nullptr;
 };
 
 struct Shader {
   String8 name;
   String8 file_name;
-  u64 last_write_time;
+  u64 last_write_time = 0;
 
-  ID3D11InputLayout *input_layout;
-  ID3D11VertexShader *vertex_shader;
-  ID3D11PixelShader *pixel_shader;
-  ID3D11GeometryShader *geometry_shader;
-  Shader_Bindings *bindings;
+  b32 initialized = 0;
+  b32 has_geometry_shader = false;
+  Shader_Bindings *bindings = nullptr;
 
-  b32 use_geometry_shader;
+  ID3D11InputLayout *input_layout = nullptr;
+  ID3D11VertexShader *vertex_shader = nullptr;
+  ID3D11PixelShader *pixel_shader = nullptr;
+  ID3D11GeometryShader *geometry_shader = nullptr;
+
+  D3D11_INPUT_ELEMENT_DESC *input_elements = nullptr;
+  int input_element_count = 0;
 };
 
 enum {
@@ -109,8 +113,8 @@ internal void write_uniform_buffer(ID3D11Buffer *buffer, void *data, UINT bytes)
 internal Texture *create_texture_from_file(String8 file_name, int flags);
 internal Texture *create_texture(u8 *data, DXGI_FORMAT format, int w, int h, int flags);
 
-internal Shader *r_d3d11_make_shader(String8 file_name, String8 program_name, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count, bool use_geometry_shader);
-internal void r_d3d11_compile_shader(String8 file_name, String8 program_name, ID3D11VertexShader **vertex_shader, ID3D11PixelShader **pixel_shader, ID3D11InputLayout **input_layout, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count);
+internal Shader *shader_create(String8 file_name, String8 program_name, D3D11_INPUT_ELEMENT_DESC input_elements[], int elements_count, bool use_geometry_shader);
+internal void shader_compile(Shader *shader);
 
 internal Texture *create_texture_cube(String8 file_names[6]);
 #endif // RENDER_H
