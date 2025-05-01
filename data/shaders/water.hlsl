@@ -75,10 +75,14 @@ float4 ps_main(Vertex_Output input) : SV_TARGET {
   refract_factor = pow(refract_factor, 6.0);
   refract_factor = clamp(refract_factor, 0.0, 0.9);
 
+  float4 murky = float4(0.0, 0.3, 0.4, 0.5);
+
   float4 reflect_color = reflection_texture.Sample(main_sampler, reflect_uv);
   float4 refract_color = refraction_texture.Sample(main_sampler, refract_uv);
+  refract_color = lerp(refract_color, murky, clamp(water_depth/60.0, 0.0, 1.0));
+
   float4 final_color = lerp(reflect_color, refract_color, refract_factor);
-  final_color.a = clamp(water_depth * 10.0, 0.0, 1.0);
-  // final_color = lerp(final_color, float4(0.0, 0.3, 0.5, 1.0), 0.2);
+  final_color.a = clamp(water_depth * 12.0, 0.0, 1.0);
+  final_color = lerp(final_color, float4(0.0, 0.3, 0.5, 1.0), 0.2);
   return final_color;
 }
