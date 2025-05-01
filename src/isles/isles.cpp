@@ -385,7 +385,7 @@ internal void init_game() {
 
   game_state->camera.update_euler_angles(-PI * 0.5f, 0.0f);
 
-  load_world(str8_lit("test.lvl"));
+  load_world(str8_lit("1.lvl"));
 
   g_viewport = new Viewport();
   g_viewport->dimension.x = 1;

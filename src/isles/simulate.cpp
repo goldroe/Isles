@@ -187,7 +187,7 @@ internal void update_sun(Sun *sun) {
   AABB bounds = get_game_state()->bounding_box;
   Vector3 center = get_aabb_center(bounds);
   Vector3 bound_dim = get_aabb_dimension(bounds);
-  f32 radius = 0.7f * get_max_elem(bound_dim);
+  f32 radius = get_max_elem(bound_dim);
 
   sun->light_direction = normalize(sun->light_direction);
 

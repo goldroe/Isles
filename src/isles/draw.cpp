@@ -54,6 +54,7 @@ global Depth_Map *refraction_depth_map;
 global Triangle_Mesh *skybox_mesh;
 global Texture *skybox_texture;
 
+global f32 water_height = -0.1f;
 global Texture *water_dudv_texture;
 global Texture *water_normal_map;
 global f32 move_factor;
@@ -538,7 +539,7 @@ internal void init_draw() {
   R_D3D11_State *d3d = r_d3d11_state();
   shadow_map = make_depth_map(2048, 2048);
 
-  water_plane_mesh = gen_plane_mesh(Vector2(100.0f, 100.0f));
+  water_plane_mesh = gen_plane_mesh(Vector2(1000.0f, 1000.0f));
 
   reflection_render_target = make_render_target(d3d->window_dimension.x, d3d->window_dimension.y, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D24_UNORM_S8_UINT);
   refraction_render_target = make_render_target(d3d->window_dimension.x, d3d->window_dimension.y, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D24_UNORM_S8_UINT);
@@ -562,7 +563,6 @@ internal void init_draw() {
   skybox_mesh = gen_cube_mesh();
 
   water_dudv_texture = create_texture_from_file(str_lit("data/textures/waterDUDV.png"), 0);
-
   water_normal_map = create_texture_from_file(str_lit("data/textures/normalMap.png"), 0);
 }
 
@@ -869,11 +869,10 @@ internal void draw_world(World *world, Camera camera) {
 
   // Water Render
   {
+    Vector3 water_position = Vector3(0, -0.1f, 0);
     f32 wave_speed = 0.03f;
     move_factor += wave_speed * get_frame_delta();
     move_factor = fmodf(move_factor, 1.0f);
-
-    Vector3 water_position = Vector3(0, 0.01f, 0);
 
     Camera mirrored = camera;
     f32 distance = 2.0f * (camera.origin.y - water_position.y);
@@ -882,7 +881,7 @@ internal void draw_world(World *world, Camera camera) {
     update_camera_matrix(&mirrored);
 
     set_render_target(reflection_render_target);
-    clear_render_target(reflection_render_target, 0, 0, 0, 1);
+    clear_render_target(reflection_render_target, 0, 0, 0, 0);
     d3d->device_context->ClearDepthStencilView(reflection_render_target->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     set_rasterizer(rasterizer_default);
@@ -948,9 +947,9 @@ internal void draw_world(World *world, Camera camera) {
 
     // set_render_target(refraction_render_target);
     d3d->device_context->OMSetRenderTargets(1, &refraction_render_target->render_target_view, refraction_depth_map->depth_stencil_view);
-    clear_render_target(refraction_render_target, 0, 0, 0, 1);
+    clear_render_target(refraction_render_target, 0, 0, 0, 0);
 
-    set_constant(str_lit("clip_plane"), Vector4(0, -1, 0, water_position.y));
+    set_constant(str_lit("clip_plane"), Vector4(0, -1, 0, water_height));
     d3d->device_context->ClearDepthStencilView(refraction_depth_map->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     for (Entity *e : manager->by_type._Inanimate) {
@@ -987,7 +986,7 @@ internal void draw_world(World *world, Camera camera) {
     set_constant(str_lit("xform"), xform);
     set_constant(str_lit("world"), world_matrix);
     set_constant(str_lit("eye_position"), camera.origin);
-    set_constant(str_lit("tiling"), 0.18f);
+    set_constant(str_lit("tiling"), 0.166f);
     set_constant(str_lit("wave_strength"), 0.02f);
     set_constant(str_lit("move_factor"), move_factor);
     apply_constants();
@@ -1002,7 +1001,6 @@ internal void draw_world(World *world, Camera camera) {
     set_rasterizer(rasterizer_default);
     set_blend_state(blend_state_default);
   }
-
 
   // draw_skybox(&camera);
 }
