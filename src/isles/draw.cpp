@@ -46,15 +46,14 @@ global bool display_shadow_map;
 
 global Triangle_Mesh *water_plane_mesh;
 
-global Render_Target *reflection_render_target;
-global Render_Target *refraction_render_target;
+global Frame_Buffer *reflection_frame_buffer;
+global Frame_Buffer *refraction_frame_buffer;
 
 global Depth_Map *refraction_depth_map;
 
 global Triangle_Mesh *skybox_mesh;
 global Texture *skybox_texture;
 
-global f32 water_height = -0.1f;
 global Texture *water_dudv_texture;
 global Texture *water_normal_map;
 global f32 move_factor;
@@ -101,7 +100,8 @@ internal Depth_Map *make_depth_map(int width, int height) {
   texture->view = srv;
 
   Depth_Map *map = new Depth_Map();
-  map->depth_stencil_view = depth_stencil_view;
+  map->dimension = Vector2Int(width, height);
+  map->depth_stencil = depth_stencil_view;
   map->texture = texture;
   return map;
 }
@@ -112,22 +112,22 @@ internal void set_shader(Shader *shader) {
   if (shader != current_shader) {
     current_shader = shader;
 
-    d3d->device_context->VSSetShader(shader->vertex_shader, nullptr, 0);
-    d3d->device_context->PSSetShader(shader->pixel_shader, nullptr, 0);
-    d3d->device_context->GSSetShader(shader->geometry_shader, nullptr, 0);
-    d3d->device_context->IASetInputLayout(shader->input_layout);
+    d3d->devcon->VSSetShader(shader->vertex_shader, nullptr, 0);
+    d3d->devcon->PSSetShader(shader->pixel_shader, nullptr, 0);
+    d3d->devcon->GSSetShader(shader->geometry_shader, nullptr, 0);
+    d3d->devcon->IASetInputLayout(shader->input_layout);
 
     for (int i = 0; i < shader->bindings->uniforms.count; i++) {
       Shader_Uniform *uniform = shader->bindings->uniforms[i];
       Shader_Loc *loc = &shader->bindings->uniform_locations[i];
       if (loc->vertex != -1) {
-        d3d->device_context->VSSetConstantBuffers(loc->vertex, 1, &uniform->buffer);
+        d3d->devcon->VSSetConstantBuffers(loc->vertex, 1, &uniform->buffer);
       }
       if (loc->pixel != -1) {
-        d3d->device_context->PSSetConstantBuffers(loc->pixel, 1, &uniform->buffer);
+        d3d->devcon->PSSetConstantBuffers(loc->pixel, 1, &uniform->buffer);
       }
       if (loc->geo != -1) {
-        d3d->device_context->GSSetConstantBuffers(loc->geo, 1, &uniform->buffer);
+        d3d->devcon->GSSetConstantBuffers(loc->geo, 1, &uniform->buffer);
       }
     }
   }
@@ -135,7 +135,7 @@ internal void set_shader(Shader *shader) {
 
 internal void reset_primitives() {
   R_D3D11_State *d3d = r_d3d11_state();
-  d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  d3d->devcon->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
 internal void reset_texture(String8 name) {
@@ -154,13 +154,13 @@ internal void reset_texture(String8 name) {
   if (loc) {
     ID3D11ShaderResourceView *null_srv[1] = {nullptr};
     if (loc->vertex != -1) {
-      d3d->device_context->VSSetShaderResources(loc->vertex, 1, null_srv);
+      d3d->devcon->VSSetShaderResources(loc->vertex, 1, null_srv);
     }
     if (loc->pixel != -1) {
-      d3d->device_context->PSSetShaderResources(loc->pixel, 1, null_srv);
+      d3d->devcon->PSSetShaderResources(loc->pixel, 1, null_srv);
     }
     if (loc->geo != -1) {
-      d3d->device_context->PSSetShaderResources(loc->geo, 1, null_srv);
+      d3d->devcon->PSSetShaderResources(loc->geo, 1, null_srv);
     }
   } else {
     logprint("Texture '%S' not found in shader '%S'\n", name, shader->file_name);
@@ -182,13 +182,13 @@ internal void set_sampler(String8 name, Sampler *sampler) {
 
   if (loc) {
     if (loc->vertex != -1) {
-      d3d->device_context->VSSetSamplers(loc->vertex, 1, &sampler->resource);
+      d3d->devcon->VSSetSamplers(loc->vertex, 1, &sampler->resource);
     }
     if (loc->pixel != -1) {
-      d3d->device_context->PSSetSamplers(loc->pixel, 1, &sampler->resource);
+      d3d->devcon->PSSetSamplers(loc->pixel, 1, &sampler->resource);
     }
     if (loc->geo != -1) {
-      d3d->device_context->PSSetSamplers(loc->geo, 1, &sampler->resource);
+      d3d->devcon->PSSetSamplers(loc->geo, 1, &sampler->resource);
     }
   } else {
     logprint("Sampler '%S' not found in shader '%S'\n", name, shader->file_name);
@@ -214,13 +214,13 @@ internal inline void set_texture(Shader_Loc *loc, Texture *texture) {
     R_D3D11_State *d3d = r_d3d11_state();
     ID3D11ShaderResourceView *view = texture ? texture->view : d3d->fallback_tex->view;
     if (loc->vertex != -1) {
-      d3d->device_context->VSSetShaderResources(loc->vertex, 1, &view);
+      d3d->devcon->VSSetShaderResources(loc->vertex, 1, &view);
     }
     if (loc->pixel != -1) {
-      d3d->device_context->PSSetShaderResources(loc->pixel, 1, &view);
+      d3d->devcon->PSSetShaderResources(loc->pixel, 1, &view);
     }
     if (loc->geo != -1) {
-      d3d->device_context->PSSetShaderResources(loc->geo, 1, &view);
+      d3d->devcon->PSSetShaderResources(loc->geo, 1, &view);
     }
   }
 }
@@ -341,12 +341,12 @@ internal inline void set_constant(String8 name, int v, Shader *shader = current_
 
 internal void set_rasterizer(Rasterizer *rasterizer) {
   R_D3D11_State *d3d = r_d3d11_state();
-  d3d->device_context->RSSetState(rasterizer->resource);
+  d3d->devcon->RSSetState(rasterizer->resource);
 }
 
 internal void set_blend_state(Blend_State *blend_state) {
   R_D3D11_State *d3d = r_d3d11_state();
-  d3d->device_context->OMSetBlendState(blend_state->resource, NULL, 0xFFFFFFF);
+  d3d->devcon->OMSetBlendState(blend_state->resource, NULL, 0xFFFFFFF);
 }
 
 internal void reset_blend_state() {
@@ -355,17 +355,17 @@ internal void reset_blend_state() {
 
 internal void set_depth_state(Depth_State *depth_state) {
   R_D3D11_State *d3d = r_d3d11_state();
-  d3d->device_context->OMSetDepthStencilState(depth_state->resource, 0);
+  d3d->devcon->OMSetDepthStencilState(depth_state->resource, 0);
 }
 
-internal void set_render_target(Render_Target *render_target) {
+internal void set_frame_buffer(Frame_Buffer *frame_buffer) {
   R_D3D11_State *d3d = r_d3d11_state();
-  d3d->device_context->OMSetRenderTargets(1, (ID3D11RenderTargetView **)&render_target->render_target_view, (ID3D11DepthStencilView *)render_target->depth_stencil_view);
+  d3d->devcon->OMSetRenderTargets(1, &frame_buffer->render_target, frame_buffer->depth_stencil);
 }
 
-internal void reset_render_target() {
+internal void reset_frame_buffer() {
   R_D3D11_State *d3d = r_d3d11_state();
-  set_render_target(d3d->default_render_target);
+  d3d->devcon->OMSetRenderTargets(1, &d3d->render_target, d3d->depth_stencil);
 }
 
 internal void set_viewport(f32 left, f32 top, f32 right, f32 bottom) {
@@ -377,7 +377,7 @@ internal void set_viewport(f32 left, f32 top, f32 right, f32 bottom) {
   viewport.Height = bottom - top;
   viewport.MinDepth = 0;
   viewport.MaxDepth = 1;
-  d3d->device_context->RSSetViewports(1, &viewport); 
+  d3d->devcon->RSSetViewports(1, &viewport); 
 }
 
 internal void reset_viewport() {
@@ -440,9 +440,9 @@ internal void immediate_flush() {
 
   ID3D11Buffer *vertex_buffer = make_vertex_buffer(immediate_vertices.data, immediate_vertices.byte_count, 1);
 
-  d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &format_size, &offset);
+  d3d->devcon->IASetVertexBuffers(0, 1, &vertex_buffer, &format_size, &offset);
 
-  d3d->device_context->Draw(vertices_count, 0);
+  d3d->devcon->Draw(vertices_count, 0);
 
   vertex_buffer->Release();
   immediate_vertices.byte_count = 0;
@@ -456,15 +456,15 @@ internal void draw_wireframe_mesh(Triangle_Mesh *mesh) {
   R_D3D11_State *d3d = r_d3d11_state();
 
   UINT stride = sizeof(Vertex_XNCUU), offset = 0;
-  d3d->device_context->IASetVertexBuffers(0, 1, &mesh->vertex_buffer, &stride, &offset);
-  d3d->device_context->Draw((UINT)mesh->vertices.count, 0);
+  d3d->devcon->IASetVertexBuffers(0, 1, &mesh->vertex_buffer, &stride, &offset);
+  d3d->devcon->Draw((UINT)mesh->vertices.count, 0);
 }
 
 internal void draw_mesh(Triangle_Mesh *mesh) {
   R_D3D11_State *d3d = r_d3d11_state();
 
   UINT stride = sizeof(Vertex_XNCUU), offset = 0;
-  d3d->device_context->IASetVertexBuffers(0, 1, &mesh->vertex_buffer, &stride, &offset);
+  d3d->devcon->IASetVertexBuffers(0, 1, &mesh->vertex_buffer, &stride, &offset);
 
   for (int i = 0; i < mesh->triangle_list_info.count; i++) {
     Triangle_List_Info triangle_list_info = mesh->triangle_list_info[i];
@@ -473,7 +473,7 @@ internal void draw_mesh(Triangle_Mesh *mesh) {
 
     set_texture(current_shader->bindings->diffuse_texture, material->texture);
 
-    d3d->device_context->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
+    d3d->devcon->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
   }
 }
 
@@ -541,23 +541,23 @@ internal void init_draw() {
 
   water_plane_mesh = gen_plane_mesh(Vector2(1000.0f, 1000.0f));
 
-  reflection_render_target = make_render_target(d3d->window_dimension.x, d3d->window_dimension.y, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D24_UNORM_S8_UINT);
-  refraction_render_target = make_render_target(d3d->window_dimension.x, d3d->window_dimension.y, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D24_UNORM_S8_UINT);
+  reflection_frame_buffer = make_frame_buffer(d3d->window_dimension.x, d3d->window_dimension.y, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D24_UNORM_S8_UINT);
+  refraction_frame_buffer = make_frame_buffer(d3d->window_dimension.x, d3d->window_dimension.y, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D24_UNORM_S8_UINT);
   refraction_depth_map = make_depth_map(d3d->window_dimension.x, d3d->window_dimension.y);
 
   String8 skybox_file_names[6] = {
-    str_lit("data/textures/interstellar_skybox/xpos.png"),
-    str_lit("data/textures/interstellar_skybox/xneg.png"),
-    str_lit("data/textures/interstellar_skybox/ypos.png"),
-    str_lit("data/textures/interstellar_skybox/yneg.png"),
-    str_lit("data/textures/interstellar_skybox/zpos.png"),
-    str_lit("data/textures/interstellar_skybox/zneg.png"),
-    // str_lit("data/textures/skybox2/right.png"),
-    // str_lit("data/textures/skybox2/left.png"),
-    // str_lit("data/textures/skybox2/top.png"),
-    // str_lit("data/textures/skybox2/bottom.png"),
-    // str_lit("data/textures/skybox2/front.png"),
-    // str_lit("data/textures/skybox2/back.png"),
+    str_lit("data/textures/Daylight Box/right.bmp"),
+    str_lit("data/textures/Daylight Box/left.bmp"),
+    str_lit("data/textures/Daylight Box/top.bmp"),
+    str_lit("data/textures/Daylight Box/bottom.bmp"),
+    str_lit("data/textures/Daylight Box/front.bmp"),
+    str_lit("data/textures/Daylight Box/back.bmp"),
+    // str_lit("data/textures/interstellar_skybox/xpos.png"),
+    // str_lit("data/textures/interstellar_skybox/xneg.png"),
+    // str_lit("data/textures/interstellar_skybox/ypos.png"),
+    // str_lit("data/textures/interstellar_skybox/yneg.png"),
+    // str_lit("data/textures/interstellar_skybox/zpos.png"),
+    // str_lit("data/textures/interstellar_skybox/zneg.png"),
   };
   skybox_texture = create_texture_cube(skybox_file_names);
   skybox_mesh = gen_cube_mesh();
@@ -566,12 +566,34 @@ internal void init_draw() {
   water_normal_map = create_texture_from_file(str_lit("data/textures/normalMap.png"), 0);
 }
 
+internal void update_resources() {
+  R_D3D11_State *d3d = r_d3d11_state();
+  if (reflection_frame_buffer->dimension != d3d->window_dimension) {
+    reflection_frame_buffer->render_target->Release();
+    reflection_frame_buffer->depth_stencil->Release();
+    delete reflection_frame_buffer;
+    reflection_frame_buffer = make_frame_buffer(d3d->window_dimension.x, d3d->window_dimension.y, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D24_UNORM_S8_UINT);
+  }
+  if (refraction_frame_buffer->dimension != d3d->window_dimension) {
+    refraction_frame_buffer->render_target->Release();
+    refraction_frame_buffer->depth_stencil->Release();
+    delete refraction_frame_buffer;
+    refraction_frame_buffer = make_frame_buffer(d3d->window_dimension.x, d3d->window_dimension.y, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D24_UNORM_S8_UINT);
+    refraction_depth_map = make_depth_map(d3d->window_dimension.x, d3d->window_dimension.y);
+
+    delete refraction_depth_map;
+    refraction_depth_map = make_depth_map(d3d->window_dimension.x, d3d->window_dimension.y);
+  }
+}
+
 internal void draw_scene() {
   local_persist bool first_call = true;
   if (first_call) {
     first_call = false;
     init_draw();
   }
+
+  update_resources();
 
   R_D3D11_State *d3d = r_d3d11_state();
 
@@ -597,8 +619,8 @@ internal void draw_scene() {
     set_viewport(0, 0, (f32)shadow_map->texture->width, (f32)shadow_map->texture->height);
     set_depth_state(depth_state_default);
     set_rasterizer(rasterizer_shadow_map);
-    d3d->device_context->OMSetRenderTargets(0, nullptr, shadow_map->depth_stencil_view);
-    d3d->device_context->ClearDepthStencilView(shadow_map->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
+    d3d->devcon->OMSetRenderTargets(0, nullptr, shadow_map->depth_stencil);
+    d3d->devcon->ClearDepthStencilView(shadow_map->depth_stencil, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     set_shader(shader_shadow_map);
 
@@ -620,8 +642,8 @@ internal void draw_scene() {
       apply_constants();
 
       UINT stride = sizeof(Vertex_XNCUU), offset = 0;
-      d3d->device_context->IASetVertexBuffers(0, 1, &mesh->vertex_buffer, &stride, &offset);
-      d3d->device_context->Draw((UINT)mesh->vertices.count, 0);
+      d3d->devcon->IASetVertexBuffers(0, 1, &mesh->vertex_buffer, &stride, &offset);
+      d3d->devcon->Draw((UINT)mesh->vertices.count, 0);
     }
 
     set_shader(shader_skinned_shadow_map);
@@ -639,8 +661,8 @@ internal void draw_scene() {
       apply_constants();
 
       uint stride = sizeof(Vertex_Skinned), offset = 0;
-      d3d->device_context->IASetVertexBuffers(0, 1, &mesh->skinned_vertex_buffer, &stride, &offset);
-      d3d->device_context->Draw((UINT)mesh->skinned_vertices.count, 0);
+      d3d->devcon->IASetVertexBuffers(0, 1, &mesh->skinned_vertex_buffer, &stride, &offset);
+      d3d->devcon->Draw((UINT)mesh->skinned_vertices.count, 0);
     }
 
     reset_viewport();
@@ -649,7 +671,7 @@ internal void draw_scene() {
   set_depth_state(depth_state_default);
   set_blend_state(blend_state_default);
   set_rasterizer(rasterizer_default);
-  set_render_target(d3d->default_render_target);
+  reset_frame_buffer();
 
   draw_world(world, camera);
 
@@ -661,14 +683,14 @@ internal void draw_scene() {
 
   set_blend_state(blend_state_additive);
 
+  set_shader(shader_particle);
   for (Particle_Source *source : manager->by_type._Particle_Source) {
     Particles *particles = &source->particles;
     if (particles->count == 0) continue;
 
-    set_shader(shader_particle);
     set_texture(str_lit("diffuse_texture"), sun_icon_texture);
     set_sampler(str_lit("diffuse_sampler"), sampler_linear);
-    d3d->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
+    d3d->devcon->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
 
     set_constant(str_lit("camera_position"), camera.origin);
     set_constant(str_lit("to_view_projection"), camera.transform);
@@ -684,8 +706,8 @@ internal void draw_scene() {
 
     ID3D11Buffer *vertex_buffer = make_vertex_buffer(points, particles->count, sizeof(Particle_Pt));
     uint stride = sizeof(Particle_Pt), offset = 0;
-    d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
-    d3d->device_context->Draw(particles->count, 0);
+    d3d->devcon->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+    d3d->devcon->Draw(particles->count, 0);
     vertex_buffer->Release();
     delete [] points;
   }
@@ -712,8 +734,8 @@ internal void draw_scene() {
     vertices[5] = Vector2(rect.x0, rect.y1);
     ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices, 6, sizeof(Vector2));
     uint stride = sizeof(Vector2), offset = 0;
-    d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
-    d3d->device_context->Draw(6, 0);
+    d3d->devcon->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+    d3d->devcon->Draw(6, 0);
     vertex_buffer->Release();
   }
 
@@ -753,8 +775,8 @@ internal void draw_skybox(Camera *camera) {
   apply_constants();
 
   uint stride = sizeof(Vertex_XNCUU), offset = 0;
-  d3d->device_context->IASetVertexBuffers(0, 1, &skybox_mesh->vertex_buffer, &stride, &offset);
-  d3d->device_context->Draw((uint)skybox_mesh->vertices.count, 0);
+  d3d->devcon->IASetVertexBuffers(0, 1, &skybox_mesh->vertex_buffer, &stride, &offset);
+  d3d->devcon->Draw((uint)skybox_mesh->vertices.count, 0);
 
   set_depth_state(depth_state_default);
   set_rasterizer(rasterizer_default);
@@ -852,7 +874,7 @@ internal void draw_world(World *world, Camera camera) {
     apply_constants();
 
     uint stride = sizeof(Vertex_Skinned), offset = 0;
-    d3d->device_context->IASetVertexBuffers(0, 1, &mesh->skinned_vertex_buffer, &stride, &offset);
+    d3d->devcon->IASetVertexBuffers(0, 1, &mesh->skinned_vertex_buffer, &stride, &offset);
 
     for (int i = 0; i < mesh->triangle_list_info.count; i++) {
       Triangle_List_Info triangle_list_info = mesh->triangle_list_info[i];
@@ -860,12 +882,11 @@ internal void draw_world(World *world, Camera camera) {
       Material *material = mesh->materials[triangle_list_info.material_index];
       set_texture(str_lit("diffuse_texture"), material->texture);
 
-      d3d->device_context->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
+      d3d->devcon->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
     }
   }
 
   reset_texture(str_lit("shadow_map"));
-
 
   // Water Render
   {
@@ -874,15 +895,16 @@ internal void draw_world(World *world, Camera camera) {
     move_factor += wave_speed * get_frame_delta();
     move_factor = fmodf(move_factor, 1.0f);
 
+    // Reflection
     Camera mirrored = camera;
     f32 distance = 2.0f * (camera.origin.y - water_position.y);
     mirrored.origin.y -= distance;
     mirrored.update_euler_angles(camera.yaw, -camera.pitch);
     update_camera_matrix(&mirrored);
 
-    set_render_target(reflection_render_target);
-    clear_render_target(reflection_render_target, 0, 0, 0, 0);
-    d3d->device_context->ClearDepthStencilView(reflection_render_target->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
+    set_frame_buffer(reflection_frame_buffer);
+    clear_frame_buffer(reflection_frame_buffer, 0, 0, 0, 0);
+    d3d->devcon->ClearDepthStencilView(reflection_frame_buffer->depth_stencil, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     set_rasterizer(rasterizer_default);
 
@@ -892,8 +914,7 @@ internal void draw_world(World *world, Camera camera) {
     Shader_Constant *c_use_tint = find_shader_constant(shader_entity, str_lit("use_override_color"));
     Shader_Constant *c_tint = find_shader_constant(shader_entity, str_lit("override_color"));
 
-    // reflection
-    set_constant(str_lit("clip_plane"), Vector4(0, 1, 0, -water_position.y + 0.1f));
+    set_constant(str_lit("clip_plane"), Vector4(0, 1, 0, -water_position.y));
 
     for (Entity *e : manager->entities) {
       if (e->kind == ENTITY_GUY) continue; //temp
@@ -931,26 +952,26 @@ internal void draw_world(World *world, Camera camera) {
       apply_constants();
 
       uint stride = sizeof(Vertex_Skinned), offset = 0;
-      d3d->device_context->IASetVertexBuffers(0, 1, &mesh->skinned_vertex_buffer, &stride, &offset);
+      d3d->devcon->IASetVertexBuffers(0, 1, &mesh->skinned_vertex_buffer, &stride, &offset);
 
       for (int i = 0; i < mesh->triangle_list_info.count; i++) {
         Triangle_List_Info triangle_list_info = mesh->triangle_list_info[i];
         Material *material = mesh->materials[triangle_list_info.material_index];
         set_texture(str_lit("diffuse_texture"), material->texture);
-        d3d->device_context->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
+        d3d->devcon->Draw(triangle_list_info.vertices_count, triangle_list_info.first_index);
       }
     }
 
-    // draw_skybox(&mirrored);
+    draw_skybox(&mirrored);
+
+
+    // Refraction
+    d3d->devcon->OMSetRenderTargets(1, &refraction_frame_buffer->render_target, refraction_depth_map->depth_stencil);
+    clear_frame_buffer(refraction_frame_buffer, 0, 0, 0, 0);
 
     set_shader(shader_entity);
-
-    // set_render_target(refraction_render_target);
-    d3d->device_context->OMSetRenderTargets(1, &refraction_render_target->render_target_view, refraction_depth_map->depth_stencil_view);
-    clear_render_target(refraction_render_target, 0, 0, 0, 0);
-
-    set_constant(str_lit("clip_plane"), Vector4(0, -1, 0, water_height));
-    d3d->device_context->ClearDepthStencilView(refraction_depth_map->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
+    set_constant(str_lit("clip_plane"), Vector4(0, -1, 0, water_position.y));
+    d3d->devcon->ClearDepthStencilView(refraction_depth_map->depth_stencil, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     for (Entity *e : manager->by_type._Inanimate) {
       Triangle_Mesh *mesh = e->mesh;
@@ -967,7 +988,7 @@ internal void draw_world(World *world, Camera camera) {
       draw_mesh(mesh);
     }
 
-    reset_render_target();
+    reset_frame_buffer();
 
     // draw water
     set_shader(shader_water);
@@ -975,25 +996,26 @@ internal void draw_world(World *world, Camera camera) {
     set_blend_state(blend_state_alpha);
 
     set_sampler(str_lit("main_sampler"), sampler_linear);
-    set_texture(str_lit("reflection_texture"), reflection_render_target->texture);
-    set_texture(str_lit("refraction_texture"), refraction_render_target->texture);
+    set_texture(str_lit("reflection_texture"), reflection_frame_buffer->texture);
+    set_texture(str_lit("refraction_texture"), refraction_frame_buffer->texture);
     set_texture(str_lit("dudv_map"), water_dudv_texture);
     set_texture(str_lit("normal_map"), water_normal_map);
     set_texture(str_lit("depth_map"), refraction_depth_map->texture);
 
     Matrix4 world_matrix = translate(water_position);
-    Matrix4 xform = camera.transform * world_matrix;
-    set_constant(str_lit("xform"), xform);
+    set_constant(str_lit("view_proj"), camera.transform);
     set_constant(str_lit("world"), world_matrix);
     set_constant(str_lit("eye_position"), camera.origin);
     set_constant(str_lit("tiling"), 0.166f);
     set_constant(str_lit("wave_strength"), 0.02f);
     set_constant(str_lit("move_factor"), move_factor);
+    set_constant(str_lit("near"), 0.01f);
+    set_constant(str_lit("far"), 1000.0f);
     apply_constants();
 
     uint stride = sizeof(Vertex_XNCUU), offset = 0;
-    d3d->device_context->IASetVertexBuffers(0, 1, &water_plane_mesh->vertex_buffer, &stride, &offset);
-    d3d->device_context->Draw((uint)water_plane_mesh->vertices.count, 0);
+    d3d->devcon->IASetVertexBuffers(0, 1, &water_plane_mesh->vertex_buffer, &stride, &offset);
+    d3d->devcon->Draw((uint)water_plane_mesh->vertices.count, 0);
 
     reset_texture(str_lit("reflection_texture"));
     reset_texture(str_lit("refraction_texture"));
@@ -1002,7 +1024,7 @@ internal void draw_world(World *world, Camera camera) {
     set_blend_state(blend_state_default);
   }
 
-  // draw_skybox(&camera);
+  draw_skybox(&camera);
 }
 
 internal inline ARGB argb_from_vector(Vector4 color) {

@@ -14,11 +14,11 @@ struct Game_Settings {
   Audio_Settings audio_settings; 
 };
 
-struct Render_Target;
+struct Frame_Buffer;
 
 struct Picker {
   Vector2 dimension;
-  Render_Target *render_target;
+  Frame_Buffer *frame_buffer;
   void *staging_texture;
 };
 

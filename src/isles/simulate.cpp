@@ -561,12 +561,10 @@ internal void update_and_render(OS_Event_List *events, OS_Handle window_handle, 
   os_set_cursor(OS_Cursor_Arrow);
 
   f32 aspect = (f32)game_state->window_dim.x / (f32)game_state->window_dim.y;
-  game_state->camera.projection_matrix = perspective_rh(game_state->camera.fov, aspect, 0.1f, 1000.0f);
-  editor->camera.projection_matrix     = perspective_rh(editor->camera.fov, aspect, 0.1f, 1000.0f);
+  game_state->camera.projection_matrix = perspective_rh(game_state->camera.fov, aspect, 0.01f, 1000.0f);
+  editor->camera.projection_matrix     = perspective_rh(editor->camera.fov, aspect, 0.01f, 1000.0f);
 
   input_begin(window_handle, events);
-
-  r_resize_render_target(game_state->window_dim);
 
   r_d3d11_begin(window_handle);
 

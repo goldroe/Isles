@@ -56,7 +56,7 @@
 #include "draw.h"
 #include "input.h"
 #include "undo.h"
-#include "render_target.h"
+#include "frame_buffer.h"
 
 #include "base/base_core.cpp"
 #include "core/core_math.cpp"
@@ -81,7 +81,7 @@
 #include "input.cpp"
 #include "editor.cpp"
 #include "undo.cpp"
-#include "render_target.cpp"
+#include "frame_buffer.cpp"
 #include "manager.cpp"
 #include "isles.cpp"
 #include "simulate.cpp"
@@ -111,6 +111,8 @@ int main() {
   if (!RegisterClassA(&window_class)) {
     printf("RegisterClassA failed, err:%d\n", GetLastError());
   }
+
+  r_g_d3d11_state = new R_D3D11_State();
 
   HWND hWnd;
   {

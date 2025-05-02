@@ -877,7 +877,7 @@ internal void draw_ui_box(UI_Box *box) {
 }
 
 internal void draw_ui_layout() {
-  R_D3D11_State *d3d11_state = r_d3d11_state();
+  R_D3D11_State *d3d = r_d3d11_state();
 
   ui_g_state->draw_bucket = new UI_Draw_Bucket();
 
@@ -887,7 +887,7 @@ internal void draw_ui_layout() {
   UI_Draw_Bucket *bucket = ui_g_state->draw_bucket;
 
   set_shader(shader_ui);
-  d3d11_state->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  d3d->devcon->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
   Vector2Int window_dim = ui_g_state->window_dimension;
   Matrix4 projection = ortho_rh_zo(0.0f, (f32)window_dim.x, (f32)window_dim.y, 0.0f);
@@ -915,12 +915,12 @@ internal void draw_ui_layout() {
       desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
       D3D11_SUBRESOURCE_DATA data = {};
       data.pSysMem = batch->vertices.data;
-      d3d11_state->device->CreateBuffer(&desc, &data, &vertex_buffer);
+      d3d->device->CreateBuffer(&desc, &data, &vertex_buffer);
     }
 
     UINT stride = sizeof(UI_Vertex), offset = 0;
-    d3d11_state->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
-    d3d11_state->device_context->Draw((UINT)batch->vertices.count, 0);
+    d3d->devcon->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+    d3d->devcon->Draw((UINT)batch->vertices.count, 0);
         
     vertex_buffer->Release();
     batch->vertices.clear();

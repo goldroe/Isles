@@ -587,7 +587,7 @@ internal void update_entity_panel(Editor *editor) {
 }
 
 internal void r_picker_render_gizmo(Picker *picker) {
-  Render_Target *render_target = picker->render_target;
+  Frame_Buffer *frame_buffer = picker->frame_buffer;
   
   R_D3D11_State *d3d = r_d3d11_state();
 
@@ -597,11 +597,11 @@ internal void r_picker_render_gizmo(Picker *picker) {
   set_depth_state(depth_state_disable);
   set_rasterizer(rasterizer_no_cull);
 
-  d3d->device_context->OMSetRenderTargets(1, (ID3D11RenderTargetView **)&render_target->render_target_view, (ID3D11DepthStencilView*)render_target->depth_stencil_view);
+  d3d->devcon->OMSetRenderTargets(1, &frame_buffer->render_target, frame_buffer->depth_stencil);
 
   float clear_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-  d3d->device_context->ClearRenderTargetView((ID3D11RenderTargetView*)picker->render_target->render_target_view, clear_color);
-  d3d->device_context->ClearDepthStencilView((ID3D11DepthStencilView *)d3d->default_render_target->depth_stencil_view, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
+  d3d->devcon->ClearRenderTargetView(picker->frame_buffer->render_target, clear_color);
+  d3d->devcon->ClearDepthStencilView(d3d->depth_stencil, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
 
   set_shader(shader_picker);
 
@@ -630,14 +630,14 @@ internal void r_picker_render_gizmo(Picker *picker) {
 
     UINT stride = sizeof(Vector3), offset = 0;
     ID3D11Buffer *vertex_buffer = make_vertex_buffer(mesh->vertices.data, mesh->vertices.count, sizeof(Vector3));
-    d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+    d3d->devcon->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
 
-    d3d->device_context->Draw((UINT)mesh->vertices.count, 0);
+    d3d->devcon->Draw((UINT)mesh->vertices.count, 0);
 
     vertex_buffer->Release();
   }
 
-  set_render_target(d3d->default_render_target);
+  reset_frame_buffer();
 }
 
 internal void picker_render(Picker *picker) {
@@ -650,12 +650,12 @@ internal void picker_render(Picker *picker) {
   set_blend_state(blend_state_default);
   set_depth_state(depth_state_default);
 
-  Render_Target *render_target = picker->render_target;
-  d3d->device_context->OMSetRenderTargets(1, (ID3D11RenderTargetView **)&render_target->render_target_view, (ID3D11DepthStencilView *)render_target->depth_stencil_view);
+  Frame_Buffer *frame_buffer = picker->frame_buffer;
+  d3d->devcon->OMSetRenderTargets(1, &frame_buffer->render_target, frame_buffer->depth_stencil);
 
   float clear_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-  d3d->device_context->ClearRenderTargetView((ID3D11RenderTargetView *)render_target->render_target_view, clear_color);
-  d3d->device_context->ClearDepthStencilView((ID3D11DepthStencilView *)render_target->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
+  d3d->devcon->ClearRenderTargetView(frame_buffer->render_target, clear_color);
+  d3d->devcon->ClearDepthStencilView(frame_buffer->depth_stencil, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
   set_shader(shader_picker);
 
@@ -682,11 +682,11 @@ internal void picker_render(Picker *picker) {
 
     ID3D11Buffer *vertex_buffer = make_vertex_buffer(mesh->vertices.data, mesh->vertices.count, sizeof(Vector3));
     UINT stride = sizeof(Vector3), offset = 0;
-    d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+    d3d->devcon->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
 
     for (int triangle_list_idx = 0; triangle_list_idx < mesh->triangle_list_info.count; triangle_list_idx++) {
       Triangle_List_Info triangle_list_info = mesh->triangle_list_info[triangle_list_idx];
-      d3d->device_context->Draw((UINT)triangle_list_info.vertices_count, triangle_list_info.first_index);
+      d3d->devcon->Draw((UINT)triangle_list_info.vertices_count, triangle_list_info.first_index);
     }
 
     vertex_buffer->Release();
@@ -729,12 +729,12 @@ internal void picker_render(Picker *picker) {
 
     ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices, ArrayCount(vertices), sizeof(Vector3));
     UINT stride = sizeof(Vector3), offset = 0;
-    d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
-    d3d->device_context->Draw((UINT)ArrayCount(vertices), 0);
+    d3d->devcon->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+    d3d->devcon->Draw((UINT)ArrayCount(vertices), 0);
     vertex_buffer->Release();
   }
 
-  set_render_target(d3d->default_render_target);
+  reset_frame_buffer();
 }
 
 internal Picker *make_picker(int width, int height) {
@@ -742,7 +742,7 @@ internal Picker *make_picker(int width, int height) {
   picker->dimension = Vector2((f32)width, (f32)height);
 
   R_D3D11_State *d3d = r_d3d11_state();
-  picker->render_target = make_render_target(width, height, DXGI_FORMAT_R8G8B8A8_UNORM);
+  picker->frame_buffer = make_frame_buffer(width, height, DXGI_FORMAT_R8G8B8A8_UNORM);
 
   HRESULT hr = S_OK;
   {
@@ -775,10 +775,10 @@ internal Pid picker_get_id(Picker *picker, Vector2Int mouse) {
   src_box.bottom = src_box.top + 1;
   src_box.front = 0;
   src_box.back = 1;
-  d3d->device_context->CopySubresourceRegion((ID3D11Texture2D *)picker->staging_texture, 0, 0, 0, 0, (ID3D11Texture2D *)picker->render_target->texture, 0, &src_box);
+  d3d->devcon->CopySubresourceRegion((ID3D11Texture2D *)picker->staging_texture, 0, 0, 0, 0, (ID3D11Texture2D *)picker->frame_buffer->texture, 0, &src_box);
 
   D3D11_MAPPED_SUBRESOURCE mapped = {};
-  if (d3d->device_context->Map((ID3D11Texture2D *)picker->staging_texture, 0, D3D11_MAP_READ, 0, &mapped) == S_OK) {
+  if (d3d->devcon->Map((ID3D11Texture2D *)picker->staging_texture, 0, D3D11_MAP_READ, 0, &mapped) == S_OK) {
     u8 *ptr = (u8 *)mapped.pData;
     u8 r = *ptr++;
     u8 g = *ptr++;
@@ -786,7 +786,7 @@ internal Pid picker_get_id(Picker *picker, Vector2Int mouse) {
     u8 a = *ptr++;
     result = r | (g << 8) | (b << 16) | (a << 24);
 
-    d3d->device_context->Unmap((ID3D11Texture2D *)picker->staging_texture, 0);
+    d3d->devcon->Unmap((ID3D11Texture2D *)picker->staging_texture, 0);
   }
 
   return result;
@@ -951,8 +951,8 @@ internal void update_editor(OS_Event_List *events) {
  
     ID3D11Buffer *vertex_buffer = make_vertex_buffer(vertices, ArrayCount(vertices), sizeof(Vertex_XNCUU));
     UINT stride = sizeof(Vertex_XNCUU), offset = 0;
-    d3d->device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
-    d3d->device_context->Draw((UINT)ArrayCount(vertices), 0);
+    d3d->devcon->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+    d3d->devcon->Draw((UINT)ArrayCount(vertices), 0);
     vertex_buffer->Release();
   }
 
@@ -1002,7 +1002,7 @@ internal void update_editor(OS_Event_List *events) {
     for (int axis = AXIS_X; axis <= AXIS_Z; axis++) {
       Triangle_Mesh *mesh = editor->gizmo_meshes[editor->active_gizmo][axis];
 
-      d3d->device_context->ClearDepthStencilView((ID3D11DepthStencilView *)d3d->default_render_target->depth_stencil_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
+      d3d->devcon->ClearDepthStencilView(d3d->depth_stencil, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
       Vector4 color = Vector4(unit_vector(axis), 1.0f);
       if (editor->gizmo_axis_hover == axis && editor->gizmo_axis_active == (Axis)-1) {
@@ -1016,8 +1016,8 @@ internal void update_editor(OS_Event_List *events) {
       apply_constants();
 
       UINT stride = sizeof(Vertex_XNCUU), offset = 0;
-      d3d->device_context->IASetVertexBuffers(0, 1, &mesh->vertex_buffer, &stride, &offset);
-      d3d->device_context->Draw((UINT)mesh->vertices.count, 0);
+      d3d->devcon->IASetVertexBuffers(0, 1, &mesh->vertex_buffer, &stride, &offset);
+      d3d->devcon->Draw((UINT)mesh->vertices.count, 0);
     }
   }
 
