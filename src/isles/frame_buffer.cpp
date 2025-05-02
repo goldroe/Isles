@@ -1,9 +1,8 @@
 
-internal Render_Target *make_render_target(int width, int height, DXGI_FORMAT format, DXGI_FORMAT depth_format) {
+internal Frame_Buffer *make_frame_buffer(int width, int height, DXGI_FORMAT format, DXGI_FORMAT depth_format) {
   R_D3D11_State *d3d = r_d3d11_state();
-  Render_Target *render_target = new Render_Target();
-  render_target->width = width;
-  render_target->height = height;
+  Frame_Buffer *frame_buffer = new Frame_Buffer();
+  frame_buffer->dimension = Vector2Int(width, height);
 
   ID3D11Texture2D *tex2d = nullptr;
   ID3D11RenderTargetView *render_target_view = nullptr;
@@ -53,7 +52,6 @@ internal Render_Target *make_render_target(int width, int height, DXGI_FORMAT fo
     desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
     desc.CPUAccessFlags = 0;
     desc.MiscFlags = 0;
-
     ID3D11Texture2D *depth_stencil_buffer = nullptr;
     hr = d3d->device->CreateTexture2D(&desc, NULL, &depth_stencil_buffer);
     hr = d3d->device->CreateDepthStencilView(depth_stencil_buffer, NULL, &depth_stencil_view);
@@ -64,16 +62,16 @@ internal Render_Target *make_render_target(int width, int height, DXGI_FORMAT fo
   texture->height = height;
   texture->format = format;
   texture->view = srv;
-  render_target->texture = texture;
+  frame_buffer->texture = texture;
 
-  render_target->render_target_view = render_target_view;
-  render_target->depth_stencil_view = depth_stencil_view;
+  frame_buffer->render_target = render_target_view;
+  frame_buffer->depth_stencil = depth_stencil_view;
 
-  return render_target;
+  return frame_buffer;
 }
 
-internal void clear_render_target(Render_Target *render_target, f32 r, f32 g, f32 b, f32 a) {
+internal void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b, f32 a) {
   R_D3D11_State *d3d = r_d3d11_state();
   f32 color[4] = {r, g, b, a};
-  d3d->device_context->ClearRenderTargetView(render_target->render_target_view, color);
+  d3d->devcon->ClearRenderTargetView(frame_buffer->render_target, color);
 }
