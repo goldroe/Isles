@@ -117,9 +117,67 @@ internal LRESULT CALLBACK win32_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 
     case WM_SIZE:
     {
-        UINT width = LOWORD(lParam);
-        UINT height = HIWORD(lParam);
-        break;
+      R_D3D11_State *d3d = r_d3d11_state();
+      UINT width = LOWORD(lParam);
+      UINT height = HIWORD(lParam);
+
+      //@Note Resize Swap Chain and Buffers
+      if (d3d->swap_chain) {
+        // Release all outstanding references to the swap chain's buffers.
+        d3d->devcon->OMSetRenderTargets(0, 0, 0);
+        if (d3d->render_target) d3d->render_target->Release();
+
+        HRESULT hr;
+        // Preserve the existing buffer count and format.
+        // Automatically choose the width and height to match the client rect for HWNDs.
+        hr = d3d->swap_chain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
+
+        // Perform error handling here!
+
+        // Get buffer and create a render-target-view.
+        ID3D11Texture2D* pBuffer;
+        hr = d3d->swap_chain->GetBuffer(0, __uuidof( ID3D11Texture2D), (void **)&pBuffer);
+        // Perform error handling here!
+
+        hr = d3d->device->CreateRenderTargetView(pBuffer, NULL, &d3d->render_target);
+        // Perform error handling here!
+        pBuffer->Release();
+
+        // depth stencil view
+        if (d3d->depth_stencil) ((ID3D11DepthStencilView *)d3d->depth_stencil)->Release();
+        {
+          D3D11_TEXTURE2D_DESC desc{};
+          desc.Width = width;
+          desc.Height = height;
+          desc.MipLevels = 1;
+          desc.ArraySize = 1;
+          desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+          desc.SampleDesc.Count = 1;
+          desc.SampleDesc.Quality = 0;
+          desc.Usage = D3D11_USAGE_DEFAULT;
+          desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+          desc.CPUAccessFlags = 0;
+          desc.MiscFlags = 0;
+
+          ID3D11Texture2D *depth_stencil_buffer = nullptr;
+          hr = d3d->device->CreateTexture2D(&desc, NULL, &depth_stencil_buffer);
+          hr = d3d->device->CreateDepthStencilView(depth_stencil_buffer, NULL, &d3d->depth_stencil);
+        }
+
+        d3d->devcon->OMSetRenderTargets(1, &d3d->render_target, d3d->depth_stencil);
+
+        // Set up the viewport.
+        D3D11_VIEWPORT vp;
+        vp.Width  = (float)width;
+        vp.Height = (float)height;
+        vp.MinDepth = 0.0f;
+        vp.MaxDepth = 1.0f;
+        vp.TopLeftX = 0;
+        vp.TopLeftY = 0;
+        d3d->devcon->RSSetViewports( 1, &vp);
+      }
+      result = 1;
+      break;
     }
 
     case WM_DROPFILES:

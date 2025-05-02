@@ -12,9 +12,9 @@ template <class T> void SafeRelease(T **ppT) {
 }
 
 internal void r_clear_color(f32 r, f32 g, f32 b, f32 a) {
-  R_D3D11_State *d3d11_state = r_d3d11_state();
+  R_D3D11_State *d3d = r_d3d11_state();
   FLOAT color[4] = {r, g, b, a};
-  d3d11_state->device_context->ClearRenderTargetView((ID3D11RenderTargetView*)d3d11_state->default_render_target->render_target_view, color);
+  d3d->devcon->ClearRenderTargetView(d3d->render_target, color);
 }
 
 UINT get_num_mip_levels(UINT width, UINT height) {
@@ -75,9 +75,9 @@ internal ID3D11Buffer *make_vertex_buffer(void *data, size_t elem_count, size_t 
 internal void write_uniform_buffer(ID3D11Buffer *buffer, void *data, UINT bytes) {
   R_D3D11_State *d3d = r_d3d11_state();
   D3D11_MAPPED_SUBRESOURCE res = {};
-  if (d3d->device_context->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res) == S_OK) {
+  if (d3d->devcon->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res) == S_OK) {
     memcpy((u8 *)res.pData, data, bytes);
-    d3d->device_context->Unmap(buffer, 0);
+    d3d->devcon->Unmap(buffer, 0);
   } else {
     logprint("Failed to write to constant buffer.\n");
   }
@@ -274,6 +274,9 @@ internal Texture *create_texture_cube(String8 file_names[6]) {
   D3D11_SUBRESOURCE_DATA data[6] = {};
   for (int i = 0; i < 6; i++) {
     u8 *mem = stbi_load((char *)file_names[i].data, &x, &y, &n, 4);
+    if (!mem) {
+      logprint("Cannot load '%S'\n", file_names[i]);
+    }
     data[i].pSysMem = mem;
     data[i].SysMemPitch = x * 4;
     data[i].SysMemSlicePitch = 0;
@@ -351,7 +354,7 @@ internal Texture *create_texture(u8 *data, DXGI_FORMAT format, int w, int h, int
   }
 
   hr = d3d11_state->device->CreateTexture2D(&desc, NULL, &tex2d);
-  d3d11_state->device_context->UpdateSubresource(tex2d, 0, NULL, data, w * bytes_from_format(format), 0);
+  d3d11_state->devcon->UpdateSubresource(tex2d, 0, NULL, data, w * bytes_from_format(format), 0);
     
   ID3D11ShaderResourceView *view = nullptr;
 	D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
@@ -362,7 +365,7 @@ internal Texture *create_texture(u8 *data, DXGI_FORMAT format, int w, int h, int
   hr = d3d11_state->device->CreateShaderResourceView(tex2d, &srv_desc, &view);
 
   if (flags & TEXTURE_FLAG_GENERATE_MIPS) {
-    d3d11_state->device_context->GenerateMips(view); 
+    d3d11_state->devcon->GenerateMips(view); 
   }
 
   texture->view = view;
@@ -380,76 +383,10 @@ internal Texture *create_texture_from_file(String8 file_name, int flags) {
   return texture;
 }
 
-internal void r_resize_render_target(Vector2Int dimension) {
-  R_D3D11_State *d3d11_state = r_d3d11_state();
-
-  if (dimension.x == 0 || dimension.y == 0) return;
-
-  if (dimension == d3d11_state->window_dimension) {
-    return;
-  }
-
-  d3d11_state->window_dimension = dimension;
-
-  d3d11_state->draw_region = {
-    0, 0, (f32)dimension.x, (f32)dimension.y
-  };
-
-  UINT width = (UINT)dimension.x;
-  UINT height = (UINT)dimension.y;
-
-  HRESULT hr = S_OK;
-
-  // NOTE: Resize render target view
-  d3d11_state->device_context->OMSetRenderTargets(0, 0, 0);
-
-  Render_Target *render_target = d3d11_state->default_render_target;
-
-  // Release all outstanding references to the swap chain's buffers.
-  if (render_target->render_target_view) ((ID3D11RenderTargetView*)render_target->render_target_view)->Release();
-
-  // Preserve the existing buffer count and format.
-  // Automatically choose the width and height to match the client rect for HWNDs.
-  hr = d3d11_state->swap_chain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
-
-  // Get buffer and create a render-target-view.
-  ID3D11Texture2D *backbuffer;
-  hr = d3d11_state->swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&backbuffer);
-
-  hr = d3d11_state->device->CreateRenderTargetView(backbuffer, NULL, (ID3D11RenderTargetView **)&render_target->render_target_view);
-
-  // render_target->texture = backbuffer;
-
-  if (render_target->depth_stencil_view) ((ID3D11DepthStencilView *)render_target->depth_stencil_view)->Release();
-
-  {
-    D3D11_TEXTURE2D_DESC desc{};
-    desc.Width = width;
-    desc.Height = height;
-    desc.MipLevels = 1;
-    desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-    desc.SampleDesc.Count = 1;
-    desc.SampleDesc.Quality = 0;
-    desc.Usage = D3D11_USAGE_DEFAULT;
-    desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-    desc.CPUAccessFlags = 0;
-    desc.MiscFlags = 0;
-
-    ID3D11Texture2D *depth_stencil_buffer = nullptr;
-    hr = d3d11_state->device->CreateTexture2D(&desc, NULL, &depth_stencil_buffer);
-    hr = d3d11_state->device->CreateDepthStencilView(depth_stencil_buffer, NULL, (ID3D11DepthStencilView **)&render_target->depth_stencil_view);
-  }
-
-  d3d11_state->device_context->OMSetRenderTargets(1, (ID3D11RenderTargetView **)&render_target->render_target_view, (ID3D11DepthStencilView*)render_target->depth_stencil_view);
-}
-
 internal void r_d3d11_initialize(HWND window_handle) {
-  r_g_d3d11_state = new R_D3D11_State();
+  R_D3D11_State *d3d = r_d3d11_state();
 
-  R_D3D11_State *d3d11_state = r_d3d11_state();
-
-  d3d11_state->arena = arena_alloc(get_virtual_allocator(), MB(4));
+  d3d->arena = arena_alloc(get_virtual_allocator(), MB(4));
 
   HRESULT hr;
 
@@ -480,16 +417,35 @@ internal void r_d3d11_initialize(HWND window_handle) {
     swap_chain_desc.Windowed = TRUE;
     swap_chain_desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 
-    hr = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, device_flags, feature_levels, ArrayCount(feature_levels), D3D11_SDK_VERSION, &swap_chain_desc, &d3d11_state->swap_chain, &d3d11_state->device, NULL, &d3d11_state->device_context);
+    hr = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, device_flags, feature_levels, ArrayCount(feature_levels), D3D11_SDK_VERSION, &swap_chain_desc, &d3d->swap_chain, &d3d->device, NULL, &d3d->devcon);
   }
 
   //@Note Initialize render target view
   {
-    d3d11_state->default_render_target = new Render_Target();
     ID3D11Texture2D *back_buffer;
-    hr = d3d11_state->swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&back_buffer);
-    hr = d3d11_state->device->CreateRenderTargetView(back_buffer, NULL, (ID3D11RenderTargetView **)&d3d11_state->default_render_target->render_target_view);
+    hr = d3d->swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&back_buffer);
+    hr = d3d->device->CreateRenderTargetView(back_buffer, NULL, &d3d->render_target);
     back_buffer->Release();
+  }
+
+  //@Note Initialize depth stencil view
+  {
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = os_get_window_width((OS_Handle)window_handle);
+    desc.Height = os_get_window_height((OS_Handle)window_handle);
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    desc.SampleDesc.Count = 1;
+    desc.SampleDesc.Quality = 0;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+    desc.CPUAccessFlags = 0;
+    desc.MiscFlags = 0;
+
+    ID3D11Texture2D *depth_stencil_buffer = nullptr;
+    hr = d3d->device->CreateTexture2D(&desc, NULL, &depth_stencil_buffer);
+    hr = d3d->device->CreateDepthStencilView(depth_stencil_buffer, NULL, &d3d->depth_stencil);
   }
 
   //@Note Create depth stencil states
@@ -697,7 +653,7 @@ internal void r_d3d11_initialize(HWND window_handle) {
       0xFFFFFFFF, 0xFFFFFFFF,
       0xFFFFFFFF, 0xFFFFFFFF
     };
-    d3d11_state->fallback_tex = create_texture((u8 *)white_bitmap, DXGI_FORMAT_R8G8B8A8_UNORM, 2, 2, 0);
+    d3d->fallback_tex = create_texture((u8 *)white_bitmap, DXGI_FORMAT_R8G8B8A8_UNORM, 2, 2, 0);
   }
 
   //@Note Compile shaders
@@ -792,29 +748,38 @@ internal void r_d3d11_initialize(HWND window_handle) {
 }
 
 internal void r_d3d11_begin(OS_Handle window_handle) {
-  R_D3D11_State *d3d11_state = r_d3d11_state();
-  d3d11_state->device_context->OMSetRenderTargets(1, (ID3D11RenderTargetView **)&d3d11_state->default_render_target->render_target_view, (ID3D11DepthStencilView *)d3d11_state->default_render_target->depth_stencil_view);
+  R_D3D11_State *d3d = r_d3d11_state();
+  d3d->devcon->OMSetRenderTargets(1, &d3d->render_target, d3d->depth_stencil);
+
+  Vector2 window_dim = os_get_window_dim(window_handle);
+  window_dim.x = Max(window_dim.x, 1);
+  window_dim.y = Max(window_dim.y, 1);
+  d3d->window_dimension = to_vec2i(window_dim);
+  
+  d3d->draw_region = {
+    0, 0, window_dim.x, window_dim.y
+  };
 
   HRESULT hr = S_OK;
   D3D11_VIEWPORT viewport{};
-  viewport.TopLeftX = d3d11_state->draw_region.x0;
-  viewport.TopLeftY = d3d11_state->draw_region.y0;
-  viewport.Width = rect_width(d3d11_state->draw_region);
-  viewport.Height = rect_height(d3d11_state->draw_region);
+  viewport.TopLeftX = 0;
+  viewport.TopLeftY = 0;
+  viewport.Width = window_dim.x;
+  viewport.Height = window_dim.y;
   viewport.MinDepth = 0.0f;
   viewport.MaxDepth = 1.0f;
-  d3d11_state->device_context->RSSetViewports(1, &viewport);
+  d3d->devcon->RSSetViewports(1, &viewport);
 
   set_rasterizer(rasterizer_default);
-  d3d11_state->device_context->ClearDepthStencilView((ID3D11DepthStencilView*)d3d11_state->default_render_target->depth_stencil_view, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
+  d3d->devcon->ClearDepthStencilView(d3d->depth_stencil, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
 
-  d3d11_state->device_context->OMSetBlendState(nullptr, NULL, 0xffffffff);
+  d3d->devcon->OMSetBlendState(nullptr, NULL, 0xffffffff);
 
-  d3d11_state->device_context->VSSetShader(nullptr, nullptr, 0);
-  d3d11_state->device_context->PSSetShader(nullptr, nullptr, 0);
-  d3d11_state->device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  d3d->devcon->VSSetShader(nullptr, nullptr, 0);
+  d3d->devcon->PSSetShader(nullptr, nullptr, 0);
+  d3d->devcon->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-  Matrix4 screen_projection = ortho_rh_zo(0, rect_width(d3d11_state->draw_region), 0.0f, rect_height(d3d11_state->draw_region));
+  Matrix4 screen_projection = ortho_rh_zo(0, (f32)d3d->window_dimension.x, 0.0f, (f32)d3d->window_dimension.y);
 
   set_shader(shader_argb_texture);
   set_constant(str8_lit("projection"), screen_projection);
@@ -1113,5 +1078,3 @@ internal void r_d3d11_update_dirty_shaders() {
     }
   }
 }
-
-

@@ -87,8 +87,6 @@ struct Depth_State {
   ID3D11DepthStencilState *resource; 
 };
 
-struct Render_Target;
-
 struct R_D3D11_State {
   Arena *arena;
   Rect draw_region;
@@ -96,15 +94,31 @@ struct R_D3D11_State {
   Vector2Int window_dimension = Vector2Int(0, 0);
 
   ID3D11Device *device = nullptr;
-  ID3D11DeviceContext *device_context = nullptr;
+  ID3D11DeviceContext *devcon = nullptr;
   IDXGISwapChain *swap_chain = nullptr;
-  Render_Target *default_render_target = nullptr;
+  ID3D11RenderTargetView *render_target = nullptr;
+  ID3D11DepthStencilView *depth_stencil = nullptr;
 
   Auto_Array<Shader*> shaders;
 
   Texture *fallback_tex;
 };
 
+struct Depth_Map {
+  Vector2Int dimension;
+  Texture *texture = nullptr;
+  ID3D11DepthStencilView *depth_stencil = nullptr;
+};
+
+struct R_Point_Light {
+  Vector3 position;
+  float range;
+  Vector4 color;
+  Vector3 att;
+  float pad;
+};
+
+// internal void r_resize_render_target(Vector2Int dimension);
 internal inline R_D3D11_State *r_d3d11_state();
 
 internal ID3D11Buffer *make_vertex_buffer(void *data, size_t elem_count, size_t elem_size);
