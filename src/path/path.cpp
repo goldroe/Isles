@@ -4,12 +4,12 @@ internal inline bool is_separator(u8 c) {
   return c == '/' || c == '\\';
 }
 
-internal String8 path_join(Arena *arena, String8 parent, String8 child) {
+internal String8 path_join(Allocator allocator, String8 parent, String8 child) {
   Assert(parent.data);
   String8 result = str8_zero();
   bool ends_in_slash = is_separator(parent.data[parent.count - 1]);
   u64 count = parent.count + child.count - ends_in_slash + 1;
-  result.data = push_array(arena, u8, count + 1);
+  result.data = alloc_array(allocator, u8, count + 1);
   MemoryCopy(result.data, parent.data, parent.count - ends_in_slash);
   result.data[parent.count - ends_in_slash] = '/';
   MemoryCopy(result.data + parent.count - ends_in_slash + 1, child.data, child.count);
@@ -36,13 +36,13 @@ internal String8 get_file_path_extension(String8 file_name) {
   return str8_zero();
 }
 
-internal String8 path_strip_extension(Arena *arena, String8 path) {
+internal String8 path_strip_extension(Allocator allocator, String8 path) {
   Assert(path.data);
   for (u64 i = path.count - 1; i > 0; i--) {
     switch (path.data[i]) {
     case '.':
     {
-      String8 result = str8_copy(arena, str8(path.data + i + 1, path.count - i - 1));
+      String8 result = str8_copy(allocator, str8(path.data + i + 1, path.count - i - 1));
       return result;
     }
     case '/':
@@ -85,7 +85,7 @@ internal String8 path_file_name(String8 path) {
   return result;
 }
 
-internal String8 path_strip_dir_name(Arena *arena, String8 path) {
+internal String8 path_strip_dir_name(Allocator allocator, String8 path) {
   String8 result = str8_zero();
   if (path.data) {
     u64 end = path.count - 1;
@@ -93,13 +93,13 @@ internal String8 path_strip_dir_name(Arena *arena, String8 path) {
       if (is_separator(path.data[end - 1])) break;
       end--;
     }
-    result = str8_copy(arena, str8(path.data, end));
+    result = str8_copy(allocator, str8(path.data, end));
         
   }
   return result;
 }
 
-internal String8 path_strip_file_name(Arena *arena, String8 path) {
+internal String8 path_strip_file_name(Allocator allocator, String8 path) {
   String8 result = str8_zero();
   if (path.data) {
     if (is_separator(path.data[path.count - 1])) {
@@ -108,7 +108,7 @@ internal String8 path_strip_file_name(Arena *arena, String8 path) {
     u64 start = path.count - 1;
     while (start > 0) {
       if (is_separator(path.data[start])) {
-        result = str8_copy(arena, str8(path.data + start + 1, path.count - start - 1));
+        result = str8_copy(allocator, str8(path.data + start + 1, path.count - start - 1));
         break;
       }
       start--;
@@ -128,7 +128,7 @@ internal u64 path_last_segment(String8 path) {
   return result;
 }
 
-internal String8 normalize_path(Arena *arena, String8 path) {
+internal String8 normalize_path(Allocator allocator, String8 path) {
   Assert(path.data);
   String8 result = str8_zero();
   Arena *scratch = arena_alloc(get_malloc_allocator(), path.count * 2);

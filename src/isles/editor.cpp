@@ -151,7 +151,7 @@ internal inline void select_entity(Editor *editor, Entity *e) {
   editor->selections.push(e);
   editor->active_selection = e;
   editor->entity_panel->dirty = true;
-  editor->entity_panel->override_color = e->override_color;
+  editor->entity_panel->tint_color = e->tint_color;
 }
 
 internal inline void single_select_entity(Editor *editor, Entity *e) {
@@ -183,8 +183,8 @@ internal Entity *copy_entity(Entity *e) {
   clone->flags = e->flags;
   clone->set_position(e->position);
   clone->theta = e->theta;
-  clone->override_color = e->override_color;
-  clone->use_override_color = e->use_override_color;
+  clone->tint_color = e->tint_color;
+  clone->use_tint_color = e->use_tint_color;
 
   switch (e->kind) {
   case ENTITY_SUN:
@@ -495,7 +495,7 @@ internal void init_editor() {
   editor->entity_panel->common_fields.push(position_field);
 
   Entity_Field *color_field = new Entity_Field();
-  color_field->name = str8_lit("override_color");
+  color_field->name = str8_lit("tint_color");
   color_field->kind = FIELD_VEC4;
   {
     color_field->fields.push(ui_line_edit_create(str8_lit("r")));
@@ -566,9 +566,9 @@ internal void update_entity_panel(Editor *editor) {
     ui_line_edit_write(panel->position_field->fields[1], "%g", entity->position.y);
     ui_line_edit_write(panel->position_field->fields[2], "%g", entity->position.z);
 
-    ui_line_edit_write(panel->color_field->fields[0], "%g", entity->override_color.x);
-    ui_line_edit_write(panel->color_field->fields[1], "%g", entity->override_color.y);
-    ui_line_edit_write(panel->color_field->fields[2], "%g", entity->override_color.z);
+    ui_line_edit_write(panel->color_field->fields[0], "%g", entity->tint_color.x);
+    ui_line_edit_write(panel->color_field->fields[1], "%g", entity->tint_color.y);
+    ui_line_edit_write(panel->color_field->fields[2], "%g", entity->tint_color.z);
 
     ui_line_edit_write(panel->theta_field->fields[0], "%g", RadToDeg(entity->theta));
 
@@ -1366,9 +1366,9 @@ internal void editor_present_ui() {
           }
         }
 
-        // Override Color
+        // Tint Color
         {
-          Vector4 last_color = panel->override_color;
+          Vector4 last_color = panel->tint_color;
           UI_PrefWidth(ui_pct(1.0f))
             UI_PrefHeight(ui_pixels(field_height))
             UI_BackgroundColor(Vector4(1, 1, 1, 1))
@@ -1381,42 +1381,42 @@ internal void editor_present_ui() {
             ui_set_next_fixed_x(0);
             ui_set_next_fixed_y(0);
             ui_set_next_parent(cont);
-            ui_slider(&panel->override_color.x, 0.0f, 1.0f, slider_color, str8_lit("R##color_r"));
+            ui_slider(&panel->tint_color.x, 0.0f, 1.0f, slider_color, str8_lit("R##color_r"));
 
             cont = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, 0);
             ui_set_next_fixed_x(0);
             ui_set_next_fixed_y(0);
             ui_set_next_parent(cont);
-            ui_slider(&panel->override_color.y, 0.0f, 1.0f, slider_color, str8_lit("G##color_g"));
+            ui_slider(&panel->tint_color.y, 0.0f, 1.0f, slider_color, str8_lit("G##color_g"));
 
             cont = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, 0);
             ui_set_next_fixed_x(0);
             ui_set_next_fixed_y(0);
             ui_set_next_parent(cont);
-            ui_slider(&panel->override_color.z, 0.0f, 1.0f, slider_color, str8_lit("B##color_b"));
+            ui_slider(&panel->tint_color.z, 0.0f, 1.0f, slider_color, str8_lit("B##color_b"));
 
             cont = ui_box_create(UI_BOX_FLAG_DRAW_BACKGROUND, 0);
             ui_set_next_fixed_x(0);
             ui_set_next_fixed_y(0);
             ui_set_next_parent(cont);
-            ui_slider(&panel->override_color.w, 0.0f, 1.0f, slider_color, str8_lit("A##color_a"));
+            ui_slider(&panel->tint_color.w, 0.0f, 1.0f, slider_color, str8_lit("A##color_a"));
           }
 
-          if (last_color != panel->override_color) {
+          if (last_color != panel->tint_color) {
             for (int i = 0; i < editor->selections.count; i++) {
               Entity *e = editor->selections[i];
-              e->override_color = panel->override_color;
+              e->tint_color = panel->tint_color;
             }
           }
         }
 
-        // Override Color
+        // Tint Color
         {
-          UI_Icon_Kind button_icon = e->use_override_color ? UI_ICON_CHECK : UI_ICON_CHECK_EMPTY;
+          UI_Icon_Kind button_icon = e->use_tint_color ? UI_ICON_CHECK : UI_ICON_CHECK_EMPTY;
           ui_set_next_font(panel->icon_font);
           ui_set_next_pref_width(ui_pct(1.0f));
           if (ui_clicked(ui_button(ui_string_from_icon_kind(button_icon, "##overbtn")))) {
-            e->use_override_color = !e->use_override_color;
+            e->use_tint_color = !e->use_tint_color;
           }
         }
 
@@ -1466,7 +1466,7 @@ internal void editor_present_ui() {
 
     if (panel->color_field->dirty) {
       panel->color_field->dirty = 0;
-      e->override_color = read_vec4(panel->color_field);
+      e->tint_color = read_vec4(panel->color_field);
     }
 
     if (panel->theta_field->dirty) {

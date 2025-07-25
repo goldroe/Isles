@@ -90,7 +90,7 @@ internal LRESULT CALLBACK win32_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
         if (c == '\r') c = '\n';
         if (c >= 32 && c != 127) {
             event = win32_push_event(OS_EventKind_Text);
-            event->text = str8_copy(win32_event_arena, str8(&c, 1));
+            event->text = str8_copy(heap_allocator, str8(&c, 1));
         }
         break;
     }

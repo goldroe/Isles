@@ -26,7 +26,7 @@
 
 #include "base/base_core.h"
 #include "core/core_math.h"
-#include "base/base_arena.h"
+// #include "base/base_arena.h"
 #include "base/base_strings.h"
 #include "auto_array.h"
 #include "os/os.h"
@@ -60,7 +60,7 @@
 
 #include "base/base_core.cpp"
 #include "core/core_math.cpp"
-#include "base/base_arena.cpp"
+// #include "base/base_arena.cpp"
 #include "base/base_strings.cpp"
 
 #include "os/os.cpp"

@@ -6,7 +6,7 @@ internal void ui_text(String8 text) {
 internal void ui_textf(const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  String8 text = str8_pushfv(ui_build_arena(), fmt, args); 
+  String8 text = str8_pushfv(ui_g_state->allocator, fmt, args); 
   va_end(args);
   ui_text(text);
 }
@@ -24,7 +24,7 @@ internal UI_Signal ui_button(String8 string) {
 internal UI_Signal ui_buttonf(const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  String8 string = str8_pushfv(ui_build_arena(), fmt, args); 
+  String8 string = str8_pushfv(ui_g_state->allocator, fmt, args); 
   va_end(args);
   UI_Signal sig = ui_button(string);
   return sig;
@@ -138,7 +138,7 @@ internal UI_Signal ui_text_edit(String8 name, void *buffer, int max_buffer_capac
   *buffer_count = count;
   *buffer_pos = pos;
 
-  UI_Draw_Text_Edit *draw_data = push_array(ui_build_arena(), UI_Draw_Text_Edit, 1);
+  UI_Draw_Text_Edit *draw_data = alloc_array(ui_g_state->allocator, UI_Draw_Text_Edit, 1);
   draw_data->txt_pos = pos;
   draw_data->txt_count = count;
   ui_box_equip_draw_proc(box, ui_draw_text_edit, draw_data);
@@ -165,7 +165,7 @@ internal UI_Signal ui_line_edit(UI_Line_Edit *edit, String8 string) {
 internal UI_Signal ui_line_editf(UI_Line_Edit *edit, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  String8 string = str8_pushfv(ui_build_arena(), fmt, args); 
+  String8 string = str8_pushfv(ui_g_state->allocator, fmt, args); 
   va_end(args);
   UI_Signal signal = ui_line_edit(edit, string);
   return signal;
@@ -211,7 +211,7 @@ internal void ui_slider(f32 *value, f32 min, f32 max, Vector4 slider_color, Stri
 
   *value = Clamp(*value, min, max);
 
-  UI_Draw_Slider *draw_data = push_array(ui_build_arena(), UI_Draw_Slider, 1);
+  UI_Draw_Slider *draw_data = alloc_array(ui_g_state->allocator, UI_Draw_Slider, 1);
   draw_data->min = min;
   draw_data->max = max;
   draw_data->value = *value;

@@ -1,17 +1,8 @@
 
 global UI_State *ui_g_state;
 
-internal void *ui_alloc(u64 bytes) {
-  void *memory = calloc(1, bytes);
-  return memory;
-}
-
 internal void ui_set_state(UI_State *ui_state) {
   ui_g_state = ui_state;
-}
-
-internal Arena *ui_build_arena() {
-  return ui_g_state->arena;
 }
 
 global char *ui_g_icon_kind_strings[] = {
@@ -44,7 +35,7 @@ global char *ui_g_icon_kind_strings[] = {
 };
 internal String8 ui_string_from_icon_kind(UI_Icon_Kind kind, const char *end) {
     char *icon_string = ui_g_icon_kind_strings[kind];
-    String8 result = str8_pushf(ui_build_arena(), "%s%s", icon_string, end);
+    String8 result = str8_pushf(ui_g_state->allocator, "%s%s", icon_string, end);
     return result;
 }
 
@@ -298,7 +289,7 @@ internal UI_Box *ui_box_create(UI_Box_Flags flags, UI_Key key) {
   bool is_transient = (key == 0);
 
   if (first_frame) {
-    box = (UI_Box *)ui_alloc(sizeof(UI_Box));
+    box = (UI_Box *)alloc(ui_g_state->allocator, sizeof(UI_Box));
     if (!is_transient) {
       ui_push_box(key, box);
     }
@@ -322,6 +313,8 @@ internal UI_Box *ui_box_create(UI_Box_Flags flags, UI_Key key) {
 
   box->key = key;
   box->flags = flags;
+
+  box->text = str8_zero();
 
   box->font = ui_top_font();
   box->child_layout_axis = ui_top_child_layout_axis();
@@ -414,7 +407,7 @@ internal UI_Box *ui_box_create(UI_Box_Flags flags, String8 string) {
 internal UI_Box *ui_box_create_format(UI_Box_Flags flags, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  String8 string = str8_pushfv(ui_build_arena(), fmt, args);
+  String8 string = str8_pushfv(ui_g_state->allocator, fmt, args);
   va_end(args);
   UI_Box *box = ui_box_create(flags, string);
   return box;
@@ -472,7 +465,7 @@ internal void ui_begin(OS_Handle window_handle, OS_Event_List *events) {
     ui_state->events.push(event);
   }
 
-  arena_clear(ui_g_state->arena);
+  // arena_clear(ui_g_state->allocator);
 
   ui_push_pref_width(ui_pixels(window_dim.x));
   ui_push_pref_height(ui_pixels(window_dim.y));

@@ -512,3 +512,48 @@ internal Vector3 get_random_vec3(Vector3 min, Vector3 max) {
  return result;
 }
 
+internal Allocator make_allocator(Allocator_Proc *proc, void *data) {
+  Allocator result;
+  result.proc = proc;
+  result.data = data;
+  return result;
+}
+
+internal void *alloc(Allocator allocator, u64 size) {
+  void *mem = allocator.proc(ALLOCATION_ALLOC, size, NULL);
+  return mem;
+}
+
+internal void free(Allocator allocator, void *mem) {
+  allocator.proc(ALLOCATION_FREE, 0, mem);
+}
+
+ALLOCATOR_PROC(heap_allocator_proc) {
+  switch (alloc_type) {
+  case ALLOCATION_ALLOC:
+  {
+    void *mem = malloc(size);
+    return mem;
+    break;
+  }
+  case ALLOCATION_FREE:
+  {
+    if (old_mem) free(old_mem);
+    break;
+  }
+  case ALLOCATION_RESIZE:
+  {
+    void *mem = realloc(old_mem, size);
+    return mem;
+    break;
+  }
+  }
+  return NULL;
+}
+
+internal Allocator heap_allocator() {
+  Allocator result;
+  result.proc = heap_allocator_proc;
+  result.data = nullptr;
+  return result;
+}

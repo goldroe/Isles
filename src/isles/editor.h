@@ -92,7 +92,7 @@ struct Entity_Panel {
   Entity_Field *point_range_field = nullptr;
   Entity_Field *point_att_field = nullptr;
 
-  Vector4 override_color;
+  Vector4 tint_color;
 };
 
 struct Editor {

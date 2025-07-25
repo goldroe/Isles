@@ -281,16 +281,43 @@ enum Face {
     FACE_COUNT
 };
 
-union RGBA {
-    u32 v;
-    struct {
-        u8 r, g, b, a;
-    };
-    u8 e[4];
-};
-
 typedef u32 ARGB;
 
+enum {
+  DEFAULT_MINIMUM_BLOCK_SIZE = 8ll * 1024ll * 1024ll
+};
+
+struct Memory_Block {
+  Memory_Block *prev;
+  u8 *base;
+  u64 cap;
+  u64 size;
+};
+
+struct Arena {
+  struct Memory_Block *curr_block;
+  u64 minimum_block_size;
+};
+
+enum Allocation_Type {
+  ALLOCATION_ALLOC,
+  ALLOCATION_FREE,
+  ALLOCATION_RESIZE,
+};
+
+#define ALLOCATOR_PROC(Name) void *Name(Allocation_Type alloc_type, u64 size, void *old_mem)
+typedef ALLOCATOR_PROC(Allocator_Proc);
+
+struct Allocator {
+  Allocator_Proc *proc;
+  void *data;
+};
+
+internal Allocator make_allocator(Allocator_Proc *proc, void *data);
+internal void *alloc(Allocator allocator, u64 size);
+internal void free(Allocator allocator, void *memory);
+
+#define array_alloc(_allocator, T, _size) (T *)MemoryZero(alloc(_allocator, sizeof(T) * (_size)), sizeof(T) * (_size))
 
 #define MAX_PROFILES 32
 struct Profile_Scope {

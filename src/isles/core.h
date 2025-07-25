@@ -102,26 +102,6 @@ struct Vertex_ARGB {
   ARGB argb;
 };
 
-#define ALLOCATOR_RESERVE_SIG(name) void * name(u64 bytes)
-typedef ALLOCATOR_RESERVE_SIG(Allocator_Reserve);
-
-#define ALLOCATOR_RELEASE_SIG(name) void name(void *address)
-typedef ALLOCATOR_RELEASE_SIG(Allocator_Release);
-
-struct Allocator {
-  Allocator_Reserve *reserve;
-  Allocator_Release *release;
-};
-
-struct Arena2 {
-  Arena *prev;
-  Arena *current;
-  u64 pos;
-  u64 end;
-  u64 base_pos;
-  int align;
-};
-
 enum Token_Kind {
   TOKEN_EOF,
 
@@ -179,5 +159,9 @@ T range_clamp(T value, T min, T max) {
     return value;
   }
 }
+
+
+ALLOCATOR_PROC(heap_allocator_proc);
+internal Allocator heap_allocator();
 
 #endif // CORE_H

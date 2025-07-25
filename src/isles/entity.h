@@ -47,8 +47,8 @@ struct Entity {
   f32 theta;
   f32 theta_target;
 
-  b32 use_override_color;
-  Vector4 override_color;
+  b32 use_tint_color;
+  Vector4 tint_color;
 
   String8 mesh_name;
   Triangle_Mesh *mesh;

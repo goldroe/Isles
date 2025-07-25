@@ -1,6 +1,11 @@
 #ifndef DRAW_H
 #define DRAW_H
 
+struct Draw_Context {
+  Camera camera;
+  Vector3 clip_plane;
+};
+
 struct Vertex_List {
   void *data = nullptr;
   u64 byte_count = 0;
