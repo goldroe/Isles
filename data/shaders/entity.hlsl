@@ -27,8 +27,8 @@ cbuffer Per_Frame : register(b0) {
 cbuffer Per_Object : register(b1) {
   matrix xform;
   matrix world;
-  float use_tint_color;
-  float4 tint_color;
+  float use_override_color;
+  float4 override_color;
 };
 
 struct Vertex_Input {
@@ -63,8 +63,8 @@ Vertex_Output vs_main(Vertex_Input input) {
   output.pos_w = pos_w;
   output.normal = mul((float3x3)world, input.normal);
   output.color = input.color;
-  if (use_tint_color) {
-    output.color = tint_color;
+  if (use_override_color) {
+    output.color = override_color;
   }
   output.uv = input.uv;
   float4 light_view_position = mul(light_view_projection, float4(output.pos_w, 1.0));

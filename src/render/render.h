@@ -88,7 +88,7 @@ struct Depth_State {
 };
 
 struct R_D3D11_State {
-  Allocator allocator;
+  Arena *arena;
   Rect draw_region;
   Vector4 clear_color;
   Vector2Int window_dimension = Vector2Int(0, 0);

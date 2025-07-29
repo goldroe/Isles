@@ -115,7 +115,7 @@ internal Entity *entity_make(Entity_Kind kind) {
     break;
   }
   e->kind = kind;
-  e->tint_color = Vector4(1, 1, 1, 1);
+  e->override_color = Vector4(1, 1, 1, 1);
   entity_push(manager, e);
   return e;
 }

@@ -44,5 +44,15 @@ internal bool rect_contains(Rect rect, V2_F32 v) {
     return result; 
 }
 
+
 internal inline bool operator==(V3_S32 left, V3_S32 right) {return left.x == right.x && left.y == right.y && left.z == right.z;}
 internal inline bool operator!=(V3_S32 left, V3_S32 right) {return !(left == right);}
+
+internal inline RGBA make_rgba(u8 r, u8 g, u8 b, u8 a) {
+    RGBA result;
+    result.r = r;
+    result.g = g;
+    result.b = b;
+    result.a = a;
+    return result;
+}

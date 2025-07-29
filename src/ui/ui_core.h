@@ -190,7 +190,7 @@ struct UI_Draw_Bucket {
 };
 
 struct UI_State {
-  Allocator allocator;
+  Arena *arena = nullptr;
 
   Vector2Int window_dimension = {0, 0};
   Vector2Int mouse_position = {-1, -1};

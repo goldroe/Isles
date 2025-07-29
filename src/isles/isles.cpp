@@ -138,11 +138,11 @@ internal World *load_world(String8 name) {
     entity->set_position(Vector3((f32)x, (f32)y, (f32)z));
     entity->set_theta(theta);
 
-    entity->use_tint_color = (b32)buffer->get_byte();
-    entity->tint_color.x = buffer->get_f32();
-    entity->tint_color.y = buffer->get_f32();
-    entity->tint_color.z = buffer->get_f32();
-    entity->tint_color.w = buffer->get_f32();
+    entity->use_override_color = (b32)buffer->get_byte();
+    entity->override_color.x = buffer->get_f32();
+    entity->override_color.y = buffer->get_f32();
+    entity->override_color.z = buffer->get_f32();
+    entity->override_color.w = buffer->get_f32();
 
     switch (entity->kind) {
     case ENTITY_GUY:
@@ -193,11 +193,11 @@ internal void serialize_entity(Byte_Buffer *buffer, Entity *e) {
 
   buffer->put_f32(e->theta);
 
-  buffer->put_byte((u8)e->use_tint_color);
-  buffer->put_f32(e->tint_color.x);
-  buffer->put_f32(e->tint_color.y);
-  buffer->put_f32(e->tint_color.z);
-  buffer->put_f32(e->tint_color.w);
+  buffer->put_byte((u8)e->use_override_color);
+  buffer->put_f32(e->override_color.x);
+  buffer->put_f32(e->override_color.y);
+  buffer->put_f32(e->override_color.z);
+  buffer->put_f32(e->override_color.w);
 
   switch (e->kind) {
   case ENTITY_SUN:
@@ -291,7 +291,7 @@ internal void init_game() {
 
   UI_State *ui_state = new UI_State();
   ui_set_state(ui_state);
-  ui_state->allocator = make_allocator(&heap_allocator_proc, NULL);
+  ui_state->arena = arena_alloc(get_virtual_allocator(), MB(4));
 
   g_picker = make_picker(1280, 720);
 
@@ -323,47 +323,47 @@ internal void init_game() {
   guy_prototype->entity.kind = ENTITY_GUY;
   guy_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
   guy_prototype->entity.mesh = guy_mesh;
-  guy_prototype->entity.tint_color = Vector4(1, 1, 1, 1);
+  guy_prototype->entity.override_color = Vector4(1, 1, 1, 1);
   guy_prototype->entity.offset = Vector3(0.5f, 0.0f, 0.5f);
 
   Entity_Prototype *mirror_prototype = entity_prototype_create("Mirror");
   mirror_prototype->entity.kind = ENTITY_MIRROR;
   mirror_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
   mirror_prototype->entity.mesh = mirror_mesh;
-  mirror_prototype->entity.tint_color = Vector4(1, 1, 1, 1);
+  mirror_prototype->entity.override_color = Vector4(1, 1, 1, 1);
   mirror_prototype->entity.offset = Vector3(0.5f, 0.f, 0.5f);
 
   Entity_Prototype *block_prototype = entity_prototype_create("Block");
   block_prototype->entity.kind = ENTITY_INANIMATE;
   block_prototype->entity.flags = ENTITY_FLAG_STATIC;
   block_prototype->entity.mesh = block_mesh;
-  block_prototype->entity.tint_color = Vector4(1, 1, 1, 1);
+  block_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
   Entity_Prototype *stone_prototype = entity_prototype_create("Stone");
   stone_prototype->entity.kind = ENTITY_INANIMATE;
   stone_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
   stone_prototype->entity.mesh = stone_mesh;
-  stone_prototype->entity.tint_color = Vector4(1, 1, 1, 1);
+  stone_prototype->entity.override_color = Vector4(1, 1, 1, 1);
 
   Entity_Prototype *crate_prototype = entity_prototype_create("Crate");
   crate_prototype->entity.kind = ENTITY_INANIMATE;
   crate_prototype->entity.flags = ENTITY_FLAG_PUSHABLE;
   crate_prototype->entity.mesh = crate_mesh;
-  crate_prototype->entity.tint_color = Vector4(1, 1, 1, 1);
+  crate_prototype->entity.override_color = Vector4(1, 1, 1, 1);
   crate_prototype->entity.offset = Vector3(0.5f, 0.0f, 0.5f);
 
   Entity_Prototype *sand_prototype = entity_prototype_create("Sand");
   sand_prototype->entity.kind = ENTITY_INANIMATE;
   sand_prototype->entity.flags = ENTITY_FLAG_STATIC;
   sand_prototype->entity.mesh = sand_mesh;
-  sand_prototype->entity.tint_color = Vector4(1, 1, 1, 1);
+  sand_prototype->entity.override_color = Vector4(1, 1, 1, 1);
   sand_prototype->entity.offset = Vector3(0.5f, 0.0f, 0.5f);
 
   Entity_Prototype *sun_prototype = entity_prototype_create("Sun");
   sun_prototype->entity.kind = ENTITY_SUN;
   sun_prototype->entity.flags = ENTITY_FLAG_STATIC;
   sun_prototype->entity.mesh = nullptr;
-  sun_prototype->entity.tint_color = Vector4(0.9f, 0.84f, 0.1f, 1.0f);
+  sun_prototype->entity.override_color = Vector4(0.9f, 0.84f, 0.1f, 1.0f);
 
   Entity_Prototype *particle_source_proto = entity_prototype_create("Particle_Source");
   particle_source_proto->entity.kind = ENTITY_PARTICLE_SOURCE;

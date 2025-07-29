@@ -58,8 +58,6 @@ global Texture *water_dudv_texture;
 global Texture *water_normal_map;
 global f32 move_factor;
 
-global Draw_Context *draw_context;
-
 internal Depth_Map *make_depth_map(int width, int height) {
   R_D3D11_State *d3d = r_d3d11_state();
 
@@ -538,14 +536,6 @@ internal void draw_mirror_reflection() {
 }
 
 internal void init_draw() {
-  local_persist bool initialized = false;
-  if (initialized) {
-    return;
-  }
-  initialized = true;
-
-  draw_context = new Draw_Context;
-
   R_D3D11_State *d3d = r_d3d11_state();
   shadow_map = make_depth_map(2048, 2048);
 
@@ -596,19 +586,41 @@ internal void update_resources() {
   }
 }
 
-internal void compute_shadow_map(Camera camera) {
+internal void draw_scene() {
+  local_persist bool first_call = true;
+  if (first_call) {
+    first_call = false;
+    init_draw();
+  }
+
+  update_resources();
+
   R_D3D11_State *d3d = r_d3d11_state();
 
   Entity_Manager *manager = get_entity_manager();
 
-  d3d->devcon->OMSetRenderTargets(0, nullptr, shadow_map->depth_stencil);
-  d3d->devcon->ClearDepthStencilView(shadow_map->depth_stencil, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
+  Game_State *game_state = get_game_state();
+  Editor *editor = get_editor();
+  World *world = get_world();
+
+  Camera camera;
+  if (game_state->editing) {
+    camera = editor->camera;
+  } else {
+    camera = game_state->camera;
+  }
+
+  Matrix4 projection = ortho_rh_zo(0.0f, (f32)d3d->window_dimension.x, 0.f, (f32)d3d->window_dimension.y);
+
+  // @Note Shadow mapping
   Sun *sun = manager->by_type._Sun.count ? manager->by_type._Sun[0] : 0;
   if (sun) {
     set_viewport(0, 0, (f32)shadow_map->texture->width, (f32)shadow_map->texture->height);
     set_depth_state(depth_state_default);
     set_rasterizer(rasterizer_shadow_map);
+    d3d->devcon->OMSetRenderTargets(0, nullptr, shadow_map->depth_stencil);
+    d3d->devcon->ClearDepthStencilView(shadow_map->depth_stencil, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     set_shader(shader_shadow_map);
 
@@ -655,29 +667,6 @@ internal void compute_shadow_map(Camera camera) {
 
     reset_viewport();
   }
-}
-
-internal void draw_scene() {
-  init_draw();
-
-  update_resources();
-
-  R_D3D11_State *d3d = r_d3d11_state();
-
-  Entity_Manager *manager = get_entity_manager();
-
-  Game_State *game_state = get_game_state();
-  Editor *editor = get_editor();
-  World *world = get_world();
-
-  Camera camera;
-  if (game_state->editing) {
-    camera = editor->camera;
-  } else {
-    camera = game_state->camera;
-  }
-
-  compute_shadow_map(camera);
 
   set_depth_state(depth_state_default);
   set_blend_state(blend_state_default);
@@ -729,7 +718,6 @@ internal void draw_scene() {
   reset_primitives();
 
   if (0) {
-    Matrix4 projection = ortho_rh_zo(0.0f, (f32)d3d->window_dimension.x, 0.f, (f32)d3d->window_dimension.y);
     set_shader(shader_color_wheel);
     set_constant(str_lit("projection"), projection);
     set_constant(str_lit("radius"), 250.0f);
@@ -782,6 +770,7 @@ internal void draw_skybox(Camera *camera) {
 
   set_texture(str_lit("skybox_texture"), skybox_texture);
   set_sampler(str_lit("skybox_sampler"), sampler_skybox);
+
   set_constant(str_lit("xform"), xform);
   apply_constants();
 
@@ -801,7 +790,7 @@ internal void draw_world(World *world, Camera camera) {
   Sun *sun = manager->by_type._Sun.count ? manager->by_type._Sun[0] : 0;
   Matrix4 light_space = sun ? sun->light_space_matrix : make_matrix4(1.0f);
   Vector3 light_direction = sun ? sun->light_direction : Vector3(0, 0, 0);
-  Vector4 light_color = sun ? sun->tint_color : make_vec4(1.0f);
+  Vector4 light_color = sun ? sun->override_color : make_vec4(1.0f);
 
   set_constant(str_lit("light_direction"), light_direction, shader_entity);
   set_constant(str_lit("light_view_projection"), light_space, shader_entity);
@@ -814,6 +803,7 @@ internal void draw_world(World *world, Camera camera) {
   set_constant(str_lit("light_color"), light_color, shader_skinned);
   apply_constants(shader_skinned);
 
+
   Auto_Array<R_Point_Light> point_lights;
   point_lights.reserve(manager->by_type._Point_Light.count);
   for (int i = 0; i < manager->by_type._Point_Light.count; i++) {
@@ -821,7 +811,7 @@ internal void draw_world(World *world, Camera camera) {
     R_Point_Light pt;
     pt.position = point_light->position;
     pt.range = point_light->range;
-    pt.color = point_light->tint_color;
+    pt.color = point_light->override_color;
     pt.att = point_light->attenuation;
     point_lights.push(pt);
   }
@@ -838,8 +828,8 @@ internal void draw_world(World *world, Camera camera) {
   set_sampler(str_lit("shadow_sampler"), sampler_point);
 
   Shader_Constant *c_eye_pos = find_shader_constant(shader_entity, str_lit("eye_pos"));
-  Shader_Constant *c_use_tint = find_shader_constant(shader_entity, str_lit("use_tint_color"));
-  Shader_Constant *c_tint = find_shader_constant(shader_entity, str_lit("tint_color"));
+  Shader_Constant *c_use_tint = find_shader_constant(shader_entity, str_lit("use_override_color"));
+  Shader_Constant *c_tint = find_shader_constant(shader_entity, str_lit("override_color"));
 
   for (Entity *entity : manager->entities) {
     if (entity->kind == ENTITY_GUY) continue; //temp
@@ -853,8 +843,8 @@ internal void draw_world(World *world, Camera camera) {
     set_constant(shader_entity->bindings->xform, xform);
     set_constant(shader_entity->bindings->world, world_matrix);
     set_constant(c_eye_pos, camera.origin);
-    set_constant(c_use_tint, (float)entity->use_tint_color);
-    set_constant(c_tint, entity->tint_color);
+    set_constant(c_use_tint, (float)entity->use_override_color);
+    set_constant(c_tint, entity->override_color);
     apply_constants();
 
     draw_mesh(mesh);
@@ -876,7 +866,7 @@ internal void draw_world(World *world, Camera camera) {
     Matrix4 world_matrix = translate(guy->visual_position) * translate(guy->offset) * rotation_matrix;
     Matrix4 xform = camera.transform * world_matrix;
 
-    Vector4 color = guy->use_tint_color ? make_vec4(1.0f) : guy->tint_color;
+    Vector4 color = guy->use_override_color ? make_vec4(1.0f) : guy->override_color;
     set_constant(str_lit("xform"), xform);
     set_constant(str_lit("world"), world_matrix);
     set_constant(str_lit("color"), color);
@@ -913,7 +903,7 @@ internal void draw_world(World *world, Camera camera) {
     update_camera_matrix(&mirrored);
 
     set_frame_buffer(reflection_frame_buffer);
-    clear_frame_buffer(reflection_frame_buffer, 0, 0, 0, 1);
+    clear_frame_buffer(reflection_frame_buffer, 0, 0, 0, 0);
     d3d->devcon->ClearDepthStencilView(reflection_frame_buffer->depth_stencil, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     set_rasterizer(rasterizer_default);
@@ -921,8 +911,8 @@ internal void draw_world(World *world, Camera camera) {
     set_shader(shader_entity);
 
     Shader_Constant *c_eye_pos = find_shader_constant(shader_entity, str_lit("eye_pos"));
-    Shader_Constant *c_use_tint = find_shader_constant(shader_entity, str_lit("use_tint_color"));
-    Shader_Constant *c_tint = find_shader_constant(shader_entity, str_lit("tint_color"));
+    Shader_Constant *c_use_tint = find_shader_constant(shader_entity, str_lit("use_override_color"));
+    Shader_Constant *c_tint = find_shader_constant(shader_entity, str_lit("override_color"));
 
     set_constant(str_lit("clip_plane"), Vector4(0, 1, 0, -water_position.y));
 
@@ -936,8 +926,8 @@ internal void draw_world(World *world, Camera camera) {
       set_constant(shader_entity->bindings->xform, xform);
       set_constant(shader_entity->bindings->world, world_matrix);
       set_constant(c_eye_pos, mirrored.origin);
-      set_constant(c_use_tint, (f32)e->use_tint_color);
-      set_constant(c_tint, e->tint_color);
+      set_constant(c_use_tint, (f32)e->use_override_color);
+      set_constant(c_tint, e->override_color);
       apply_constants();
       draw_mesh(mesh);
     }
@@ -954,7 +944,7 @@ internal void draw_world(World *world, Camera camera) {
 
       Matrix4 world_matrix = translate(guy->visual_position) * translate(guy->offset) * rotate_rh(guy->theta, vec3_up());
       Matrix4 xform = mirrored.transform * world_matrix;
-      Vector4 color = guy->use_tint_color ? make_vec4(1.0f) : guy->tint_color;
+      Vector4 color = guy->use_override_color ? make_vec4(1.0f) : guy->override_color;
       set_constant(str_lit("xform"), xform);
       set_constant(str_lit("world"), world_matrix);
       set_constant(str_lit("color"), color);
@@ -974,9 +964,10 @@ internal void draw_world(World *world, Camera camera) {
 
     draw_skybox(&mirrored);
 
+
     // Refraction
     d3d->devcon->OMSetRenderTargets(1, &refraction_frame_buffer->render_target, refraction_depth_map->depth_stencil);
-    clear_frame_buffer(refraction_frame_buffer, 0, 0, 0, 1);
+    clear_frame_buffer(refraction_frame_buffer, 0, 0, 0, 0);
 
     set_shader(shader_entity);
     set_constant(str_lit("clip_plane"), Vector4(0, -1, 0, water_position.y));
@@ -990,8 +981,8 @@ internal void draw_world(World *world, Camera camera) {
       set_constant(str_lit("eye_pos"), mirrored.origin);
       set_constant(str_lit("xform"), xform);
       set_constant(str_lit("world"), world_matrix);
-      set_constant(str_lit("use_tint_color"), (f32)e->use_tint_color);
-      set_constant(str_lit("tint_color"), e->tint_color);
+      set_constant(str_lit("use_override_color"), (f32)e->use_override_color);
+      set_constant(str_lit("override_color"), e->override_color);
       apply_constants();
 
       draw_mesh(mesh);

@@ -61,6 +61,9 @@ internal inline Game_State *get_game_state();
 internal inline World *get_world();
 internal inline void set_world(World *world);
 
+
+internal inline Arena *get_permanent_arena();
+
 internal World *load_world(String8 file_name);
 
 internal void save_world(World *world);
