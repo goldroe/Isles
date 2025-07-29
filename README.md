@@ -2,7 +2,7 @@
 # Isles
 A game engine for Windows, written in C/C++.
 
-![Screenshot](./assets/screenshot.png)
+![Video](https://github.com/goldroe/Isles/blob/2744c8798e9dc7b30f2f8dea318db36d3c101258/assets/capture.mp4)
 
 ## Features
   - Sokoban puzzle mechanics
@@ -13,7 +13,7 @@ A game engine for Windows, written in C/C++.
   - Audio using FMOD
   - Input using native Windows API
 
-<video src="./assets/capture.mp4" width="320" height="240" controls></video>
+![Screenshot](./assets/screenshot.png)
 
 ## Build
 Run `build.bat`
